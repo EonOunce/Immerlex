@@ -1,0 +1,241 @@
+<!doctype html>
+<!--
+  Immerlex 一次性原型 · 阅读页视觉/交互规格（非产品代码，M4 验收后冻结或删除）
+  设计令牌（M4 Compose 对照实现）：
+    paper #f5f4f0 / ink #141414 / body #5c6070 / meta #878c9f / line #e4e2db
+    accent(锈橙) #bc4b12 / card #fff / radius 10px / 阴影 0 1px 2px rgba(0,0,0,.05)
+    高亮三态：新词 bg #f6e3d7 fg #a03d0c / 学习中 bg #dcefe0 fg #2f7d4f / 已熟 bg #dbe7f5 fg #2b6cb0
+    字体 Inter + Noto Sans SC；标题 800；正文 17px / line-height 2.0
+  交互规格：
+    - 学习模式：行内显示 en (释义)；复习模式：显示 en (  )，点击揭示释义
+    - 点词 → 底部卡片：词 + 音标 + TTS + 释义 + 例句 + 四档 grade（忘了/困难/记得/简单 → FSRS 1-4）
+    - 顶栏：章节标题 + 学习/复习分段切换 + 设置弹层（字号/深色/密度展示）
+    - 底部：滚动阅读进度条
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Immerlex 原型 · 阅读页</title>
+<style>
+  :root{
+    --paper:#f5f4f0; --ink:#141414; --body:#5c6070; --meta:#878c9f; --line:#e4e2db;
+    --accent:#bc4b12; --card:#ffffff; --radius:10px; --shadow:0 1px 2px rgba(0,0,0,.05);
+    --fs:17px;
+    --new-bg:#f6e3d7; --new-fg:#a03d0c;
+    --lea-bg:#dcefe0; --lea-fg:#2f7d4f;
+    --mas-bg:#dbe7f5; --mas-fg:#2b6cb0;
+  }
+  html.dark{
+    --paper:#191813; --ink:#f0eee8; --body:#b8b6ae; --meta:#7c7a72; --line:#302e28;
+    --card:#22211b; --shadow:0 1px 2px rgba(0,0,0,.4);
+    --new-bg:#3a2417; --new-fg:#e8a071;
+    --lea-bg:#1d3125; --lea-fg:#8fce a5; --lea-fg:#8fcea5;
+    --mas-bg:#1c2a3a; --mas-fg:#8fb8e8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; background:#e9e7e1; font-family:Inter,-apple-system,"Segoe UI",Roboto,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; color:var(--body)}
+  html.dark body{background:#0e0d0a}
+  .phone{max-width:430px; margin:0 auto; min-height:100dvh; background:var(--paper); display:flex; flex-direction:column; box-shadow:0 0 40px rgba(0,0,0,.08)}
+  /* 顶栏 */
+  header{position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--line)}
+  .bar{display:flex; align-items:center; gap:10px; padding:12px 16px}
+  .chev{font-size:20px; color:var(--meta); background:none; border:none; padding:4px}
+  .ttl{flex:1; min-width:0}
+  .ttl b{display:block; color:var(--ink); font-weight:800; font-size:16px; letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ttl span{font-size:11px; color:var(--meta)}
+  .seg{display:flex; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:2px; box-shadow:var(--shadow)}
+  .seg button{border:none; background:none; color:var(--meta); font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; cursor:pointer}
+  .seg button.on{background:var(--accent); color:#fff}
+  .gear{border:1px solid var(--line); background:var(--card); border-radius:var(--radius); width:34px; height:34px; color:var(--meta); font-size:15px; cursor:pointer; box-shadow:var(--shadow)}
+  /* 元信息 chips */
+  .meta{display:flex; gap:6px; padding:10px 16px 0; flex-wrap:wrap; align-items:center}
+  .chip{font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; border:1px solid var(--line); color:var(--meta); background:var(--card)}
+  .chip.due{color:var(--accent); border-color:color-mix(in srgb, var(--accent) 35%, var(--line))}
+  .legend{display:flex; gap:10px; padding:8px 16px 2px; font-size:10px; color:var(--meta)}
+  .legend i{display:inline-block; width:8px; height:8px; border-radius:3px; margin-right:4px; vertical-align:middle}
+  /* 正文 */
+  main{flex:1; padding:14px 20px 90px; font-size:var(--fs); line-height:2.05; text-align:justify}
+  main p{margin:0 0 1.4em}
+  .w{border-radius:6px; padding:1px 5px; margin:0 1px; cursor:pointer; font-weight:700; font-size:.94em; white-space:nowrap; transition:background .15s}
+  .w .gl{font-weight:400}
+  .st-new{background:var(--new-bg); color:var(--new-fg)}
+  .st-lea{background:var(--lea-bg); color:var(--lea-fg)}
+  .st-mas{background:var(--mas-bg); color:var(--mas-fg)}
+  body.review .w .gl{visibility:hidden; display:inline-block; width:2.2em; text-align:center}
+  body.review .w .gl::before{content:"··"; visibility:visible; color:inherit; opacity:.45}
+  body.review .w.revealed .gl{visibility:visible; width:auto}
+  body.review .w.revealed .gl::before{content:none}
+  /* 设置弹层 */
+  .pop{position:absolute; right:12px; top:56px; z-index:9; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,.12); padding:14px; width:210px; display:none}
+  .pop.on{display:block}
+  .pop h4{margin:0 0 8px; font-size:12px; color:var(--ink); font-weight:800}
+  .row{display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--body); margin:8px 0}
+  .row button{border:1px solid var(--line); background:var(--paper); color:var(--ink); border-radius:8px; width:28px; height:28px; font-weight:800; cursor:pointer}
+  .row .val{font-weight:700; color:var(--ink)}
+  /* 底部卡片 */
+  .scrim{position:fixed; inset:0; background:rgba(0,0,0,.35); opacity:0; pointer-events:none; transition:opacity .2s; z-index:20}
+  .scrim.on{opacity:1; pointer-events:auto}
+  .sheet{position:fixed; left:50%; transform:translate(-50%,100%); bottom:0; width:min(430px,100%); background:var(--card); border-radius:20px 20px 0 0; padding:18px 20px calc(20px + env(safe-area-inset-bottom)); z-index:21; transition:transform .25s cubic-bezier(.2,.8,.2,1); box-shadow:0 -8px 40px rgba(0,0,0,.18)}
+  .sheet.on{transform:translate(-50%,0)}
+  .grab{width:38px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 14px}
+  .whead{display:flex; align-items:baseline; gap:10px}
+  .whead b{font-size:24px; color:var(--ink); font-weight:800}
+  .ipa{color:var(--meta); font-size:13px}
+  .tts{margin-left:auto; border:1px solid var(--line); background:var(--paper); color:var(--accent); border-radius:999px; padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer}
+  .zh{margin:8px 0 2px; color:var(--accent); font-weight:700; font-size:15px}
+  .def{font-size:13px; line-height:1.7; color:var(--body); margin:4px 0}
+  .ex{font-size:12.5px; line-height:1.7; color:var(--meta); border-left:3px solid var(--line); padding-left:10px; margin:10px 0 14px}
+  .grades{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
+  .grades button{border:none; border-radius:var(--radius); padding:10px 0; font-size:13px; font-weight:800; cursor:pointer; color:#fff}
+  .g1{background:#c0392b}.g2{background:#d68910}.g3{background:#2f7d4f}.g4{background:#2b6cb0}
+  .grades small{display:block; font-weight:600; opacity:.85; font-size:10px; margin-top:2px}
+  /* 进度与 toast */
+  .prog{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:min(430px,100%); height:3px; background:var(--line); z-index:6}
+  .prog i{display:block; height:100%; width:0; background:var(--accent)}
+  .toast{position:fixed; left:50%; bottom:76px; transform:translate(-50%,10px); background:var(--ink); color:var(--paper); font-size:12px; font-weight:700; padding:8px 14px; border-radius:999px; opacity:0; pointer-events:none; transition:all .25s; z-index:30}
+  .toast.on{opacity:.95; transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="phone">
+  <header>
+    <div class="bar">
+      <button class="chev">‹</button>
+      <div class="ttl"><b>第七章 · 春宴</b><span>宫宴题材 · 第 7/40 章</span></div>
+      <div class="seg" id="seg">
+        <button data-m="learn" class="on">学习</button>
+        <button data-m="review">复习</button>
+      </div>
+      <button class="gear" id="gear">⚙</button>
+    </div>
+    <div class="pop" id="pop">
+      <h4>阅读设置</h4>
+      <div class="row"><span>字号</span><span><button id="fminus">A−</button> <span class="val" id="fval">17</span> <button id="fplus">A＋</button></span></div>
+      <div class="row"><span>深色模式</span><span><button id="dark">切换</button></span></div>
+      <div class="row"><span>密度档</span><span class="val">密 · 35–50/千字</span></div>
+      <div class="row"><span>今日新词上限</span><span class="val">25</span></div>
+    </div>
+    <div class="meta">
+      <span class="chip due">待复习 12</span>
+      <span class="chip">新词 8</span>
+      <span class="chip">本章嵌词 21</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--new-bg);border:1px solid var(--new-fg)"></i>新词</span>
+      <span><i style="background:var(--lea-bg);border:1px solid var(--lea-fg)"></i>学习中</span>
+      <span><i style="background:var(--mas-bg);border:1px solid var(--mas-fg)"></i>已熟</span>
+      <span style="margin-left:auto">复习模式点词揭示</span>
+    </div>
+  </header>
+
+  <main id="book"></main>
+
+  <div class="prog"><i id="pbar"></i></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <div class="whead"><b id="s-en"></b><span class="ipa" id="s-ipa"></span><button class="tts" id="s-tts">🔊 发音</button></div>
+  <div class="zh" id="s-zh"></div>
+  <div class="def" id="s-def"></div>
+  <div class="ex" id="s-ex"></div>
+  <div class="grades">
+    <button class="g1" data-g="1">忘了<small>8 分钟</small></button>
+    <button class="g2" data-g="2">困难<small>1.1 天</small></button>
+    <button class="g3" data-g="3">记得<small>3.2 天</small></button>
+    <button class="g4" data-g="4">简单<small>7.5 天</small></button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* mock 章节：结构与 M3 的 JSON schema 对齐（k:t 文本段 / k:w 嵌词段） */
+const CHAPTER = {
+  title: "第七章 · 春宴",
+  paragraphs: [
+    [{k:"t",v:"刘禧终究 "},{k:"w",id:"or",en:"or",zh:"还是",ipa:"/ɔːr/", st:"new",def:"conj. 或者，还是；否则",ex:"Tea or coffee? 茶还是咖啡？"},{k:"t",v:" 没有 "},{k:"w",id:"resist",en:"resist",zh:"忍住",ipa:"/rɪˈzɪst/", st:"new",def:"v. 忍住，抵挡；反抗",ex:"She could hardly resist laughing. 她几乎忍不住笑出来。"},{k:"t",v:"，"},{k:"w",id:"low",en:"low",zh:"低声",ipa:"/loʊ/", st:"lea",def:"adj./adv. 低的；低声地",ex:"He spoke in a low voice. 他低声说话。"},{k:"t",v:"问起了身前皇后的贴身内人烟萝：“娘娘这是……”"}],
+    [{k:"t",v:"烟萝回头看了一眼，低声回道：“昨儿白里，娘娘叫人抬出了她出嫁前封存的 "},{k:"w",id:"several",en:"several",zh:"几个",ipa:"/ˈsevrəl/", st:"lea",def:"adj. 几个，数个",ex:"Several people arrived late. 几个人迟到了。"},{k:"t",v:" 大 "},{k:"w",id:"bin",en:"bin",zh:"箱子",ipa:"/bɪn/", st:"new",def:"n. 箱子，储物箱；垃圾桶",ex:"a storage bin 一只储物箱"},{k:"t",v:"，将这些进宫前的裙子全找了出来，洗净熏香、日中晾晒……想是娘娘得闲，寻些少时的玩意儿怀恋一番罢了。”"}],
+    [{k:"t",v:"话音方落，刘禧便隔着正殿 "},{k:"w",id:"gate",en:"gate",zh:"大门",ipa:"/ɡeɪt/", st:"mas",def:"n. 大门，城门",ex:"the palace gate 宫门"},{k:"t",v:" "},{k:"w",id:"way",en:"way",zh:"远远",ipa:"/weɪ/", st:"mas",def:"adv. 远远地；n. 路，方式",ex:"way behind 远远落在后面"},{k:"t",v:" 瞧见了身着金鳞紫缎玄光朝服的皇后，心中怪道果然是自己想多了，皇后这样的 "},{k:"w",id:"manner",en:"manner",zh:"规矩",ipa:"/ˈmænər/", st:"lea",def:"n. 方式，规矩；举止",ex:"in the traditional manner 按传统规矩"},{k:"t",v:" 人，就算寻出了这些裙子，也不会穿着朝宴的。"}],
+    [{k:"t",v:"他拍拍衣袖，还没进门便 "},{k:"w",id:"flat",en:"flat",zh:"干脆",ipa:"/flæt/", st:"new",def:"adv. 干脆地，断然地；adj. 平的",ex:"a flat refusal 断然拒绝"},{k:"t",v:" 利落地行了个大礼：“臣给娘娘请安。”"}],
+    [{k:"t",v:"落薇正张着双臂，任宫人为两袖熏香，"},{k:"w",id:"cigarette",en:"cigarette",zh:"香烟",ipa:"/ˌsɪɡəˈret/", st:"new",def:"n. 香烟，卷烟",ex:"a packet of cigarettes 一包烟"},{k:"t",v:" 上浮，她便索性闭了眼睛，闻声也不曾睁开，"},{k:"w",id:"just",en:"just",zh:"只是",ipa:"/dʒʌst/", st:"mas",def:"adv. 只是，仅仅；刚刚",ex:"Just a moment. 只是稍等。"},{k:"t",v:" 懒懒道：“刘翁，不必多礼。”"}],
+    [{k:"t",v:"刘禧站起来，半躬着身子笑道：“娘娘，陛下春巡归来，宴席将开，陛下怕娘娘记挂，特意遣臣来迎驾。”"}],
+    [{k:"t",v:"去岁 "},{k:"w",id:"northern",en:"northern",zh:"北方",ipa:"/ˈnɔːrðərn/", st:"lea",def:"adj. 北方的，北部的",ex:"the northern border 北疆"},{k:"t",v:" 打了几场胜仗，朝堂甫定，小昭帝便在上元 "},{k:"w",id:"lateron",en:"later on",zh:"过后",ipa:"/ˈleɪtər ɒn/", st:"lea",def:"adv. 过后，后来",ex:"Later on, he changed his mind. 过后他改了主意。"},{k:"t",v:" 北上春巡去了，这是他登基后第 "},{k:"w",id:"breath",en:"breath",zh:"一次",ipa:"/breθ/", st:"new",def:"n. 一次呼吸；一口气",ex:"in one breath 一口气"},{k:"t",v:" 巡幸，一是为了 "},{k:"w",id:"incentive",en:"incentive",zh:"激励",ipa:"/ɪnˈsentɪv/", st:"mas",def:"n. 激励，刺激；动机",ex:"an incentive for soldiers 对将士的激励"},{k:"t",v:" "},{k:"w",id:"conquer",en:"conquer",zh:"得胜",ipa:"/ˈkɒŋkər/", st:"mas",def:"v. 征服，得胜；克服",ex:"conquer the enemy 克敌"},{k:"t",v:" 将士，二也是拉拢北方的宗室权贵，为自己亲政铺路。"}],
+    [{k:"t",v:"皇帝一去，"},{k:"w",id:"march",en:"march",zh:"三月",ipa:"/mɑːrtʃ/", st:"lea",def:"n. 三月；行进",ex:"in early March 三月初"},{k:"t",v:" 有余，今春闰 "},{k:"w",id:"february",en:"February",zh:"二月",ipa:"/ˈfebrueri/", st:"lea",def:"n. 二月",ex:"February 2nd 二月二"},{k:"t",v:"，御驾归来不久后，恰是 "},{k:"w",id:"secondary",en:"secondary",zh:"第二",ipa:"/ˈsekənderi/", st:"mas",def:"adj. 第二的，次级的",ex:"of secondary importance 次重要"},{k:"t",v:" 个二月二的节气，落薇便将本该再晚些的春宴挪到了此日，君臣同宴，也算是为众人洗尘。"}],
+    [{k:"t",v:"春宴照例设在禁宫 "},{k:"w",id:"southwest",en:"southwest",zh:"西南",ipa:"/ˌsaʊθˈwest/", st:"new",def:"n./adj. 西南（的）",ex:"the southwest corner 西南角"},{k:"t",v:" 侧的点红台上，刘禧是皇帝近身的侍臣，遣来迎她，是向群臣示帝后的鹣鲽情深。"}],
+    [{k:"t",v:"落薇乘辇往点红台去，金冠在 "},{k:"w",id:"vertical",en:"vertical",zh:"头顶",ipa:"/ˈvɜːrtkl/", st:"new",def:"adj. 垂直的，头顶正上方的",ex:"the vertical line 垂直线"},{k:"t",v:" 压得 "},{k:"w",id:"neck",en:"neck",zh:"脖子",ipa:"/nek/", st:"lea",def:"n. 脖子，颈",ex:"stiff neck 落枕"},{k:"t",v:" 生疼。"}],
+    [{k:"t",v:"然而她对这样的迫痛已经漠然，只是正襟端坐在辇台上，听着耳边珠玉乱撞的声响。"}]
+  ]
+};
+const ST = {new:"st-new", lea:"st-lea", mas:"st-mas"};
+const book = document.getElementById("book");
+book.innerHTML = CHAPTER.paragraphs.map(p => "<p>" + p.map(s =>
+  s.k === "t" ? s.v :
+  `<span class="w ${ST[s.st]}" data-id="${s.id}">${s.en} <span class="gl">（${s.zh}）</span></span>`
+).join("") + "</p>").join("");
+
+const words = {}; CHAPTER.paragraphs.forEach(p => p.forEach(s => { if (s.k === "w") words[s.id] = s; }));
+
+/* 模式切换 */
+document.getElementById("seg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  document.querySelectorAll("#seg button").forEach(x => x.classList.toggle("on", x === b));
+  document.body.classList.toggle("review", b.dataset.m === "review");
+  toast(b.dataset.m === "review" ? "复习模式：释义已隐藏，点词揭示" : "学习模式：释义可见");
+});
+
+/* 设置弹层 */
+const pop = document.getElementById("pop");
+document.getElementById("gear").onclick = e => { e.stopPropagation(); pop.classList.toggle("on"); };
+document.addEventListener("click", e => { if (!pop.contains(e.target)) pop.classList.remove("on"); });
+let fs = 17;
+const setFs = v => { fs = Math.min(21, Math.max(14, v)); document.documentElement.style.setProperty("--fs", fs + "px"); document.getElementById("fval").textContent = fs; };
+document.getElementById("fplus").onclick = () => setFs(fs + 1);
+document.getElementById("fminus").onclick = () => setFs(fs - 1);
+document.getElementById("dark").onclick = () => document.documentElement.classList.toggle("dark");
+
+/* 点词 → 底部卡片 */
+const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
+const $ = id => document.getElementById(id);
+const s_en = $("s-en"), s_ipa = $("s-ipa"), s_zh = $("s-zh"), s_def = $("s-def"), s_ex = $("s-ex");
+let cur = null;
+book.addEventListener("click", e => {
+  const w = e.target.closest(".w"); if (!w) return;
+  if (document.body.classList.contains("review") && !w.classList.contains("revealed")) {
+    w.classList.add("revealed"); toast("已揭示：" + words[w.dataset.id].zh); return;
+  }
+  cur = words[w.dataset.id];
+  s_en.textContent = cur.en; s_ipa.textContent = cur.ipa; s_zh.textContent = cur.zh;
+  s_def.textContent = cur.def; s_ex.textContent = cur.ex;
+  sheet.classList.add("on"); scrim.classList.add("on");
+});
+const closeSheet = () => { sheet.classList.remove("on"); scrim.classList.remove("on"); };
+scrim.onclick = closeSheet;
+document.getElementById("s-tts").onclick = () => {
+  const u = new SpeechSynthesisUtterance(cur.en); u.lang = "en-US"; speechSynthesis.speak(u);
+};
+const NEXT = {new:{3:"lea",4:"lea"}, lea:{3:"mas",4:"mas"}, mas:{}};
+document.querySelector(".grades").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || !cur) return;
+  const g = +b.dataset.g;
+  if (g >= 3 && NEXT[cur.st] && NEXT[cur.st][g]) {
+    cur.st = NEXT[cur.st][g];
+    document.querySelector(`.w[data-id="${cur.id}"]`).className = `w ${ST[cur.st]} revealed`;
+  }
+  toast(`已记录「${b.firstChild.textContent}」→ 下次 ${b.querySelector("small").textContent}（回写 FSRS）`);
+  closeSheet();
+});
+
+/* 进度与 toast */
+addEventListener("scroll", () => {
+  const h = document.documentElement;
+  pbar.style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight) * 100 || 0) + "%";
+});
+let tt; function toast(msg) {
+  const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove("on"), 1800);
+}
+</script>
+</body>
+</html>
