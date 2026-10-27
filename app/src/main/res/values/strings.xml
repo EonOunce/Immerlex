@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Immerlex</string>
+
+    <string name="tab_bank">词库</string>
+    <string name="tab_reader">阅读</string>
+    <string name="tab_settings">设置</string>
+
+    <string name="bank_title">词库</string>
+    <string name="bank_count">共 %1$d 个词</string>
+    <string name="bank_search">搜索单词或释义</string>
+    <string name="bank_add">添加单词</string>
+    <string name="bank_add_title">添加单词</string>
+    <string name="bank_field_word">英文单词</string>
+    <string name="bank_field_gloss_optional">释义（可留空）</string>
+    <string name="bank_gloss_hint">留空时自动从离线词典 ECDICT 补全音标与释义。</string>
+    <string name="bank_import_txt">导入 txt</string>
+    <string name="bank_import_image">截图导入</string>
+    <string name="bank_ocr_failed">识别失败，请换一张更清晰的截图</string>
+    <string name="bank_ocr_empty">截图里没有可识别的文字</string>
+    <string name="bank_import_failed">无法读取所选文件，请确认它是纯文本。</string>
+    <string name="bank_import_result">解析 %1$d 条，新增 %2$d，重复 %3$d，缺释义 %4$d</string>
+    <string name="bank_working">处理中…</string>
+    <string name="bank_added">已添加</string>
+    <string name="bank_duplicate">这个词已经在词库里了</string>
+    <string name="bank_deleted">已删除 %1$s</string>
+    <string name="bank_delete_title">删除单词</string>
+    <string name="bank_delete_body">删除 %1$s 会同时清除它的复习记录，确定吗？</string>
+    <string name="bank_empty_all">词库还是空的。点上方“导入 txt”或“截图导入”，也可以点右下角“添加单词”；点列表里的单词能查看释义或删除。</string>
+    <string name="bank_empty_search">没有匹配的单词。</string>
+    <string name="bank_fsrs_summary">状态：%1$s · 复习 %2$d 次 · 遗忘 %3$d 次 · 当前间隔 %4$d 天</string>
+
+    <string name="mastery_new">新词</string>
+    <string name="mastery_learning">学习中</string>
+    <string name="mastery_mastered">已掌握</string>
+
+    <string name="action_add">添加</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_delete">删除</string>
+    <string name="action_close">关闭</string>
+
+    <string name="settings_ai_section">AI 接口</string>
+    <string name="settings_base_url">Base URL</string>
+    <string name="settings_base_url_hint">OpenAI 兼容地址，例如 https://api.deepseek.com 或 https://api.openai.com/v1</string>
+    <string name="settings_model">模型名</string>
+    <string name="settings_api_key">API Key</string>
+    <string name="settings_key_hint">密钥保存在系统加密存储中，不会写入日志或备份。</string>
+    <string name="settings_key_volatile">本机加密存储不可用，密钥仅在本次启动内保留、不会落盘。</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_test">测试连接</string>
+    <string name="settings_saved">已保存</string>
+    <string name="settings_need_config">请先填写 Base URL 与模型名</string>
+    <string name="settings_probe_ok">连接成功，接口可用</string>
+    <string name="settings_probe_fail">连接失败：%1$s</string>
+    <string name="settings_generate_section">章节生成</string>
+    <string name="settings_genre">小说类型</string>
+    <string name="settings_density">嵌词密度</string>
+    <string name="settings_new_limit">每日新词上限</string>
+    <string name="settings_generate">用今日词写一章</string>
+    <string name="settings_working">处理中…</string>
+    <string name="settings_bank_section">词库概况</string>
+    <string name="settings_bank_summary">共 %1$d 词 · 新词 %2$d · 今日到期 %3$d</string>
+
+    <string name="settings_appearance_section">阅读外观</string>
+    <string name="settings_font_size">字号</string>
+    <string name="settings_dark_mode">深色模式</string>
+
+    <string name="density_sparse">疏</string>
+    <string name="density_medium">中</string>
+    <string name="density_dense">密</string>
+    <string name="density_range_sparse">每千汉字 10–15 词，适合先读情节</string>
+    <string name="density_range_medium">每千汉字 20–30 词，平衡阅读与学习</string>
+    <string name="density_range_dense">每千汉字 35–50 词，沉浸式背词</string>
+
+    <string name="gen_saved">已生成第 %1$d 章《%2$s》（尝试 %3$d 次）</string>
+    <string name="gen_rejected">生成未通过校验（尝试 %2$d 次）：%1$s</string>
+    <string name="gen_no_words">今日没有可安排的新词或复习词</string>
+    <string name="gen_failed">生成失败：%1$s</string>
+
+    <string name="reader_loading">正在载入章节…</string>
+    <string name="reader_mode_learn">学习模式</string>
+    <string name="reader_mode_review">复习模式</string>
+    <string name="reader_review_hint">释义已隐藏，点单词揭示并打分</string>
+    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 已复习 %3$d</string>
+    <string name="reader_speak">朗读</string>
+    <string name="reader_no_gloss">（暂无释义）</string>
+    <string name="reader_not_in_bank">这个词不在你的词库里，只读不排复习</string>
+    <string name="reader_cannot_grade">把它加入词库后才能安排复习</string>
+    <string name="reader_empty">还没有章节。配好 AI 接口后，点这里用今天的词写第一章。</string>
+    <string name="reader_generate">写下一章</string>
+    <string name="reader_generate_first">写第一章</string>
+    <string name="reader_generating">写作中…</string>
+    <string name="reader_go_settings">去设置</string>
+
+    <string name="grade_again">忘了</string>
+    <string name="grade_hard">困难</string>
+    <string name="grade_good">记得</string>
+    <string name="grade_easy">简单</string>
+    <string name="grade_days">%1$d 天</string>
+</resources>
