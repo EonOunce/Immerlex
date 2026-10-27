@@ -1,0 +1,188 @@
+package com.immerlex.feature.settings
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.immerlex.app.R
+import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.core.ai.Density
+
+@Composable
+fun SettingsScreen(vm: SettingsViewModel) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        vm.messages.collect { msg ->
+            snackbar.showSnackbar(context.getString(msg.resId, *msg.args.toTypedArray()))
+        }
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SectionTitle(stringResource(R.string.settings_ai_section))
+            OutlinedTextField(
+                value = state.baseUrl,
+                onValueChange = vm::onBaseUrl,
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_base_url)) },
+                supportingText = { Text(stringResource(R.string.settings_base_url_hint)) },
+            )
+            OutlinedTextField(
+                value = state.model,
+                onValueChange = vm::onModel,
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_model)) },
+            )
+            OutlinedTextField(
+                value = state.apiKey,
+                onValueChange = vm::onApiKey,
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_api_key)) },
+                visualTransformation = PasswordVisualTransformation(),
+                supportingText = {
+                    Text(
+                        stringResource(
+                            if (state.keyPersistent) R.string.settings_key_hint
+                            else R.string.settings_key_volatile,
+                        ),
+                    )
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = vm::save, enabled = !state.busy) {
+                    Text(stringResource(R.string.settings_save))
+                }
+                OutlinedButton(onClick = vm::testConnection, enabled = !state.busy) {
+                    Text(stringResource(R.string.settings_test))
+                }
+            }
+
+            SectionTitle(stringResource(R.string.settings_generate_section))
+            OutlinedTextField(
+                value = state.genre,
+                onValueChange = vm::onGenre,
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_genre)) },
+            )
+            Text(stringResource(R.string.settings_density), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Density.entries.forEach { tier ->
+                    val selected = tier == state.density
+                    if (selected) {
+                        Button(onClick = { vm.onDensity(tier) }, shape = RoundedCornerShape(10.dp)) {
+                            Text(stringResource(densityLabel(tier)))
+                        }
+                    } else {
+                        OutlinedButton(onClick = { vm.onDensity(tier) }, shape = RoundedCornerShape(10.dp)) {
+                            Text(stringResource(densityLabel(tier)))
+                        }
+                    }
+                }
+            }
+            Text(
+                stringResource(densityRange(state.density)),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImmerlexColors.Meta,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_new_limit), style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = { vm.onNewLimit(state.dailyNewLimit - 5) }) { Text("−") }
+                Spacer(Modifier.width(10.dp))
+                Text(state.dailyNewLimit.toString(), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = { vm.onNewLimit(state.dailyNewLimit + 5) }) { Text("＋") }
+            }
+            Button(onClick = vm::generateChapter, enabled = !state.busy) {
+                Text(if (state.busy) stringResource(R.string.settings_working) else stringResource(R.string.settings_generate))
+            }
+
+            SectionTitle(stringResource(R.string.settings_appearance_section))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_font_size), style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = { vm.onFontScale(-1f) }) { Text("A−") }
+                Spacer(Modifier.width(10.dp))
+                Text(state.fontScale.toInt().toString(), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = { vm.onFontScale(1f) }) { Text("A＋") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_dark_mode),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = state.darkMode, onCheckedChange = vm::onDarkMode)
+            }
+
+            SectionTitle(stringResource(R.string.settings_bank_section))
+            Text(
+                stringResource(R.string.settings_bank_summary, state.bankTotal, state.bankNew, state.bankDue),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+private fun densityLabel(tier: Density): Int = when (tier) {
+    Density.SPARSE -> R.string.density_sparse
+    Density.MEDIUM -> R.string.density_medium
+    Density.DENSE -> R.string.density_dense
+}
+
+private fun densityRange(tier: Density): Int = when (tier) {
+    Density.SPARSE -> R.string.density_range_sparse
+    Density.MEDIUM -> R.string.density_range_medium
+    Density.DENSE -> R.string.density_range_dense
+}
