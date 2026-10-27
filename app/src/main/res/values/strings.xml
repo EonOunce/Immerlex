@@ -81,7 +81,7 @@
     <string name="reader_mode_learn">学习模式</string>
     <string name="reader_mode_review">复习模式</string>
     <string name="reader_review_hint">释义已隐藏，点单词揭示并打分</string>
-    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 已复习 %3$d</string>
+    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 本次已复习 %3$d</string>
     <string name="reader_speak">朗读</string>
     <string name="reader_no_gloss">（暂无释义）</string>
     <string name="reader_not_in_bank">这个词不在你的词库里，只读不排复习</string>
