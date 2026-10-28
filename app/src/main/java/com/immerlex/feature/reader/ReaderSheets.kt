@@ -19,20 +19,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.core.ai.ShortTone
 import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.reader.ReaderWord
@@ -162,6 +167,170 @@ fun ChapterSheet(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BookShelfSheet(
+    books: List<BookOption>,
+    shorts: List<ChapterOption>,
+    currentBook: String,
+    currentChapterId: Long,
+    readingShort: Boolean,
+    generating: Boolean,
+    onPickBook: (String) -> Unit,
+    onPickShort: (Long) -> Unit,
+    onNewBook: () -> Unit,
+    onWriteShort: () -> Unit,
+    onDeleteShort: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text(
+                stringResource(R.string.reader_shelf),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(stringResource(R.string.shelf_serial), style = MaterialTheme.typography.labelMedium, color = ImmerlexColors.Meta)
+            books.forEach { book ->
+                val current = !readingShort && book.genre == currentBook
+                TextButton(onClick = { onPickBook(book.genre) }, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                        Text(
+                            text = if (current) stringResource(R.string.shelf_book_current, book.genre) else book.genre,
+                            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (book.chapters == 0) {
+                                stringResource(R.string.shelf_book_empty)
+                            } else {
+                                stringResource(R.string.shelf_book_meta, book.chapters)
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ImmerlexColors.Meta,
+                        )
+                    }
+                }
+            }
+            if (shorts.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.shelf_shorts), style = MaterialTheme.typography.labelMedium, color = ImmerlexColors.Meta)
+                shorts.forEach { short ->
+                    val current = readingShort && short.id == currentChapterId
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onPickShort(short.id) }, modifier = Modifier.weight(1f)) {
+                            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                                Text(
+                                    text = if (current) {
+                                        stringResource(R.string.shelf_short_current, short.title)
+                                    } else {
+                                        short.title
+                                    },
+                                    color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        IconButton(onClick = { onDeleteShort(short.id) }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.reader_short_delete_title),
+                                tint = ImmerlexColors.Meta,
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onNewBook, enabled = !generating) {
+                    Text(stringResource(R.string.shelf_new_book))
+                }
+                OutlinedButton(onClick = onWriteShort, enabled = !generating) {
+                    Text(stringResource(if (generating) R.string.reader_generating else R.string.shelf_write_short))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun NewBookDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.shelf_new_book_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(MAX_BOOK_NAME) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.shelf_new_book_field)) },
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.shelf_new_book_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ImmerlexColors.Meta,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.shelf_new_book_action))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+@Composable
+fun ShortTonePicker(onDismiss: () -> Unit, onPick: (ShortTone) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.shelf_short_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(R.string.shelf_short_hint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImmerlexColors.Meta,
+                )
+                ShortTone.entries.forEach { tone ->
+                    OutlinedButton(onClick = { onPick(tone) }, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                            Text(stringResource(toneLabel(tone)))
+                            Text(
+                                stringResource(toneDescription(tone)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ImmerlexColors.Meta,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+private fun toneLabel(tone: ShortTone): Int = when (tone) {
+    ShortTone.EVERYMAN -> R.string.short_tone_everyman
+    ShortTone.LUSH -> R.string.short_tone_lush
+    ShortTone.COLD -> R.string.short_tone_cold
+}
+
+private fun toneDescription(tone: ShortTone): Int = when (tone) {
+    ShortTone.EVERYMAN -> R.string.short_tone_everyman_desc
+    ShortTone.LUSH -> R.string.short_tone_lush_desc
+    ShortTone.COLD -> R.string.short_tone_cold_desc
+}
+
+private const val MAX_BOOK_NAME = 20
 
 @Composable
 fun ConfirmDialog(

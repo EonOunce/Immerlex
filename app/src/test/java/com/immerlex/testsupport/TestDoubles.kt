@@ -2,6 +2,7 @@ package com.immerlex.testsupport
 
 import com.immerlex.core.db.BibleEntryDao
 import com.immerlex.core.db.BibleEntryEntity
+import com.immerlex.core.db.BookRow
 import com.immerlex.core.db.CharacterStateDao
 import com.immerlex.core.db.CharacterStateEntity
 import com.immerlex.core.db.ChapterDao
@@ -10,6 +11,8 @@ import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.db.ChapterRecap
 import com.immerlex.core.db.DailyLoopDao
 import com.immerlex.core.db.DailyLoopEntity
+import com.immerlex.core.db.KIND_SERIAL
+import com.immerlex.core.db.KIND_SHORT
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.ReviewMoment
@@ -124,18 +127,28 @@ internal class FakeChapterDao : ChapterDao {
 
     override suspend fun byId(id: Long) = items.find { it.id == id }
 
-    override suspend fun titlesForGenre(genre: String) = items.filter { it.genre == genre }
+    override suspend fun titlesForGenre(genre: String) = items.filter { it.genre == genre && it.kind == KIND_SERIAL }
         .sortedWith(compareByDescending<ChapterEntity> { it.number }.thenByDescending { it.id })
         .map { ChapterOption(it.id, it.number, it.title) }
 
     override suspend fun deleteById(id: Long) { items.removeAll { it.id == id } }
 
-    override suspend fun latest(genre: String) = items.filter { it.genre == genre }.maxByOrNull { it.number }
+    override suspend fun latest(genre: String) =
+        items.filter { it.genre == genre && it.kind == KIND_SERIAL }.maxByOrNull { it.number }
 
     override suspend fun recaps(genre: String, excludeId: Long) = items
-        .filter { it.genre == genre && it.id != excludeId }
+        .filter { it.genre == genre && it.kind == KIND_SERIAL && it.id != excludeId }
         .sortedWith(compareBy({ it.number }, { it.id }))
         .map { ChapterRecap(it.number, it.title, it.summary) }
+
+    override suspend fun serialBooks() = items.filter { it.kind == KIND_SERIAL }
+        .groupBy { it.genre }
+        .map { (genre, rows) -> BookRow(genre, rows.size, rows.maxOf { it.createdAtSec }) }
+        .sortedByDescending { it.updatedAtSec }
+
+    override suspend fun shortStories() = items.filter { it.kind == KIND_SHORT }
+        .sortedWith(compareByDescending<ChapterEntity> { it.createdAtSec }.thenByDescending { it.id })
+        .map { ChapterOption(it.id, it.number, it.title) }
 }
 
 internal class FakeStoryBibleDao : StoryBibleDao {

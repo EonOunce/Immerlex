@@ -9,7 +9,7 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 词库（截图 OCR / txt / CSV 导入，ECDICT 补全释义）→ FSRS 间隔调度 → AI 按题材生成中文章节并按密度行内嵌入"新词 + 到期词"→ 双阅读模式（学习：释义可见 / 复习：释义隐藏、点击揭示或挖空）→ grade 回写 FSRS → 统计趋势。
 
 - v1 范围：词库导入 + FSRS 调度 + AI 生成嵌词 + 双阅读模式 + 章节回看与重写 + 故事圣经 + 今日任务页与通知与坚果云备份（v1.0 收尾）。
-- v1.5：**短篇模式（首位）**、独立测验会话、统计趋势图、导入嵌词（AI 建议插入点 → 用户确认）、CSV/Anki 导出。
+- v1.5：**短篇模式（首位，已实现待真机验收）**、独立测验会话、统计趋势图、导入嵌词（AI 建议插入点 → 用户确认）、CSV/Anki 导出。
 
 ## 2. 已定决策（推翻需用户明确同意）
 
@@ -19,6 +19,7 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 | 调度算法 | FSRS-6（open-spaced-repetition 当前版本，21 参数），移植参照 py-fsrs scheduler.py；单测必须与参考测试向量一致（向量由 py-fsrs 生成：无学习/重学步、fuzz 关闭、上限 3650 天、DR=0.9）。用户 2026-10-27 确认升级 FSRS-6，见 `docs/adr/0001-fsrs-6-version.md` |
 | 词典 | ECDICT（skywind3000/ECDICT）sqlite 精简版，asset 或按需下载 |
 | 截图 OCR | ML Kit `text-recognition-chinese` bundled 模型（`core.ocr.MlKitOcr`），离线可用；arm64 release APK 实测 25.49MB，其中离线中文 OCR 模型占约 11.5MB。用户 2026-10-28 确认**保留 bundled**：主词源是微信/相册截图，必须在无 Google Play 服务的国产 ROM 上离线可用，包体积代价接受 |
+| PDF 导入 | `core.ocr.PdfOcr`：`PdfRenderer` 逐页渲染成位图（目标宽 1500px、最多 20 页），复用截图导入的 ML Kit 通道，不另建识别链路。渲染位图**必须先铺白底**再画页：无底色 PDF 在透明位图上会让 ML Kit 把黑字当黑底，整页识别为空（`PdfOcrTest` 锁住）。`PdfRenderer` 不保证线程安全，整个渲染循环钉在单线程 dispatcher |
 | 发布包 | 只交付 `app/build/outputs/apk/release/immerlex-arm64-v8a-release.apk`（用户 2026-10-27 指定）；ABI 切分为 arm64-v8a + x86_64（后者只服务模拟器），不出 universal APK；release 用 `keystore.properties` 指向的 `D:/dev-tools/immerlex-release.jks` 签名，该文件与 jks 均不进版本库；R8 保持关闭（未经设备验证不混淆） |
 | AI 接入 | OpenAI 兼容协议；baseURL / key / model 由用户首启手动配置；代码与仓库中禁止硬编码 key |
 | 语言对 | 仅中文小说嵌英文词 |
@@ -32,8 +33,10 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 | 日常化落地（v1.0 已交付 2026-10-28） | 今日页的到期数**不另算**，取 `core.schedule.ScheduleService.todaysQueue()` 的 `reviewWords + newWords`，与生成下一章喂给模型的是同一份词表；连续天数与补卡是纯函数 `core.schedule.dailyInfoOf(DailyLoopInput)`，Room v4 新增 `daily_loop`（按 `epochDay` 一行）与 `backup_runs`。提醒用**自排程的一次性 unique work**（WorkManager 周期任务只有"每 24 小时"会漂到凌晨），`secondsUntilNext` 纯函数，worker 在 `finally` 里排明天、应用启动再重排，所以改时刻立即生效；当日 0 个到期就不弹，`last_reminded_day` 保证一天最多一条。备份固定为 `VACUUM INTO` 快照 → gzip → PUT，保留策略是纯函数 `core.backup.BackupPlan`；恢复先校验（gzip 头 / `user_version` / `integrity_check` / 必备表），不过就**逐项明说且不动本机库**，过了才换文件并强制"重开应用"。坚果云应用密码与 AI key 同存 EncryptedSharedPreferences，地址预填 `https://dav.jianguoyun.com/dav/`。详见 `docs/adr/0006` |
 | 故事圣经 | 长篇的跨章连贯由三层承担（见 `docs/adr/0005`）：① 开局由用户口述一段想法，**一次调用**展开成结构化故事圣经（基调/主角与目标/结局倾向/禁止事项/起始人物），逐条可编辑可重掷；② 生成契约要求模型回报**本章变化**（谁的位置、关系、承诺或信息发生变化），系统合并进人物状态表；③ 本章全书逐章一行梗概全量入 prompt，超过约 60 章才折叠成分卷摘要。用户写过的条目优先级最高，冲突时不覆盖而标提示。**绝不**做聊天式多轮开局界面：入口只到"一段话 → 一份圣经"为止，否则等于为输入再造一个 app |
 | 故事圣经落地（v0.3 已交付 2026-10-28） | 三层各一张表，Room v3 起 `bible_entries`（题材分区条目 + `authoredByUser`）与 `character_states`（题材内 `(genre,name)` 唯一）；合并在纯函数 `core.bible.CastMerger`（两条铁律：用户手写状态只标冲突不覆盖、旧章不能把新章之后的人物状态往回改）。展开调用是 `core.ai.BibleExpander`，schema 校验、≤2 次修复、超限即裁剪（条目 160 字 / 禁止事项 8 条 / 起始人物 12 条）。prompt 升到 **PROMPT_V3**：档案 → 人物当前状态 → 全书梗概（由旧到新）三层全量入 prompt，用户条目后挂「（读者设定，务必遵守）」，冲突写「注意：第 N 章把它写成了…」。入口在设置页「查看并编辑故事档案」，**没配 API key 也能逐条手填/删除**——AI 只是把一段话展开成初稿，不是使用档案的前提 |
-| 短篇模式 | 意林/花火/科幻世界式单篇自足短篇为 **v1.5 第一项**：不依赖跨章连贯层，字数由词数决定（15 词 → 1500–2500 字），"像某杂志"只做**腔调预设**（小人物点题 / 情绪华丽 / 设定先行冷结尾）而不复制其样文 |
-| 版本切分 | 三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付，2026-10-28 模拟器验收）、**v0.3** prompt 层（默认密度与篇幅、故事圣经、人物状态、全书梗概，已交付，2026-10-28 模拟器验收，versionName 0.3.0 / versionCode 4）、**v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收，versionName 1.0.0 / versionCode 5）。每刀单独真机验收 |
+| 短篇模式 | 意林/花火/科幻世界式单篇自足短篇为 **v1.5 第一项**：不依赖跨章连贯层，字数由词数决定（15 词 → 1500–2500 字），"像某杂志"只做**腔调预设**（小人物点题 / 情绪华丽 / 设定先行冷结尾）而不复制其样文。**2026-10-29 已实现（v1.1.0，模拟器验收）**：`chapters.kind = "short"`、章号 0、`genre` 存腔调名；复用章节 JSON 契约，不写故事圣经/人物状态；`ChapterGenerator.generateShort(tone)` 取今日队列前 15 词，`rewrite()` 对短篇保持同腔调同批词 |
+| 书架与阅读位置 | **书 = 题材**，不新增 `books` 表；短篇单独列一篇。Room v5 新增 `reading_positions`（连载 `book:<题材>`、短篇 `short:<章 id>`，`updatedAtSec` 最新的一行即上次阅读落点）；新建但没写正文的书用 `chapterId = 0` 占位。阅读页"书架"面板可切连载/短篇、新建连载、写短篇；关掉应用重开回到同一本同一章 |
+| 热力图 | 今日页 13 周日历格，按**当天不重复词数**着色（同一天同一词连点多次只算一个），不按打分次数。固定阈值 0 / 1–4 / 5–9 / 10–19 / 20+，不用相对分位。纯函数 `core.schedule.heatGridOf`，数据源同 `review_logs` |
+| 版本切分 | 四刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付，2026-10-28 模拟器验收）、**v0.3** prompt 层（默认密度与篇幅、故事圣经、人物状态、全书梗概，已交付，2026-10-28 模拟器验收，versionName 0.3.0 / versionCode 4）、**v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收，versionName 1.0.0 / versionCode 5）、**v1.1** PDF 导入 + 书架/阅读位置 + 热力图 + 短篇模式（已交付，2026-10-29 模拟器验收，versionName 1.1.0 / versionCode 6）。每刀单独真机验收 |
 | prototype/ | 一次性交互原型（仅阅读页视觉/交互规格），非产品代码，禁止进入 app source set |
 
 ## 3. 架构边界（防屎山条款）
@@ -44,7 +47,10 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 - `core.bible`：故事圣经的领域层——`BibleSection` 枚举与 `BibleDraft` 等模型、`StoryContext` / `StoryContextSource`（生成侧只看这三层）、纯函数 `CastMerger`（合并规则可单测）、`StoryBibleRepository`（唯一写入口，只它碰 Room）。依赖方向单向：`core.ai` → `core.bible`，禁止反向。
 - `core.backup`：`DbSnapshot`（`VACUUM INTO` 出一致性快照 + 校验，返回 `SnapshotProblem` 列表而不是布尔）、`WebDavClient`（只做 HTTP，异常带 `BackupFailure` 枚举）、`BackupPlan`（保留策略纯函数）、`BackupService`（编排 + 写 `backup_runs`）。`core.notify`：`ReminderScheduler`（排程，纯函数 `secondsUntilNext`）、`DailyReminderWorker`（只认 `ReminderHost` 接口，不认识 `AppContainer`）、`Notifier`（渠道与文案投递）。二者对外暴露的都是**能力对象**（`ReminderControl` / `BackupService`），`Context` 封装在对象内部，ViewModel 只注入能力对象——这是"ViewModel 禁止持有 Context"的具体实现方式。
 - 旧列迁移后**保留但清空**（`story_bibles.charactersJson` / `synopsis`，被 `bible_entries` + `character_states` 取代）：`DROP COLUMN` 在 minSdk 26 上要 SQLite 3.35+，机型不稳；一次性回填（旧人物表与旧梗概搬进新表）放在 `Mutex` 后面，防并发改表把人写乱。
-- `core.ai`：prompt 模板为带版本常量（当前 `PromptBuilder.VERSION = 3`：三层上下文 + 章节 JSON 里回报 `changes`；档案展开另带 `BIBLE_SCHEMA`）；AI 输出必须通过 kotlinx-serialization schema 校验后才能入库；解析失败走修复重试（最多 2 次），仍失败则向用户明示错误，禁止静默丢弃。缺 `changes` 键的旧 V2 章节行必须照常能读。
+- `core.ai`：prompt 模板为带版本常量（当前 `PromptBuilder.VERSION = 3`：三层上下文 + 章节 JSON 里回报 `changes`；档案展开另带 `BIBLE_SCHEMA`，短篇另带 `SHORT_SCHEMA`）；AI 输出必须通过 kotlinx-serialization schema 校验后才能入库；解析失败走修复重试（最多 2 次），仍失败则向用户明示错误，禁止静默丢弃。缺 `changes` 键的旧 V2 章节行必须照常能读。短篇复用同一套章节契约与校验器，只换 prompt（`ShortTone`），且 `chapter.kind == "short"` 时**不写**故事档案/人物状态。
+- `core.ocr`：截图与 PDF 共用 `OcrEngine`（`lines(context, uri)` / `lines(bitmap)`）。`PdfOcr` 只负责逐页渲染与进度回调；`PdfRenderer` 的单线程约束与"先铺白底再渲染"的 ML Kit 前提写在类注释里，改动前先读。
+- `core.schedule`：到期队列（`ScheduleService` / `WordQueue`）、每日连续与补卡（`dailyInfoOf`）、热力图（`heatGridOf`，按"当天不重复词数"计）都在这层；今日页与阅读页必须共用同一份到期数，不许各算一套。
+- Room v5 起 `chapters.kind`（`serial` / `short`，默认 `serial`）与 `reading_positions` 并存。**所有连载章节查询必须带 `kind = 'serial'` 过滤**，短篇走 `shortStories()`；新增查询漏掉过滤会把短篇串进章节列表。书 = 题材（`genre`），短篇的 `genre` 存腔调名。
 - `core.fsrs`：纯 Kotlin 函数，零 Android 依赖，可直接单测。
 - 量化红线：单文件 >400 行或单函数 >80 行必须拆分；禁止 Util 垃圾抽屉包（工具放进所属领域包）；同一逻辑复制粘贴出现第 3 次必须抽象；禁止空 catch 与吞异常；ViewModel 禁止持有 Context / View。
 
@@ -115,7 +121,7 @@ Git Bash 下 `adb` 的文件路径参数会被 MSYS 改写，先 `export MSYS_NO
 
 ## 8. 里程碑
 
-M0 环境与骨架 → M1 词库层 → M2 FSRS 调度 → M3 AI 生成 → M4 阅读层（均已在 2026-10-28 真机验收，唯 txt / 截图导入未跑）→ M5 收尾分三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付）→ **v0.3** prompt 层：默认密度与篇幅、故事圣经、人物状态、全书梗概（已交付，2026-10-28 模拟器验收，Room v2→v3 迁移在带真实数据的旧库上实测过）→ **v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收：`DailyLoopMigrationTest` 覆盖 v3→v4 且模拟器上的既有库原地升到了 v4、提醒通知实弹弹出、备份与恢复的校验闸门实测会拒绝坏文件与未配置；**尚未在用户真机上走过**，坚果云真实账号也未实测）。下一刀 v1.5 以**短篇模式**开头。每刀单独真机验收，不许合并跳级。
+M0 环境与骨架 → M1 词库层 → M2 FSRS 调度 → M3 AI 生成 → M4 阅读层（均已在 2026-10-28 真机验收，唯 txt / 截图导入未跑）→ M5 收尾分三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付）→ **v0.3** prompt 层：默认密度与篇幅、故事圣经、人物状态、全书梗概（已交付，2026-10-28 模拟器验收，Room v2→v3 迁移在带真实数据的旧库上实测过）→ **v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收：`DailyLoopMigrationTest` 覆盖 v3→v4 且模拟器上的既有库原地升到了 v4、提醒通知实弹弹出、备份与恢复的校验闸门实测会拒绝坏文件与未配置；**尚未在用户真机上走过**，坚果云真实账号也未实测）→ **v1.1** PDF 导入 + 书架/阅读位置 + 热力图 + 短篇模式（已交付，2026-10-29 模拟器验收：`BookshelfMigrationTest` 覆盖 v4→v5、PDF 端到端导入 3 词、书架切书与杀进程重开仍回原书、短篇入口与 prompt/校验单测；**短篇真实正文尚未生成**，因为模拟器没有 API key）。v1.5 剩余：独立测验会话、统计趋势图、导入嵌词、CSV/Anki 导出。每刀单独真机验收，不许合并跳级。
 
 ## 9. 术语表
 
@@ -127,4 +133,7 @@ M0 环境与骨架 → M1 词库层 → M2 FSRS 调度 → M3 AI 生成 → M4 �
 - 故事圣经：按题材存在的三层上下文——用户口述展开出的设定条目（基调/主角/结局倾向/禁止事项）、系统从每章"本章变化"合并出的人物状态表、以及本章全书逐章一行梗概（超过约 60 章才折叠成分卷摘要）。取代原先"只有最近 3 章梗概 + 被覆盖的 synopsis"的做法。取舍见 `docs/adr/0005-story-bible-from-one-prompt.md`；早期角色表 12 条上限与 recap 窗口见 `docs/adr/0002-chapter-continuity.md`（已被 0005 部分修订）。
 - 打卡 / 补卡：当天给任意 1 个词打过分即算打卡；漏一天不归零，次日清空当日到期词自动补上，每周最多 1 次。见 `docs/adr/0006`。
 - 章 / 词的单位：章是阅读单位（进度、回看、重写、删除），词是调度单位（到期、计分、复现）。见 `docs/adr/0004-chapter-word-units.md`。
+- 书架 / 阅读位置：书 = 题材；`reading_positions` 记上次在看的书与章（连载 `book:<题材>`、短篇 `short:<章 id>`），重开应用回到同一本同一章。见 `docs/adr/0007`。
+- 短篇：单篇自足、不参与连载连贯层，章号 0、腔调存 `genre`，篇幅由词数决定（15 词 → 1500–2500 字）。见 `docs/adr/0007`。
+- 热力图：今日页 13 周网格，颜色按"当天不重复词数"计，固定阈值 0 / 1–4 / 5–9 / 10–19 / 20+。
 - grade：复习打分（忘了 / 困难 / 记得 / 简单），FSRS 输入；行内暴露记低权重 grade。

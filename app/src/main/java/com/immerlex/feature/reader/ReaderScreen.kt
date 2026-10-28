@@ -61,6 +61,9 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     var chaptersOpen by remember { mutableStateOf(false) }
+    var shelfOpen by remember { mutableStateOf(false) }
+    var newBookOpen by remember { mutableStateOf(false) }
+    var tonePickerOpen by remember { mutableStateOf(false) }
     var rewriteOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Long?>(null) }
 
@@ -74,16 +77,19 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             ReaderHeader(
                 title = state.title,
+                book = state.book,
                 number = state.number,
                 mode = state.mode,
                 wordCount = state.wordCount,
                 graded = state.graded,
                 loading = state.loading,
                 hasChapter = state.hasChapter,
+                isShort = state.isShort,
                 generating = state.generating,
                 onSelectMode = vm::setMode,
                 onGenerate = vm::generate,
                 onOpenChapters = { chaptersOpen = true },
+                onOpenShelf = { shelfOpen = true },
             )
             when {
                 state.loading -> CenteredNote(stringResource(R.string.reader_loading))
@@ -126,6 +132,55 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
             },
         )
     }
+    if (shelfOpen) {
+        BookShelfSheet(
+            books = state.books,
+            shorts = state.shorts,
+            currentBook = state.book,
+            currentChapterId = state.chapterId,
+            readingShort = state.isShort,
+            generating = state.generating,
+            onPickBook = { genre ->
+                shelfOpen = false
+                vm.switchBook(genre)
+            },
+            onPickShort = { id ->
+                shelfOpen = false
+                vm.openChapter(id)
+            },
+            onNewBook = {
+                shelfOpen = false
+                newBookOpen = true
+            },
+            onWriteShort = {
+                shelfOpen = false
+                tonePickerOpen = true
+            },
+            onDeleteShort = { id ->
+                shelfOpen = false
+                deleteTarget = id
+            },
+            onDismiss = { shelfOpen = false },
+        )
+    }
+    if (newBookOpen) {
+        NewBookDialog(
+            onDismiss = { newBookOpen = false },
+            onCreate = { name ->
+                newBookOpen = false
+                vm.switchBook(name)
+            },
+        )
+    }
+    if (tonePickerOpen) {
+        ShortTonePicker(
+            onDismiss = { tonePickerOpen = false },
+            onPick = { tone ->
+                tonePickerOpen = false
+                vm.generateShort(tone)
+            },
+        )
+    }
     if (rewriteOpen) {
         ConfirmDialog(
             title = stringResource(R.string.reader_rewrite),
@@ -139,10 +194,16 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         )
     }
     deleteTarget?.let { id ->
-        val chapter = state.chapters.find { it.id == id }
+        val short = state.shorts.find { it.id == id }
         ConfirmDialog(
-            title = stringResource(R.string.reader_chapter_delete),
-            body = stringResource(R.string.reader_delete_body, chapter?.number ?: 0),
+            title = stringResource(
+                if (short != null) R.string.reader_short_delete_title else R.string.reader_chapter_delete,
+            ),
+            body = if (short != null) {
+                stringResource(R.string.reader_short_delete_body)
+            } else {
+                stringResource(R.string.reader_delete_body, state.chapters.find { it.id == id }?.number ?: 0)
+            },
             confirmLabel = stringResource(R.string.action_delete),
             onConfirm = {
                 deleteTarget = null
@@ -156,35 +217,42 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
 @Composable
 private fun ReaderHeader(
     title: String,
+    book: String,
     number: Int,
     mode: ReaderMode,
     wordCount: Int,
     graded: Int,
     loading: Boolean,
     hasChapter: Boolean,
+    isShort: Boolean,
     generating: Boolean,
     onSelectMode: (ReaderMode) -> Unit,
     onGenerate: () -> Unit,
     onOpenChapters: () -> Unit,
+    onOpenShelf: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (loading) stringResource(R.string.reader_loading) else title,
+                when {
+                    loading -> stringResource(R.string.reader_loading)
+                    else -> title.ifBlank { book }
+                },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
-                    .clickable(enabled = hasChapter, onClick = onOpenChapters),
+                    .clickable(enabled = hasChapter && !isShort, onClick = onOpenChapters),
             )
-            if (hasChapter) {
+            if (hasChapter && !isShort) {
                 IconButton(onClick = onOpenChapters, modifier = Modifier.size(30.dp)) {
                     Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.reader_chapters_title))
                 }
             }
+            TextButton(onClick = onOpenShelf) { Text(stringResource(R.string.reader_shelf)) }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -203,7 +271,7 @@ private fun ReaderHeader(
                     }
                 }
             }
-            if (hasChapter) {
+            if (hasChapter && !isShort) {
                 TextButton(onClick = onGenerate, enabled = !generating) {
                     Text(
                         stringResource(
@@ -215,7 +283,11 @@ private fun ReaderHeader(
         }
         if (hasChapter) {
             Text(
-                stringResource(R.string.reader_progress, number, wordCount, graded),
+                if (isShort) {
+                    stringResource(R.string.reader_short_progress, wordCount, graded)
+                } else {
+                    stringResource(R.string.reader_progress, number, wordCount, graded)
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = ImmerlexColors.Meta,
             )
@@ -226,6 +298,13 @@ private fun ReaderHeader(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+        }
+        if (generating) {
+            Text(
+                stringResource(R.string.reader_generating),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

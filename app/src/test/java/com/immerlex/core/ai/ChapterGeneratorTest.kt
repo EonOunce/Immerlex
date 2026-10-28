@@ -8,6 +8,7 @@ import com.immerlex.core.bible.RecapLine
 import com.immerlex.core.bible.StoryContext
 import com.immerlex.core.bible.StoryContextSource
 import com.immerlex.core.db.ChapterEntity
+import com.immerlex.core.db.KIND_SHORT
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.schedule.TodayQueue
 import com.immerlex.core.schedule.WordQueue
@@ -334,6 +335,78 @@ class ChapterGeneratorTest {
 
         assertTrue(gen.rewrite(harness.chapters.items.single().id, Density.MEDIUM) is GenerateOutcome.Rejected)
         assertEquals("第三章 · 旧版", harness.chapters.items.single().title)
+        assertEquals(0, harness.story.outcomes.size)
+    }
+
+    @Test
+    fun shortStoryCarriesTheToneAndEveryWord() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val (gen, client) = generator(listOf(encode(f.doc)), f)
+
+        val outcome = gen.generateShort(ShortTone.LUSH)
+
+        assertTrue(outcome is GenerateOutcome.Saved)
+        val prompt = client.prompts.single()
+        assertTrue(prompt.contains(ShortTone.LUSH.brief))
+        assertTrue(prompt.contains("1500–2500"))
+        f.words.forEach { assertTrue("短篇没带上 $it", prompt.contains(it)) }
+        assertFalse("短篇不该读故事档案", prompt.contains("【故事档案】"))
+    }
+
+    @Test
+    fun shortIsStoredAsShortAndLeavesTheBibleAlone() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val harness = Harness(story = FakeStory(context = StoryContext(recaps = listOf(RecapLine(1, "旧章", "旧梗概")))))
+        val (gen, _) = generator(listOf(encode(f.doc)), f, harness)
+
+        val outcome = gen.generateShort(ShortTone.EVERYMAN) as GenerateOutcome.Saved
+
+        assertEquals(KIND_SHORT, outcome.chapter.kind)
+        assertEquals(0, outcome.chapter.number)
+        assertEquals(KIND_SHORT, harness.chapters.items.single().kind)
+        assertEquals("短篇是自足的，不该回写人物状态", 0, harness.story.outcomes.size)
+    }
+
+    @Test
+    fun shortStoryAsksForAtMostFifteenWords() = runBlocking {
+        val bankFixture = fixture(paragraphs = 20, blocks = 3, wordsPerParagraph = 1)
+        val doc = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val (gen, client) = generator(listOf(encode(doc.doc)), bankFixture)
+
+        val outcome = gen.generateShort(ShortTone.COLD)
+
+        assertTrue(outcome is GenerateOutcome.Saved)
+        val prompt = client.prompts.single()
+        assertTrue(prompt.contains(bankFixture.words[14]))
+        assertFalse("第 16 个词不该进短篇", prompt.contains(bankFixture.words[15]))
+    }
+
+    @Test
+    fun shortRewriteKeepsItsKindAndTone() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val harness = Harness()
+        f.words.forEach { harness.words.insert(WordEntity(word = it, source = "test", createdAtSec = 0)) }
+        harness.chapters.insert(
+            chapterRow(0, "COLD", "旧短篇", "").copy(segmentsJson = encode(f.doc), kind = KIND_SHORT),
+        )
+        val id = harness.chapters.items.single().id
+        val fresh = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1, title = "新短篇")
+        val client = FakeClient(listOf(encode(fresh.doc)))
+        val gen = ChapterGenerator(
+            queue = FakeQueue(TodayQueue(emptyList(), emptyList())),
+            chapterDao = harness.chapters,
+            story = harness.story,
+            wordDao = harness.words,
+            clientFor = { client },
+        )
+
+        val outcome = gen.rewrite(id, Density.MEDIUM) as GenerateOutcome.Saved
+
+        assertEquals(KIND_SHORT, outcome.chapter.kind)
+        assertEquals("COLD", outcome.chapter.genre)
+        assertEquals("新短篇", harness.chapters.items.single().title)
+        assertEquals("重写不该新增一行", 1, harness.chapters.items.size)
+        assertTrue(client.prompts.single().contains(ShortTone.COLD.brief))
         assertEquals(0, harness.story.outcomes.size)
     }
 }

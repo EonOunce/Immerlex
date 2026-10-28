@@ -3,6 +3,7 @@ package com.immerlex.core.schedule
 import com.immerlex.core.db.DailyLoopDao
 import com.immerlex.core.db.DailyLoopEntity
 import com.immerlex.core.db.ReviewLogDao
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
 
@@ -47,6 +48,14 @@ class DailyLoopService(
             )
         }
         return info
+    }
+
+    /** 输入与 [info] 同源：都按本机时区把 `review_logs` 的时刻落到日历日上。 */
+    suspend fun heatGrid(now: Instant, weeks: Int = HEATMAP_WEEKS): List<HeatDay> {
+        val today = now.atZone(zone).toLocalDate()
+        val start = today.with(DayOfWeek.MONDAY).minusWeeks((weeks - 1).toLong())
+        val since = start.atStartOfDay(zone).toEpochSecond()
+        return heatGridOf(logDao.reviewsSince(since), today, weeks, zone)
     }
 
     private fun epochDay(epochSec: Long): Long =

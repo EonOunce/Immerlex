@@ -1,8 +1,11 @@
 package com.immerlex.core.ai
 
+import com.immerlex.core.bible.StoryContext
 import com.immerlex.core.bible.StoryContextSource
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.ChapterEntity
+import com.immerlex.core.db.KIND_SERIAL
+import com.immerlex.core.db.KIND_SHORT
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.schedule.WordQueue
@@ -61,7 +64,8 @@ class ChapterGenerator(
 
     /**
      * 重写本章：沿用这一章已经嵌过的词与编号，成功才替换原行，失败则原章原样保留。
-     * 词的状态一个都不动——重写只是重写作文，不是重学一遍单词。
+     * 词的状态一个都不动——重写只是重写作文，不是重学一遍单词。短篇换用短篇 prompt，
+     * 但同样保持"同一批词、同一个腔调"。
      */
     suspend fun rewrite(
         chapterId: Long,
@@ -76,27 +80,80 @@ class ChapterGenerator(
             .orEmpty()
         val words = wordDao.findByWords(lookups.distinct())
         if (words.isEmpty()) return GenerateOutcome.NoWords
-        val request = buildRequest(
-            genre = chapter.genre,
-            density = density,
-            newWords = words.filter { it.isNew },
-            reviewWords = words.filterNot { it.isNew },
-            chapterNumber = chapter.number,
-            excludeChapterId = chapterId,
+        val short = chapter.kind == KIND_SHORT
+        val request = if (short) {
+            shortRequest(ShortTone.of(chapter.genre), words, shortCharsFor(words.size))
+        } else {
+            buildRequest(
+                genre = chapter.genre,
+                density = density,
+                newWords = words.filter { it.isNew },
+                reviewWords = words.filterNot { it.isNew },
+                chapterNumber = chapter.number,
+                excludeChapterId = chapterId,
+            )
+        }
+        return write(
+            request = request,
+            replaceId = chapterId,
+            kind = chapter.kind,
+            minHanChars = if (short) MIN_SHORT_HAN_CHARS else MIN_HAN_CHARS,
         )
-        return write(request, replaceId = chapterId)
     }
 
-    private suspend fun write(request: ChapterRequest, replaceId: Long?): GenerateOutcome {
+    /**
+     * v1.5 短篇：用今日队列里最多 15 个词写一篇自足的短篇。它不读、也不写故事档案，
+     * 所以短篇和连载互不干扰。
+     */
+    suspend fun generateShort(
+        tone: ShortTone,
+        now: Instant = Instant.now(),
+        dailyNewLimit: Int = DEFAULT_DAILY_NEW,
+    ): GenerateOutcome {
+        val today = queue.todaysQueue(now, dailyNewLimit)
+        val words = (today.newWords + today.reviewWords).take(SHORT_WORD_CAP)
+        if (words.isEmpty()) return GenerateOutcome.NoWords
+        return write(
+            request = shortRequest(tone, words, shortCharsFor(words.size)),
+            replaceId = null,
+            kind = KIND_SHORT,
+            minHanChars = MIN_SHORT_HAN_CHARS,
+        )
+    }
+
+    private fun shortRequest(
+        tone: ShortTone,
+        words: List<WordEntity>,
+        targetHanChars: Int,
+    ) = ChapterRequest(
+        genre = tone.name,
+        chapterNumber = 0,
+        targetHanChars = targetHanChars,
+        density = Density.SPARSE,
+        newWords = words.filter { it.isNew }.map { it.brief() },
+        reviewWords = words.filterNot { it.isNew }.map { it.brief() },
+        story = StoryContext(),
+    )
+
+    private fun shortCharsFor(wordCount: Int): Int =
+        (wordCount * SHORT_CHARS_PER_WORD).coerceIn(MIN_SHORT_CHARS, MAX_SHORT_CHARS)
+
+    private suspend fun write(
+        request: ChapterRequest,
+        replaceId: Long?,
+        kind: String = KIND_SERIAL,
+        minHanChars: Int = MIN_HAN_CHARS,
+    ): GenerateOutcome {
         val client = clientFor()
+        val task = promptFor(request, kind)
         var previous = ""
         var issues = listOf<ValidationIssue>()
 
         for (attempt in 0..maxRepairs) {
             val userPrompt = if (attempt == 0) {
-                PromptBuilder.user(request)
+                task
             } else {
-                PromptBuilder.repair(PromptBuilder.user(request), issues, previous)
+                PromptBuilder.repair(task, issues, previous)
             }
             val raw = try {
                 client.complete(PromptBuilder.system(), userPrompt)
@@ -110,10 +167,10 @@ class ChapterGenerator(
                 parsed,
                 request.allWords.map { it.word },
                 request.density,
-                MIN_HAN_CHARS,
+                minHanChars,
             )
             if (issues.isEmpty() && parsed != null) {
-                return save(parsed, raw, request, attempt + 1, replaceId)
+                return save(parsed, raw, request, attempt + 1, replaceId, kind)
             }
             if (issues.isEmpty()) {
                 issues = listOf(ValidationIssue("unparseable_json"))
@@ -121,6 +178,13 @@ class ChapterGenerator(
         }
         return GenerateOutcome.Rejected(issues, maxRepairs + 1)
     }
+
+    private fun promptFor(request: ChapterRequest, kind: String): String =
+        if (kind == KIND_SHORT) {
+            PromptBuilder.shortUser(request, ShortTone.of(request.genre))
+        } else {
+            PromptBuilder.user(request)
+        }
 
     private suspend fun nextChapterNumber(genre: String): Int {
         // 档案里的章号只是"曾经写到第几章"的记忆：删掉最后一章也不回退，
@@ -155,6 +219,7 @@ class ChapterGenerator(
         request: ChapterRequest,
         attempts: Int,
         replaceId: Long?,
+        kind: String,
     ): GenerateOutcome {
         val number = request.chapterNumber
         val stored = ChapterEntity(
@@ -165,13 +230,17 @@ class ChapterGenerator(
             createdAtSec = Instant.now().epochSecond,
             segmentsJson = ChapterParser.extractJson(rawJson).orEmpty(),
             summary = chapter.summary,
+            kind = kind,
         )
         val id = if (replaceId == null) chapterDao.insert(stored) else {
             chapterDao.update(stored)
             replaceId
         }
         // 登场人物与"本章变化"合并进人物状态表，不需要额外一次调用（docs/adr/0005 第 3 条）。
-        story.recordChapterOutcome(request.genre, number, chapter.characters, chapter.changes)
+        // 短篇是自足的，不属于任何一本书，所以不改动连载的上下文。
+        if (kind == KIND_SERIAL) {
+            story.recordChapterOutcome(request.genre, number, chapter.characters, chapter.changes)
+        }
         return GenerateOutcome.Saved(stored.copy(id = id), attempts = attempts)
     }
 
@@ -185,7 +254,19 @@ class ChapterGenerator(
     private companion object {
         const val MIN_HAN_CHARS = 400
 
+        /** AGENTS.md §2：每日新词上限默认 25，调用方没传时按默认值取队列。 */
+        const val DEFAULT_DAILY_NEW = 25
+
         /** 千字左右、每章 20–30 词（AGENTS.md §2）：再密就得靠重复塞词凑数，句子会先垮。 */
         const val DEFAULT_TARGET_HAN_CHARS = 1000
+
+        /** 短篇按"15 词 → 1500–2500 字"给篇幅，词少时不缩到 1500 以下（AGENTS.md §2）。 */
+        const val SHORT_WORD_CAP = 15
+        const val SHORT_CHARS_PER_WORD = 110
+        const val MIN_SHORT_CHARS = 1500
+        const val MAX_SHORT_CHARS = 2500
+
+        /** 校验底线比目标低一截：模型写到 1200 字就算可用，不为凑字数再修一轮。 */
+        const val MIN_SHORT_HAN_CHARS = 1200
     }
 }

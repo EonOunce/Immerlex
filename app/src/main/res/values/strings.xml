@@ -14,6 +14,10 @@
     <string name="home_due">今日到期</string>
     <string name="home_done">今日已完成</string>
     <string name="home_new_words">其中新词 %1$d 个（受每日新词上限约束）</string>
+    <string name="home_heat_title">背书热力图</string>
+    <string name="home_heat_caption">近 13 周每天背过或复习过的单词数 · 今天 %1$d 个</string>
+    <string name="home_heat_less">少</string>
+    <string name="home_heat_more">多</string>
     <string name="home_makeup_unused">本周补卡：未用</string>
     <string name="home_makeup_used">本周补卡：已用过，本周不再补</string>
     <string name="home_makeup_pending">昨天断了：今天把到期词读完，就自动补回昨天</string>
@@ -33,8 +37,13 @@
     <string name="bank_gloss_hint">留空时自动从离线词典 ECDICT 补全音标与释义。</string>
     <string name="bank_import_txt">导入 txt</string>
     <string name="bank_import_image">截图导入</string>
+    <string name="bank_import_pdf">导入 PDF</string>
     <string name="bank_ocr_failed">识别失败，请换一张更清晰的截图</string>
     <string name="bank_ocr_empty">截图里没有可识别的文字</string>
+    <string name="bank_pdf_page">正在识别 PDF 第 %1$d/%2$d 页…</string>
+    <string name="bank_pdf_failed">这个 PDF 打不开：可能是加密文件或已损坏</string>
+    <string name="bank_pdf_empty">PDF 里没有识别出文字</string>
+    <string name="bank_pdf_truncated">PDF 共 %1$d 页，只识别了前 %2$d 页；页数多时请拆成小文件再导入。</string>
     <string name="bank_import_failed">无法读取所选文件，请确认它是纯文本。</string>
     <string name="bank_import_result">解析 %1$d 条，新增 %2$d，重复 %3$d，缺释义 %4$d</string>
     <string name="bank_working">处理中…</string>
@@ -43,7 +52,7 @@
     <string name="bank_deleted">已删除 %1$s</string>
     <string name="bank_delete_title">删除单词</string>
     <string name="bank_delete_body">删除 %1$s 会同时清除它的复习记录，确定吗？</string>
-    <string name="bank_empty_all">词库还是空的。点上方“导入 txt”或“截图导入”，也可以点右下角“添加单词”；点列表里的单词能查看释义或删除。</string>
+    <string name="bank_empty_all">词库还是空的。点上方“导入 txt”“截图导入”或“导入 PDF”，也可以点右下角“添加单词”；点列表里的单词能查看释义或删除。</string>
     <string name="bank_empty_search">没有匹配的单词。</string>
     <string name="bank_fsrs_summary">状态：%1$s · 复习 %2$d 次 · 遗忘 %3$d 次 · 当前间隔 %4$d 天</string>
 
@@ -215,6 +224,7 @@
     <string name="density_range_dense">每千汉字 35–50 词，沉浸式背词</string>
 
     <string name="gen_saved">已生成第 %1$d 章《%2$s》（尝试 %3$d 次）</string>
+    <string name="gen_short_saved">短篇《%1$s》写好了（尝试 %2$d 次）</string>
     <string name="gen_rejected">生成未通过校验（尝试 %2$d 次）：%1$s</string>
     <string name="gen_no_words">今日没有可安排的新词或复习词</string>
     <string name="gen_failed">生成失败：%1$s</string>
@@ -245,6 +255,32 @@
     <string name="reader_rewrite_body">用本章这 %1$d 个词再写一遍，写好后替换现在这一章。会再调用一次接口。</string>
     <string name="reader_rewrite_action">重写</string>
     <string name="reader_rewritten">已重写第 %1$d 章《%2$s》</string>
+
+    <string name="reader_shelf">书架</string>
+    <string name="reader_short_progress">短篇 · 本章 %1$d 个词 · 本次已复习 %2$d</string>
+    <string name="reader_short_delete_title">删除这篇短篇</string>
+    <string name="reader_short_delete_body">只删掉这篇短篇的正文，词库和复习进度都不受影响。</string>
+    <string name="reader_short_deleted">已删除短篇《%1$s》</string>
+    <string name="shelf_serial">连载</string>
+    <string name="shelf_shorts">短篇</string>
+    <string name="shelf_book_current">%1$s ← 正在读</string>
+    <string name="shelf_book_meta">%1$d 章</string>
+    <string name="shelf_book_empty">还没写正文</string>
+    <string name="shelf_short_current">%1$s ← 正在读</string>
+    <string name="shelf_new_book">新建连载</string>
+    <string name="shelf_write_short">写一篇短篇</string>
+    <string name="shelf_new_book_title">新建一本连载</string>
+    <string name="shelf_new_book_field">书名 / 题材</string>
+    <string name="shelf_new_book_hint">这就是书架上的书名；AI 会把它当作写作题材（例如“宫斗”“修仙”），之后也能在设置里改。</string>
+    <string name="shelf_new_book_action">建好</string>
+    <string name="shelf_short_title">写一篇短篇</string>
+    <string name="shelf_short_hint">短篇独立成篇，不接前面的章节。最多取今天队列里的 15 个词，写 1500–2500 字。</string>
+    <string name="short_tone_everyman">小人物点题</string>
+    <string name="short_tone_everyman_desc">普通人的具体处境，结尾一个动作或一句话点题。</string>
+    <string name="short_tone_lush">情绪华丽</string>
+    <string name="short_tone_lush_desc">意象密集、句子有声，结尾落在情绪最高点。</string>
+    <string name="short_tone_cold">设定先行冷结尾</string>
+    <string name="short_tone_cold_desc">先给清晰略带陌生的设定，最后冷处理反转或留白。</string>
     <string name="reader_grade_relearn">刚才点了“忘了”，再点一次算重学一遍。</string>
     <string name="reader_grade_amend">今天已经复习过，再点只修改上一次的评分，不会多算一次。</string>
     <string name="reader_grade_not_due">还没到复习时间，点开只是看释义。</string>

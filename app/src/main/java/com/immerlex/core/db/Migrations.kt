@@ -70,4 +70,19 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+/**
+ * v4 -> v5: v1.5 的书架与短篇。`chapters.kind` 区分连载章节（老行全是它）与单篇短篇；
+ * `reading_positions` 每个书架条目一行，记住读到哪章，"上次在看的东西"取其中最新的一行。
+ * 老章节靠列默认值直接归为 serial，不重建表、不动任何正文。
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `chapters` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'serial'")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `reading_positions` (`key` TEXT NOT NULL, " +
+                "`chapterId` INTEGER NOT NULL, `updatedAtSec` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        )
+    }
+}
+
+val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)

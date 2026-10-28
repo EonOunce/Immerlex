@@ -68,19 +68,39 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE id = :id")
     suspend fun byId(id: Long): ChapterEntity?
 
-    @Query("SELECT id, number, title FROM chapters WHERE genre = :genre ORDER BY number DESC, id DESC")
+    @Query("SELECT id, number, title FROM chapters WHERE genre = :genre AND kind = 'serial' ORDER BY number DESC, id DESC")
     suspend fun titlesForGenre(genre: String): List<ChapterOption>
 
     @Query("DELETE FROM chapters WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("SELECT * FROM chapters WHERE genre = :genre ORDER BY number DESC LIMIT 1")
+    @Query("SELECT * FROM chapters WHERE genre = :genre AND kind = 'serial' ORDER BY number DESC LIMIT 1")
     suspend fun latest(genre: String): ChapterEntity?
 
     /** [excludeId] keeps a rewritten chapter out of its own recap; pass 0 for a new chapter. */
-    @Query("SELECT number, title, summary FROM chapters WHERE genre = :genre AND id <> :excludeId ORDER BY number ASC, id ASC")
+    @Query(
+        "SELECT number, title, summary FROM chapters " +
+            "WHERE genre = :genre AND kind = 'serial' AND id <> :excludeId ORDER BY number ASC, id ASC",
+    )
     suspend fun recaps(genre: String, excludeId: Long): List<ChapterRecap>
+
+    /** 书架上的连载书：一行一本，按最近更新时间排。 */
+    @Query(
+        "SELECT genre, COUNT(*) AS chapters, MAX(createdAtSec) AS updatedAtSec FROM chapters " +
+            "WHERE kind = 'serial' GROUP BY genre ORDER BY updatedAtSec DESC",
+    )
+    suspend fun serialBooks(): List<BookRow>
+
+    @Query("SELECT id, number, title FROM chapters WHERE kind = 'short' ORDER BY createdAtSec DESC, id DESC")
+    suspend fun shortStories(): List<ChapterOption>
 }
+
+/** A row of the bookshelf's serial section. */
+data class BookRow(
+    val genre: String,
+    val chapters: Int,
+    val updatedAtSec: Long,
+)
 
 /** A row of the chapter switcher on the reading page. */
 data class ChapterOption(
@@ -199,6 +219,23 @@ interface DailyLoopDao {
     /** 连续天数最多回看一年，多余的行不参与计算。 */
     @Query("SELECT * FROM daily_loop WHERE epochDay >= :fromDay ORDER BY epochDay ASC")
     suspend fun since(fromDay: Long): List<DailyLoopEntity>
+}
+
+@Dao
+interface ReadingPositionDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ReadingPositionEntity)
+
+    /** 上次在看的那一本/那一篇：时间最新的一行，同一秒按 key 决出唯一一条。 */
+    @Query("SELECT * FROM reading_positions ORDER BY updatedAtSec DESC, key DESC LIMIT 1")
+    suspend fun latest(): ReadingPositionEntity?
+
+    @Query("SELECT * FROM reading_positions WHERE key = :key")
+    suspend fun byKey(key: String): ReadingPositionEntity?
+
+    /** 删短篇时清掉它的位置行；连载书的位置行留着，由阅读页改到这本书剩下的最后一章。 */
+    @Query("DELETE FROM reading_positions WHERE chapterId = :chapterId AND key LIKE 'short:%'")
+    suspend fun clearShortByChapter(chapterId: Long)
 }
 
 @Dao

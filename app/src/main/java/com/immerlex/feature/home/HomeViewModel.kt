@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.schedule.DailyLoopService
+import com.immerlex.core.schedule.HeatDay
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.settings.AppPreferences
 import java.time.Instant
@@ -23,6 +24,7 @@ data class HomeState(
     val makeupPending: Boolean = false,
     val hasChapter: Boolean = false,
     val chapterNumber: Int = 0,
+    val heat: List<HeatDay> = emptyList(),
 )
 
 /**
@@ -63,6 +65,7 @@ class HomeViewModel(
             makeupPending = info.makeupPendingToday,
             hasChapter = latest != null,
             chapterNumber = latest?.number ?: 0,
+            heat = dailyLoop.heatGrid(now),
         )
     }
 }

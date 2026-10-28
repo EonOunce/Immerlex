@@ -1,6 +1,7 @@
 package com.immerlex.core.ocr
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -12,6 +13,9 @@ import kotlinx.coroutines.withContext
 /** Recognised lines, one per detected text line; null when recognition itself failed. */
 interface OcrEngine {
     suspend fun lines(context: Context, uri: Uri): List<String>?
+
+    /** Same contract for a bitmap rendered by the PDF importer. */
+    suspend fun lines(bitmap: Bitmap): List<String>?
 }
 
 /**
@@ -26,6 +30,17 @@ class MlKitOcr : OcrEngine {
             val text = runCatching {
                 recognizer.process(InputImage.fromFilePath(context, uri)).await().text
             }.getOrNull() ?: return@withContext null
-            text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            text.toLines()
         }
+
+    override suspend fun lines(bitmap: Bitmap): List<String>? =
+        withContext(Dispatchers.IO) {
+            val text = runCatching {
+                recognizer.process(InputImage.fromBitmap(bitmap, 0)).await().text
+            }.getOrNull() ?: return@withContext null
+            text.toLines()
+        }
+
+    private fun String.toLines(): List<String> =
+        lines().map { it.trim() }.filter { it.isNotEmpty() }
 }

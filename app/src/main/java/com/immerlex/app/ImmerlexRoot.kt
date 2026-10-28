@@ -75,6 +75,7 @@ fun ImmerlexRoot() {
             ReaderViewModel(
                 chapterDao = container.db.chapterDao(),
                 wordDao = container.db.wordDao(),
+                positionDao = container.db.readingPositionDao(),
                 schedule = container.scheduleService,
                 prefs = container.prefs,
                 generator = container.chapterGenerator,

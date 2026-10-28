@@ -23,6 +23,7 @@ import com.immerlex.core.notify.ReminderHost
 import com.immerlex.core.notify.ReminderScheduler
 import com.immerlex.core.ocr.MlKitOcr
 import com.immerlex.core.ocr.OcrEngine
+import com.immerlex.core.ocr.PdfOcr
 import com.immerlex.core.secret.SecretStore
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.ScheduleService
@@ -69,6 +70,7 @@ class AppContainer(context: Context) {
     val prefs: AppPreferences by lazy { AppPreferences(context) }
     val apiKeyStore: ApiKeyStore by lazy { ApiKeyStore(context) }
     val ocr: OcrEngine by lazy { MlKitOcr() }
+    val pdfOcr: PdfOcr by lazy { PdfOcr(ocr) }
 
     // App-wide FSRS config: no learning steps (words graduate per review),
     // fuzzing off for deterministic scheduling, 10-year cap.

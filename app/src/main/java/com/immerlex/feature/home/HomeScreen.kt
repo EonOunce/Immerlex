@@ -1,12 +1,16 @@
 package com.immerlex.feature.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.core.schedule.HeatDay
 
 @Composable
 fun HomeScreen(vm: HomeViewModel, onStartReading: () -> Unit) {
@@ -46,6 +51,7 @@ fun HomeScreen(vm: HomeViewModel, onStartReading: () -> Unit) {
             CountCard(stringResource(R.string.home_due), state.due, Modifier.weight(1f))
             CountCard(stringResource(R.string.home_done), state.done, Modifier.weight(1f))
         }
+        HeatmapCard(days = state.heat, todayWords = state.done)
         if (state.newWords > 0) {
             Text(
                 stringResource(R.string.home_new_words, state.newWords),
@@ -132,4 +138,62 @@ private fun MakeupLine(state: HomeState) {
         else -> R.string.home_makeup_unused
     }
     Text(stringResource(text), style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Body)
+}
+
+/**
+ * 13 周 × 7 天的格子，颜色只回答一件事：那天背过或复习过多少词。
+ * 未来的几天留在网格里但不给颜色，免得最后一行看起来像"没背"。
+ */
+@Composable
+private fun HeatmapCard(days: List<HeatDay>, todayWords: Int) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.home_heat_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.home_heat_caption, todayWords),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImmerlexColors.Meta,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                days.chunked(7).forEach { week ->
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        week.forEach { day -> HeatCell(day.level) }
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    stringResource(R.string.home_heat_less),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ImmerlexColors.Meta,
+                )
+                (0..4).forEach { HeatCell(it) }
+                Text(
+                    stringResource(R.string.home_heat_more),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ImmerlexColors.Meta,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeatCell(level: Int) {
+    val color = if (level == 0) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f + 0.2f * level)
+    }
+    Box(Modifier.size(18.dp).background(color, RoundedCornerShape(3.dp)))
 }

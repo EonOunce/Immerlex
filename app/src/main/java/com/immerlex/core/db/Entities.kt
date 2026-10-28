@@ -1,5 +1,6 @@
 package com.immerlex.core.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -38,7 +39,31 @@ data class ChapterEntity(
     val createdAtSec: Long,
     val segmentsJson: String,
     val summary: String = "",
+    /** [KIND_SERIAL] = 连载里的一章，[KIND_SHORT] = 单篇自足的短篇。 */
+    @ColumnInfo(defaultValue = KIND_SERIAL) val kind: String = KIND_SERIAL,
 )
+
+const val KIND_SERIAL = "serial"
+const val KIND_SHORT = "short"
+
+/**
+ * 书架记住的阅读位置。key 是书架条目：连载书用 `book:<题材>`（一本一行），
+ * 短篇用 `short:<章 id>`。[updatedAtSec] 最大的那行就是"上次在看的东西"，
+ * 因此关掉应用再打开会回到同一本、同一章；被删的章由 [com.immerlex.core.db.ChapterDao] 的兜底处理。
+ */
+@Entity(tableName = "reading_positions")
+data class ReadingPositionEntity(
+    @PrimaryKey val key: String,
+    /** 0 = 这本书还没有章节（刚新建）。 */
+    val chapterId: Long,
+    val updatedAtSec: Long,
+)
+
+const val READING_BOOK_PREFIX = "book:"
+const val READING_SHORT_PREFIX = "short:"
+
+fun bookReadingKey(genre: String): String = READING_BOOK_PREFIX + genre
+fun shortReadingKey(chapterId: Long): String = READING_SHORT_PREFIX + chapterId
 
 @Entity(
     tableName = "review_logs",

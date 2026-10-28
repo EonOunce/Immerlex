@@ -51,6 +51,7 @@ import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.masteryPalette
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.ocr.PdfScan
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
 import java.time.Instant
@@ -72,6 +73,8 @@ fun WordBankScreen(vm: WordBankViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<WordEntity?>(null) }
     var pendingDelete by remember { mutableStateOf<WordEntity?>(null) }
+    var pdfLine by remember { mutableStateOf<String?>(null) }
+    var pdfNote by remember { mutableStateOf<String?>(null) }
 
     val importPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -98,6 +101,31 @@ fun WordBankScreen(vm: WordBankViewModel) {
                     lines == null -> snackbar.showSnackbar(context.getString(R.string.bank_ocr_failed))
                     lines.isEmpty() -> snackbar.showSnackbar(context.getString(R.string.bank_ocr_empty))
                     else -> vm.importText(lines.joinToString("\n"), source = "ocr")
+                }
+            }
+        }
+    }
+
+    val pdfPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                pdfNote = null
+                val scan = container.pdfOcr.scan(context, uri) { done, total ->
+                    pdfLine = context.getString(R.string.bank_pdf_page, done, total)
+                }
+                pdfLine = null
+                when (scan) {
+                    is PdfScan.Ok -> {
+                        if (scan.truncated) {
+                            pdfNote = context.getString(R.string.bank_pdf_truncated, scan.totalPages, scan.pages)
+                        }
+                        vm.importText(scan.lines.joinToString("\n"), source = "pdf")
+                    }
+
+                    PdfScan.CannotOpen -> snackbar.showSnackbar(context.getString(R.string.bank_pdf_failed))
+                    PdfScan.Empty -> snackbar.showSnackbar(context.getString(R.string.bank_pdf_empty))
                 }
             }
         }
@@ -130,11 +158,21 @@ fun WordBankScreen(vm: WordBankViewModel) {
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                     )
                 },
+                onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
             )
-            if (busy) {
+            pdfNote?.let { note ->
+                Text(
+                    note,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImmerlexColors.Meta,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                )
+            }
+            val progressText = pdfLine ?: if (busy) stringResource(R.string.bank_working) else null
+            if (progressText != null) {
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        stringResource(R.string.bank_working),
+                        progressText,
                         style = MaterialTheme.typography.labelLarge,
                         color = ImmerlexColors.Meta,
                     )
@@ -192,6 +230,7 @@ private fun BankHeader(
     vm: WordBankViewModel,
     onImport: () -> Unit,
     onImportImage: () -> Unit,
+    onImportPdf: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -206,12 +245,20 @@ private fun BankHeader(
                 style = MaterialTheme.typography.labelLarge,
                 color = ImmerlexColors.Meta,
             )
-            Spacer(Modifier.weight(1f))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             TextButton(onClick = onImport) {
                 Text(stringResource(R.string.bank_import_txt))
             }
             TextButton(onClick = onImportImage) {
                 Text(stringResource(R.string.bank_import_image))
+            }
+            TextButton(onClick = onImportPdf) {
+                Text(stringResource(R.string.bank_import_pdf))
             }
         }
         OutlinedTextField(
