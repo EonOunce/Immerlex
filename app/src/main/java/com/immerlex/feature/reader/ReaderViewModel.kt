@@ -15,6 +15,7 @@ import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
+import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.reader.ChapterResolver
 import com.immerlex.core.reader.ReaderSegment
 import com.immerlex.core.reader.ReaderWord
@@ -58,6 +59,7 @@ class ReaderViewModel(
     private val prefs: AppPreferences,
     private val generator: ChapterGenerator,
     private val aiConfig: () -> AiConfig,
+    private val notifier: GenerationNotifier,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderState())
@@ -80,7 +82,9 @@ class ReaderViewModel(
         }
         _state.value = _state.value.copy(generating = true)
         try {
-            val outcome = generator.generate(prefs.genre, prefs.density, prefs.dailyNewLimit)
+            val outcome = notifier.runTracked {
+                generator.generate(prefs.genre, prefs.density, prefs.dailyNewLimit)
+            }
             _messages.emit(outcome.toUiMessage())
             if (outcome is GenerateOutcome.Saved) load()
         } finally {
@@ -98,7 +102,7 @@ class ReaderViewModel(
         }
         _state.value = _state.value.copy(generating = true)
         try {
-            val outcome = generator.rewrite(chapterId, prefs.density)
+            val outcome = notifier.runTracked { generator.rewrite(chapterId, prefs.density) }
             _messages.emit(
                 if (outcome is GenerateOutcome.Saved) {
                     UiMessage(R.string.reader_rewritten, listOf(outcome.chapter.number, outcome.chapter.title))

@@ -1,5 +1,12 @@
 package com.immerlex.feature.settings
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -47,12 +54,17 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ -> vm.onNotificationPermissionResult() }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
             snackbar.showSnackbar(context.textFor(msg))
         }
     }
+
+    BackupDialogs(state, vm)
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Column(
@@ -177,6 +189,52 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
                 Switch(checked = state.darkMode, onCheckedChange = vm::onDarkMode)
             }
 
+            SectionTitle(stringResource(R.string.settings_reminder_section))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_reminder_on),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = state.reminderEnabled, onCheckedChange = vm::onReminderEnabled)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_reminder_time, state.reminderTime),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = { vm.onReminderShift(-30) }) { Text("−") }
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = { vm.onReminderShift(30) }) { Text("＋") }
+            }
+            Text(
+                stringResource(R.string.settings_reminder_rule),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImmerlexColors.Meta,
+            )
+            if (!state.notificationsAllowed) {
+                // 权限没给，提醒排得再准也弹不出来，所以这里给一个直接去授权的入口。
+                // Android 13 以下没有这个运行时权限，申请不会弹框，只能把人送到系统设置里。
+                OutlinedButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        context.openNotificationSettings()
+                    }
+                }) {
+                    Text(stringResource(R.string.settings_notify_allow))
+                }
+                Text(
+                    stringResource(R.string.settings_notify_denied),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ImmerlexColors.Rust,
+                )
+            }
+
+            SectionTitle(stringResource(R.string.settings_backup_section))
+            BackupSection(state, vm)
+
             SectionTitle(stringResource(R.string.settings_bank_section))
             Text(
                 stringResource(R.string.settings_bank_summary, state.bankTotal, state.bankNew, state.bankDue),
@@ -235,4 +293,12 @@ private fun ChipRow(options: List<Pair<String, String>>, selected: String?, onPi
             FilterChip(onClick = { onPick(value) }, selected = value == selected, label = { Text(name) })
         }
     }
+}
+
+private fun Context.openNotificationSettings() {
+    startActivity(
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
 }

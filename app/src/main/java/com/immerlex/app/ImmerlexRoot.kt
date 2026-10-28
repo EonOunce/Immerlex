@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.immerlex.app.ui.ImmerlexTheme
+import com.immerlex.feature.home.HomeScreen
+import com.immerlex.feature.home.HomeViewModel
 import com.immerlex.feature.wordbank.WordBankRepository
 import com.immerlex.feature.wordbank.WordBankScreen
 import com.immerlex.feature.reader.ReaderScreen
@@ -55,6 +58,9 @@ fun ImmerlexRoot() {
                 keyStore = container.apiKeyStore,
                 generator = container.chapterGenerator,
                 wordDao = container.db.wordDao(),
+                notifier = container.generationNotifier,
+                reminder = container.reminder,
+                backup = container.backupService,
             )
         }
         initializer {
@@ -73,6 +79,15 @@ fun ImmerlexRoot() {
                 prefs = container.prefs,
                 generator = container.chapterGenerator,
                 aiConfig = container::aiConfig,
+                notifier = container.generationNotifier,
+            )
+        }
+        initializer {
+            HomeViewModel(
+                dailyLoop = container.dailyLoopService,
+                schedule = container.scheduleService,
+                chapterDao = container.db.chapterDao(),
+                prefs = container.prefs,
             )
         }
     }
@@ -84,20 +99,23 @@ fun ImmerlexRoot() {
         val backStack by navController.currentBackStackEntryAsState()
         val currentRoute = backStack?.destination?.route
 
+        // 今日页的"开始今日阅读"和底栏走的是同一套换栏逻辑，否则两处会一个存状态一个不存。
+        val goToTab: (Destinations) -> Unit = { dest ->
+            navController.navigate(dest.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+
         Scaffold(bottomBar = {
             NavigationBar {
                 Destinations.entries.forEach { dest ->
                     NavigationBarItem(
                         selected = currentRoute == dest.route,
-                        onClick = {
-                            navController.navigate(dest.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { goToTab(dest) },
                         icon = { Icon(dest.icon, contentDescription = null) },
                         label = { Text(stringResource(dest.labelRes)) },
                     )
@@ -106,9 +124,13 @@ fun ImmerlexRoot() {
         }) { padding ->
             NavHost(
                 navController = navController,
-                startDestination = Destinations.BANK.route,
+                startDestination = Destinations.HOME.route,
                 modifier = Modifier.padding(padding),
             ) {
+                composable(Destinations.HOME.route) {
+                    val vm: HomeViewModel = viewModel(factory = appViewModelFactory)
+                    HomeScreen(vm, onStartReading = { goToTab(Destinations.READER) })
+                }
                 composable(Destinations.BANK.route) {
                     val vm: WordBankViewModel = viewModel(factory = appViewModelFactory)
                     WordBankScreen(vm)
@@ -137,6 +159,7 @@ private enum class Destinations(
     val labelRes: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
+    HOME("home", R.string.tab_home, Icons.Filled.Home),
     BANK("bank", R.string.tab_bank, Icons.AutoMirrored.Filled.List),
     READER("reader", R.string.tab_reader, Icons.Filled.Create),
     SETTINGS("settings", R.string.tab_settings, Icons.Filled.Settings),

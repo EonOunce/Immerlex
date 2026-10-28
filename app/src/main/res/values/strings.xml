@@ -5,6 +5,23 @@
     <string name="tab_bank">词库</string>
     <string name="tab_reader">阅读</string>
     <string name="tab_settings">设置</string>
+    <string name="tab_home">今日</string>
+
+    <string name="home_title">今日任务</string>
+    <string name="home_streak">连续 %1$d 天</string>
+    <string name="home_checked_in">今天已打卡</string>
+    <string name="home_not_yet">今天还没打卡：给任意一个词打过分就算</string>
+    <string name="home_due">今日到期</string>
+    <string name="home_done">今日已完成</string>
+    <string name="home_new_words">其中新词 %1$d 个（受每日新词上限约束）</string>
+    <string name="home_makeup_unused">本周补卡：未用</string>
+    <string name="home_makeup_used">本周补卡：已用过，本周不再补</string>
+    <string name="home_makeup_pending">昨天断了：今天把到期词读完，就自动补回昨天</string>
+    <string name="home_loading">正在统计…</string>
+    <string name="home_start_first">用今天的词写第一章</string>
+    <string name="home_start_reading">开始今日阅读</string>
+    <string name="home_continue">接着读第 %1$d 章；点标题能换回看其它章</string>
+    <string name="home_explain">打卡只要求当天给任意一个词打过分。漏一天不会归零：第二天清空当日到期词就自动补上，每周最多补一次。没有积分、也没有兑换。</string>
 
     <string name="bank_title">词库</string>
     <string name="bank_count">共 %1$d 个词</string>
@@ -79,6 +96,75 @@
     <string name="settings_appearance_section">阅读外观</string>
     <string name="settings_font_size">字号</string>
     <string name="settings_dark_mode">深色模式</string>
+
+    <string name="settings_reminder_section">每日提醒</string>
+    <string name="settings_reminder_on">到期提醒</string>
+    <string name="settings_reminder_time">提醒时刻：%1$s</string>
+    <string name="settings_reminder_rule">到点时如果今天还有到期词才提醒；今天一个词都不欠就安静。系统的后台调度可能让它晚到几分钟，不会提前。</string>
+    <string name="settings_notify_allow">允许通知</string>
+    <string name="settings_notify_denied">系统里本应用的通知是关着的：点这里授权，或到 设置 → 应用 → Immerlex 里打开。</string>
+
+    <string name="settings_backup_section">备份与恢复</string>
+    <string name="settings_backup_url">网盘地址</string>
+    <string name="settings_backup_url_hint">坚果云 WebDAV 地址，保持默认即可</string>
+    <string name="settings_backup_account">账号</string>
+    <string name="settings_backup_account_hint">坚果云的登录邮箱</string>
+    <string name="settings_backup_password">应用密码</string>
+    <string name="settings_backup_password_hint">在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码。填过一次后不再回显，留空表示不改。</string>
+    <string name="settings_backup_password_needed">还没存过应用密码：到坚果云「安全设置 → 安全选项」里生成一串，填在这里。</string>
+    <string name="settings_backup_save">保存备份设置</string>
+    <string name="settings_backup_saved">备份设置已保存</string>
+    <string name="settings_backup_auto">每日自动备份</string>
+    <string name="settings_backup_auto_rule">每天一次，有网络时才跑。备份里是词库、章节和复习进度；AI 接口的地址、密钥和模型名不在里面。</string>
+    <string name="settings_backup_now">立即备份</string>
+    <string name="settings_backup_restore">从云端恢复</string>
+    <string name="backup_never">还没备份过。填好上面三项，点“立即备份”试试。</string>
+    <string name="backup_last_ok">上次备份：%1$s 上传 %2$s（%3$d KB）</string>
+    <string name="backup_last_failed">上次备份失败（%1$s）：%2$s</string>
+    <string name="backup_uploaded">已备份 %1$s（%2$d KB），云端按保留策略清掉 %3$d 份旧文件</string>
+    <string name="backup_need_config">备份还没配好：地址、账号和应用密码都要填</string>
+    <string name="backup_unauthorized">网盘不认这个密码：坚果云要用“应用密码”，不是登录密码（%1$s）</string>
+    <string name="backup_missing_folder">网盘里的 Immerlex 文件夹建不出来：%1$s</string>
+    <string name="backup_timeout">网盘传输超时，稍后再试：%1$s</string>
+    <string name="backup_tls">网盘证书校验失败：%1$s</string>
+    <string name="backup_unreachable">连不上网盘，检查手机网络：%1$s</string>
+    <string name="backup_http">网盘返回错误：%1$s</string>
+    <string name="backup_failed">备份没成功：%1$s</string>
+    <string name="backup_corrupt">备份没通过校验，没往云端传：%1$s</string>
+    <string name="backup_local">本机没能做出这份备份：%1$s</string>
+    <string name="backup_issue_empty">网盘上的这个文件是空的或残缺的</string>
+    <string name="backup_issue_not_gzip">它不是一份备份压缩包（%1$s）</string>
+    <string name="backup_issue_not_sqlite">解压以后不是一本数据库</string>
+    <string name="backup_issue_no_version">库里没写版本号，认不出它是什么格式</string>
+    <string name="backup_issue_too_new">它来自更新版本的 Immerlex（%1$s），现在这个应用读不了</string>
+    <string name="backup_issue_check_failed">数据库自检没通过：%1$s</string>
+    <string name="backup_issue_missing_tables">缺了这几张表：%1$s，不像本应用的备份</string>
+    <string name="backup_pick_title">选一份要恢复的备份</string>
+    <string name="backup_pick_empty">云端 Immerlex 文件夹里还没有备份文件。</string>
+    <string name="backup_confirm_title">确定用这份覆盖本机？</string>
+    <string name="backup_confirm_body">恢复会把现在的词库、章节和复习进度整体换成 %1$s 里的内容，这一步不能撤销。</string>
+    <string name="backup_action_restore">覆盖并恢复</string>
+    <string name="backup_restored">已恢复：词库 %1$d 个词、章节 %2$d 章。</string>
+    <string name="backup_refused">这份备份读不得，本机数据一点没动：</string>
+    <string name="backup_file_row">%1$s（%2$d KB）</string>
+    <string name="backup_restart_broken">恢复中途出错，本机数据没变，但库连接已经关了，必须重开一次应用：%1$s</string>
+    <string name="backup_restart_broken_title">需要重开应用</string>
+    <string name="backup_restart_title">备份已经换上，需要重开应用</string>
+    <string name="backup_restart_body">现在应用里读的还是旧连接，重开后才能看到恢复出来的内容。AI 接口的地址、密钥和模型名不在备份里，重开后请到本页重新填写。</string>
+    <string name="backup_restart_action">立即重开</string>
+
+    <string name="channel_daily_name">今日到期提醒</string>
+    <string name="channel_daily_desc">每天到设定时刻，如果还有到期词就提醒一次。</string>
+    <string name="channel_generation_name">章节写作</string>
+    <string name="channel_generation_desc">写作时间超过十秒时挂在通知栏，写好或失败时换成结果。</string>
+
+    <string name="notify_due_title">有 %1$d 个词到期</string>
+    <string name="notify_due_body">打开今日任务，读完就打卡。</string>
+    <string name="notify_writing_title">正在写下一章…</string>
+    <string name="notify_writing_body">写得比较久，先放着，写完在这里告诉你。</string>
+    <string name="notify_written_title">第 %1$d 章已写好</string>
+    <string name="notify_write_failed_title">这一章没写成</string>
+    <string name="notify_write_failed_body">回到应用里看具体原因，可以直接再生成一次。</string>
 
     <string name="settings_open_bible">查看并编辑故事档案</string>
 

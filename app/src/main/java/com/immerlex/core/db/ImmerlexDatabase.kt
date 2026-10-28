@@ -13,8 +13,10 @@ import androidx.room.RoomDatabase
         StoryBibleEntity::class,
         BibleEntryEntity::class,
         CharacterStateEntity::class,
+        DailyLoopEntity::class,
+        BackupRunEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class ImmerlexDatabase : RoomDatabase() {
@@ -24,11 +26,15 @@ abstract class ImmerlexDatabase : RoomDatabase() {
     abstract fun storyBibleDao(): StoryBibleDao
     abstract fun bibleEntryDao(): BibleEntryDao
     abstract fun characterStateDao(): CharacterStateDao
+    abstract fun dailyLoopDao(): DailyLoopDao
+    abstract fun backupRunDao(): BackupRunDao
 
     companion object {
         fun create(context: Context): ImmerlexDatabase =
             Room.databaseBuilder(context, ImmerlexDatabase::class.java, "immerlex.db")
                 .addMigrations(*MIGRATIONS)
+                // 备份靠"先 checkpoint 再复制主库文件"取一致性快照，所以显式钉住 WAL，不靠默认值。
+                .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
     }
 }

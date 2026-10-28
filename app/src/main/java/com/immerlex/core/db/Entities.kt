@@ -116,3 +116,27 @@ data class CharacterStateEntity(
     val conflictText: String = "",
     val updatedAtSec: Long,
 )
+
+/**
+ * 一天一行，只存两件**过后就查不到**的事实：那天的到期词清空了、那天用了本周唯一一次补卡。
+ * "那天有没有打卡"不存——它已经在 `review_logs` 里，再抄一份就会有两套说法。见 docs/adr/0006 第 2 条。
+ */
+@Entity(tableName = "daily_loop")
+data class DailyLoopEntity(
+    /** 本地日历日序号（`LocalDate.toEpochDay()`）。 */
+    @PrimaryKey val epochDay: Long,
+    val dueCleared: Boolean = false,
+    val makeupConsumed: Boolean = false,
+)
+
+/** 每次备份留一行，设置页的"上次备份：…/失败：…"就是最新那条。 */
+@Entity(tableName = "backup_runs", indices = [Index("atSec")])
+data class BackupRunEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val atSec: Long,
+    val ok: Boolean,
+    val remoteName: String = "",
+    val bytes: Long = 0,
+    /** 失败时是给人看的短句（"账号或密码不对"），不是堆栈。 */
+    val detail: String = "",
+)

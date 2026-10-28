@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏小图标必须是纯白剪影，系统只取 alpha 通道，所以这里不画彩色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4,5h16v2.4H4zM4,10.8h16v2.4H4zM4,16.6h11v2.4H4z" />
+</vector>

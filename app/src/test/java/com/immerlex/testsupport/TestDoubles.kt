@@ -8,8 +8,11 @@ import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.ChapterEntity
 import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.db.ChapterRecap
+import com.immerlex.core.db.DailyLoopDao
+import com.immerlex.core.db.DailyLoopEntity
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
+import com.immerlex.core.db.ReviewMoment
 import com.immerlex.core.db.ReviewStats
 import com.immerlex.core.db.RatingCount
 import com.immerlex.core.db.StoryBibleDao
@@ -77,7 +80,21 @@ internal class FakeReviewLogDao : ReviewLogDao {
     override suspend fun ratingHistogram(sinceSec: Long) =
         items.groupingBy { it.rating }.eachCount().map { RatingCount(it.key, it.value) }
 
+    override suspend fun reviewsSince(sinceSec: Long) = items
+        .filter { it.reviewEpochSec >= sinceSec }
+        .map { ReviewMoment(it.wordId, it.reviewEpochSec) }
+
     override suspend fun deleteForWord(wordId: Long) { items.removeAll { it.wordId == wordId } }
+}
+
+internal class FakeDailyLoopDao : DailyLoopDao {
+    val items = mutableMapOf<Long, DailyLoopEntity>()
+
+    override suspend fun upsert(entity: DailyLoopEntity) { items[entity.epochDay] = entity }
+
+    override suspend fun byDay(epochDay: Long) = items[epochDay]
+
+    override suspend fun since(fromDay: Long) = items.values.filter { it.epochDay >= fromDay }.sortedBy { it.epochDay }
 }
 
 internal class FakeDictionary(private val entries: Map<String, DictEntry> = emptyMap()) : DictionarySource {

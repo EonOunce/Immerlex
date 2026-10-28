@@ -49,4 +49,25 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+/**
+ * v3 -> v4: the daily loop needs two facts that cannot be re-derived later — whether a given day's
+ * due queue ended up empty, and whether that day spent the week's single makeup credit.
+ * "Did the user check in that day" is deliberately not stored; it already lives in `review_logs`.
+ * `backup_runs` records each upload attempt so the settings page can show a truthful last result.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `daily_loop` (`epochDay` INTEGER NOT NULL PRIMARY KEY, " +
+                "`dueCleared` INTEGER NOT NULL, `makeupConsumed` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `backup_runs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT " +
+                "NOT NULL, `atSec` INTEGER NOT NULL, `ok` INTEGER NOT NULL, `remoteName` TEXT NOT NULL, " +
+                "`bytes` INTEGER NOT NULL, `detail` TEXT NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_backup_runs_atSec` ON `backup_runs` (`atSec`)")
+    }
+}
+
+val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)

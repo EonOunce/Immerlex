@@ -116,6 +116,10 @@ interface ReviewLogDao {
     )
     suspend fun statsSince(sinceSec: Long): ReviewStats
 
+    /** 按本地日切归谁由调用方的时区说了算，所以这里只取原始时刻，不在 SQL 里除 86400。 */
+    @Query("SELECT wordId, reviewEpochSec FROM review_logs WHERE reviewEpochSec >= :sinceSec")
+    suspend fun reviewsSince(sinceSec: Long): List<ReviewMoment>
+
     @Query("SELECT rating, COUNT(*) as n FROM review_logs WHERE reviewEpochSec >= :sinceSec GROUP BY rating")
     suspend fun ratingHistogram(sinceSec: Long): List<RatingCount>
 
@@ -125,6 +129,7 @@ interface ReviewLogDao {
 
 data class ReviewStats(val total: Int, val passed: Int)
 data class RatingCount(val rating: Int, val n: Int)
+data class ReviewMoment(val wordId: Long, val reviewEpochSec: Long)
 
 @Dao
 interface StoryBibleDao {
@@ -181,4 +186,26 @@ interface CharacterStateDao {
 
     @Query("DELETE FROM character_states WHERE id = :id")
     suspend fun deleteById(id: Long)
+}
+
+@Dao
+interface DailyLoopDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: DailyLoopEntity)
+
+    @Query("SELECT * FROM daily_loop WHERE epochDay = :epochDay")
+    suspend fun byDay(epochDay: Long): DailyLoopEntity?
+
+    /** 连续天数最多回看一年，多余的行不参与计算。 */
+    @Query("SELECT * FROM daily_loop WHERE epochDay >= :fromDay ORDER BY epochDay ASC")
+    suspend fun since(fromDay: Long): List<DailyLoopEntity>
+}
+
+@Dao
+interface BackupRunDao {
+    @Insert
+    suspend fun insert(entity: BackupRunEntity): Long
+
+    @Query("SELECT * FROM backup_runs ORDER BY atSec DESC, id DESC LIMIT 1")
+    suspend fun latest(): BackupRunEntity?
 }

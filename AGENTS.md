@@ -29,18 +29,20 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 | 备份 | 坚果云 WebDAV 自动备份（用户 2026-10-28 选定）：快照→gzip→上传，**禁止**把正在写入的 SQLite 文件直接交同步通道；WebDAV 无版本历史，故按日期命名并在云端保留最近 30 份 + 每月最后一份；备份**明文、不加密**；AI key 不进备份，恢复完需重填 baseURL/key/model。流量测算：重度使用一年约 1.5MB/份，每日一份约 45MB/月，远低于坚果云免费版 WebDAV 的 1GB/月上行 |
 | 通知 | 每日到期提醒（默认 20:30，可改可关）+ 生成超过 10 秒挂进行中通知、完成转"第 N 章已写好"；文案只说真实状态（"有 N 个词到期"），在章节状态存在前不得写"该读第三章了" |
 | 今日任务首页 | 底部第四栏 `feature/home`（原计划 v1.5，用户 2026-10-28 提前到 v1.0）：今日到期/已完成、连续天数、一个"开始今日阅读"入口。打卡门槛低——**当天给任意 1 个词打过分即算**；漏一天不归零，次日清空当日到期词即自动补上，每周最多补 1 次；**不做积分/兑换**（外部奖励会给"制造复习次数"的动机，与我们刚定的防刷规则互相拆台） |
+| 日常化落地（v1.0 已交付 2026-10-28） | 今日页的到期数**不另算**，取 `core.schedule.ScheduleService.todaysQueue()` 的 `reviewWords + newWords`，与生成下一章喂给模型的是同一份词表；连续天数与补卡是纯函数 `core.schedule.dailyInfoOf(DailyLoopInput)`，Room v4 新增 `daily_loop`（按 `epochDay` 一行）与 `backup_runs`。提醒用**自排程的一次性 unique work**（WorkManager 周期任务只有"每 24 小时"会漂到凌晨），`secondsUntilNext` 纯函数，worker 在 `finally` 里排明天、应用启动再重排，所以改时刻立即生效；当日 0 个到期就不弹，`last_reminded_day` 保证一天最多一条。备份固定为 `VACUUM INTO` 快照 → gzip → PUT，保留策略是纯函数 `core.backup.BackupPlan`；恢复先校验（gzip 头 / `user_version` / `integrity_check` / 必备表），不过就**逐项明说且不动本机库**，过了才换文件并强制"重开应用"。坚果云应用密码与 AI key 同存 EncryptedSharedPreferences，地址预填 `https://dav.jianguoyun.com/dav/`。详见 `docs/adr/0006` |
 | 故事圣经 | 长篇的跨章连贯由三层承担（见 `docs/adr/0005`）：① 开局由用户口述一段想法，**一次调用**展开成结构化故事圣经（基调/主角与目标/结局倾向/禁止事项/起始人物），逐条可编辑可重掷；② 生成契约要求模型回报**本章变化**（谁的位置、关系、承诺或信息发生变化），系统合并进人物状态表；③ 本章全书逐章一行梗概全量入 prompt，超过约 60 章才折叠成分卷摘要。用户写过的条目优先级最高，冲突时不覆盖而标提示。**绝不**做聊天式多轮开局界面：入口只到"一段话 → 一份圣经"为止，否则等于为输入再造一个 app |
 | 故事圣经落地（v0.3 已交付 2026-10-28） | 三层各一张表，Room v3 起 `bible_entries`（题材分区条目 + `authoredByUser`）与 `character_states`（题材内 `(genre,name)` 唯一）；合并在纯函数 `core.bible.CastMerger`（两条铁律：用户手写状态只标冲突不覆盖、旧章不能把新章之后的人物状态往回改）。展开调用是 `core.ai.BibleExpander`，schema 校验、≤2 次修复、超限即裁剪（条目 160 字 / 禁止事项 8 条 / 起始人物 12 条）。prompt 升到 **PROMPT_V3**：档案 → 人物当前状态 → 全书梗概（由旧到新）三层全量入 prompt，用户条目后挂「（读者设定，务必遵守）」，冲突写「注意：第 N 章把它写成了…」。入口在设置页「查看并编辑故事档案」，**没配 API key 也能逐条手填/删除**——AI 只是把一段话展开成初稿，不是使用档案的前提 |
 | 短篇模式 | 意林/花火/科幻世界式单篇自足短篇为 **v1.5 第一项**：不依赖跨章连贯层，字数由词数决定（15 词 → 1500–2500 字），"像某杂志"只做**腔调预设**（小人物点题 / 情绪华丽 / 设定先行冷结尾）而不复制其样文 |
-| 版本切分 | 三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付，2026-10-28 模拟器验收）、**v0.3** prompt 层（默认密度与篇幅、故事圣经、人物状态、全书梗概，已交付，2026-10-28 模拟器验收，versionName 0.3.0 / versionCode 4）、**v1.0** 今日任务页 + 通知 + 坚果云自动备份。每刀单独真机验收 |
+| 版本切分 | 三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付，2026-10-28 模拟器验收）、**v0.3** prompt 层（默认密度与篇幅、故事圣经、人物状态、全书梗概，已交付，2026-10-28 模拟器验收，versionName 0.3.0 / versionCode 4）、**v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收，versionName 1.0.0 / versionCode 5）。每刀单独真机验收 |
 | prototype/ | 一次性交互原型（仅阅读页视觉/交互规格），非产品代码，禁止进入 app source set |
 
 ## 3. 架构边界（防屎山条款）
 
 - 单向数据流：Compose UI → ViewModel(State/Event) → Repository → core 能力（db / ai / fsrs / dict / ocr）。
-- 按 feature 分包：`core/*` 提供能力，`feature/*` 提供界面；**feature 之间禁止横向依赖**，共享逻辑一律下沉 core。v1 实到 `feature/wordbank`、`feature/reader`、`feature/settings`（故事档案面板 `BibleScreen` / `BibleViewModel` 就住在这里——它是设置页的一个子页，不值得单独成包）；生成入口放在 reader 页头（写下一章）与设置页，因为它只是 `core.ai.ChapterGenerator` 的一次调用，不值得单独成包——`feature/home`（今日任务）**随 v1.0 建**（用户 2026-10-28 提前），`feature/generate`（导入嵌词建议）随 v1.5 再建。跨 feature 共用的呈现逻辑放 `app/ui/`（如 `GenerateOutcome.toUiMessage()`）。
+- 按 feature 分包：`core/*` 提供能力，`feature/*` 提供界面；**feature 之间禁止横向依赖**，共享逻辑一律下沉 core。v1 实到 `feature/wordbank`、`feature/reader`、`feature/settings`、`feature/home`（v1.0 起的底部第四栏；故事档案面板 `BibleScreen` / `BibleViewModel` 住在 settings 里——它是设置页的一个子页，不值得单独成包）；生成入口放在 reader 页头（写下一章）与设置页，因为它只是 `core.ai.ChapterGenerator` 的一次调用，不值得单独成包；`feature/generate`（导入嵌词建议）随 v1.5 再建。跨 feature 共用的呈现逻辑放 `app/ui/`（如 `GenerateOutcome.toUiMessage()`、`BackupOutcome.toUiMessage()`）。
 - Room 是唯一业务持久化入口；禁止用 SharedPreferences 散存业务状态。
 - `core.bible`：故事圣经的领域层——`BibleSection` 枚举与 `BibleDraft` 等模型、`StoryContext` / `StoryContextSource`（生成侧只看这三层）、纯函数 `CastMerger`（合并规则可单测）、`StoryBibleRepository`（唯一写入口，只它碰 Room）。依赖方向单向：`core.ai` → `core.bible`，禁止反向。
+- `core.backup`：`DbSnapshot`（`VACUUM INTO` 出一致性快照 + 校验，返回 `SnapshotProblem` 列表而不是布尔）、`WebDavClient`（只做 HTTP，异常带 `BackupFailure` 枚举）、`BackupPlan`（保留策略纯函数）、`BackupService`（编排 + 写 `backup_runs`）。`core.notify`：`ReminderScheduler`（排程，纯函数 `secondsUntilNext`）、`DailyReminderWorker`（只认 `ReminderHost` 接口，不认识 `AppContainer`）、`Notifier`（渠道与文案投递）。二者对外暴露的都是**能力对象**（`ReminderControl` / `BackupService`），`Context` 封装在对象内部，ViewModel 只注入能力对象——这是"ViewModel 禁止持有 Context"的具体实现方式。
 - 旧列迁移后**保留但清空**（`story_bibles.charactersJson` / `synopsis`，被 `bible_entries` + `character_states` 取代）：`DROP COLUMN` 在 minSdk 26 上要 SQLite 3.35+，机型不稳；一次性回填（旧人物表与旧梗概搬进新表）放在 `Mutex` 后面，防并发改表把人写乱。
 - `core.ai`：prompt 模板为带版本常量（当前 `PromptBuilder.VERSION = 3`：三层上下文 + 章节 JSON 里回报 `changes`；档案展开另带 `BIBLE_SCHEMA`）；AI 输出必须通过 kotlinx-serialization schema 校验后才能入库；解析失败走修复重试（最多 2 次），仍失败则向用户明示错误，禁止静默丢弃。缺 `changes` 键的旧 V2 章节行必须照常能读。
 - `core.fsrs`：纯 Kotlin 函数，零 Android 依赖，可直接单测。
@@ -49,7 +51,7 @@ Immerlex 是一个"把英文单词融入中文小说"的安卓应用：
 ## 4. 代码规范
 
 - Kotlin 官方风格；Compose 状态提升，组合阶段无副作用；跨配置变更的界面状态用 rememberSaveable。
-- 用户可见字符串一律进 strings.xml（中文），禁止硬编码 UI 文案。
+- 用户可见字符串一律进 strings.xml（中文），禁止硬编码 UI 文案。具体分工：`core/*` 的异常与校验结果只带**技术标记**（`"PUT $name -> HTTP $code"`、`"user_version"`）和枚举，中文一律在 `app/ui/*Messages.kt` 里按枚举映射到资源 id；需要把一段失败说明嵌进另一句话时，把 `UiMessage` 套在参数里——`Context.textFor()` 会递归解析，这样两层文案都留在 strings.xml。
 - 协程只用 viewModelScope / lifecycleScope；IO 与网络在 Repository 层切 Dispatchers.IO。
 - API key 存 EncryptedSharedPreferences；禁止打印进日志、禁止进任何提交。
 - Room schema 变更必须写 Migration 与迁移测试；**禁止 fallbackToDestructiveMigration**（开发期经用户当场同意除外）。
@@ -100,6 +102,8 @@ adb -s emulator-5554 shell am instrument -w -e class com.immerlex.core.db.StoryB
 
 Git Bash 下 `adb` 的文件路径参数会被 MSYS 改写，先 `export MSYS_NO_PATHCONV=1`。模拟器是 x86_64，装的是 `immerlex-x86_64-debug.apk`，不是 arm64 那份。
 
+定时通知这类"要等任务到点"的东西不必改代码去验：`pm grant com.immerlex.app android.permission.POST_NOTIFICATIONS` 给权限 → `am force-stop`（不先停，退出时会把 shared_prefs 写回）→ `run-as … sed -i` 把 `reminder_minute` 改成两分钟后 → `am start` 即按新时刻重排 → `dumpsys notification --noredact` 看 `channel=daily_review`。`svc power stayon true` 防打盹拖慢；**模拟器时区是 GMT，比本机慢 8 小时**，动手前先 `shell date`。
+
 未启用 Windows Hypervisor Platform 时模拟器会退回纯软件 TCG，本机内存下启动超过 10 分钟，不要用它做验收。
 
 ## 7. 工作流程
@@ -111,7 +115,7 @@ Git Bash 下 `adb` 的文件路径参数会被 MSYS 改写，先 `export MSYS_NO
 
 ## 8. 里程碑
 
-M0 环境与骨架 → M1 词库层 → M2 FSRS 调度 → M3 AI 生成 → M4 阅读层（均已在 2026-10-28 真机验收，唯 txt / 截图导入未跑）→ M5 收尾分三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付）→ **v0.3** prompt 层：默认密度与篇幅、故事圣经、人物状态、全书梗概（已交付，2026-10-28 模拟器验收，Room v2→v3 迁移在带真实数据的旧库上实测过）→ **v1.0** 今日任务页 + 通知 + 坚果云自动备份；其后 v1.5 以**短篇模式**开头。每刀单独真机验收，不许合并跳级。
+M0 环境与骨架 → M1 词库层 → M2 FSRS 调度 → M3 AI 生成 → M4 阅读层（均已在 2026-10-28 真机验收，唯 txt / 截图导入未跑）→ M5 收尾分三刀：**v0.2** 复习计分正确性 + 章节回看/重写/删章（已交付）→ **v0.3** prompt 层：默认密度与篇幅、故事圣经、人物状态、全书梗概（已交付，2026-10-28 模拟器验收，Room v2→v3 迁移在带真实数据的旧库上实测过）→ **v1.0** 今日任务页 + 通知 + 坚果云自动备份（已交付，2026-10-28 模拟器验收：`DailyLoopMigrationTest` 覆盖 v3→v4 且模拟器上的既有库原地升到了 v4、提醒通知实弹弹出、备份与恢复的校验闸门实测会拒绝坏文件与未配置；**尚未在用户真机上走过**，坚果云真实账号也未实测）。下一刀 v1.5 以**短篇模式**开头。每刀单独真机验收，不许合并跳级。
 
 ## 9. 术语表
 

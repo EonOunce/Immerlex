@@ -27,3 +27,14 @@
 - 备份文件是明文，含词库、章节与题材/AI 服务地址（不含 key）。风险面是坚果云账号本身；换取的是"永远不会因为忘口令而备份作废"。用户 2026-10-28 明确选明文。
 - 云端保留 30 份 ≈ 45MB 占用（流量额度不返还删除的部分，但删除不再消耗上行）。
 - 定时备份需要网络与前台可见性之外的后台执行，失败必须可见：设置页显示"上次备份：今天 21:03 / 失败：账号或密码不对"。
+
+## 落地（2026-10-28，v1.0 / versionName 1.0.0）
+
+- 第 1 条：`feature/home` 是底部第四栏。今日到期数不另算一遍，取 `core.schedule.ScheduleService.todaysQueue(now, 每日新词上限)` 的 `reviewWords + newWords`，与生成下一章时喂给模型的词表是同一个函数调用；"今日已完成"与连续天数走 `DailyLoopService.info(now, dueCount)`。模拟器实测今日页与阅读页头部同为 4/4/4。
+- 第 2 条：规则写成纯函数 `core.schedule.dailyInfoOf(DailyLoopInput)`（可单测，`DailyLoopTest`）；`daily_loop` 表按 `epochDay` 存当日是否打过分，补卡即把昨天那行改写为已打卡，`makeupUsedThisWeek` 按 ISO 周计数，界面显示「本周补卡：未用 / 已用」。
+- 第 3 条：无积分、无兑换券，代码里没有余额概念。
+- 第 4 条：提醒用**自排程的一次性 unique work**（`daily-review-reminder`）而不是周期任务——WorkManager 的周期任务只有"每 24 小时"，会漂到凌晨。`secondsUntilNext` 是纯函数（`ReminderSchedulerTest` 覆盖）；worker 在 `finally` 里排明天，应用启动时 `ImmerlexApplication.onCreate` 重新排队，所以用户改时刻立刻生效。当日到期为 0 直接 `return success` 不弹；`last_reminded_day` 保证同一天最多一条。模拟器已实测真的弹出：渠道 `daily_review`、标题「有 4 个词到期」、正文「打开今日任务，读完就打卡。」。生成侧 `GenerationNotifier` 超 10 秒挂进行中通知，完成转「第 N 章已写好」。Android 13+ 走 `POST_NOTIFICATIONS` 运行时授权。
+- 第 5、6 条：`DbSnapshot.take()` 用 `VACUUM INTO` 出一致性快照再 gzip；`BackupPlan` 是纯函数（文件名即日期、>30 份才删、溢出时保最近 30 份 + 每个更早月份最后一份、非本应用命名的一律不碰），`BackupPlanTest` 覆盖。恢复侧 `unpack()` 先查 gzip 头 / `PRAGMA user_version` / `PRAGMA integrity_check` / 必备表，任一不过返回 `SnapshotProblem` 列表并**原样拒绝**，弹条目化对话框，本地库一点没动；版本比本机新的备份也拒绝（`TOO_NEW`）。校验通过才 `db.close()` + 换文件，换完强制弹"重开应用"。
+- 第 7、8 条：备份文件不含 EncryptedSharedPreferences，恢复完成那一刻明示"AI 服务地址与密钥要重填"。坚果云应用密码与 AI key 同一套加密存储，地址预填 `https://dav.jianguoyun.com/dav/`，上传落在其下的 `Immerlex/` 目录（不存在则 MKCOL）。
+- 第 9 条：`webdav-daily-backup` 周期任务（`ExistingPeriodicWorkPolicy.UPDATE`，需网络）+ 设置页「立即备份」；结果写 `backup_runs`，设置页那行红/绿文案由它派生。
+- 实测踩到并已修的坑：PROPFIND 解析里"可选属性"那组括号忘了写成非捕获组，`groupValues[1]` 取到的是空属性段而不是 href，导致文件列表恒为空——列表为空既不会报错也不会报错给 UI，恢复选择器和保留期清理会一起静默失效。教训是**云端列表为空必须能区分"真的没文件"和"没解析出来"**，测试因此直接喂带 `d:`/`D:`/无前缀三种命名空间的真实响应体。

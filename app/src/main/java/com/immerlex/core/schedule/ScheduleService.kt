@@ -103,6 +103,13 @@ class ScheduleService(
         )
     }
 
+    /**
+     * 今日页、生成器、设置页共用这一个数：新词被每日上限截断之后，今天到底还有几个词要读。
+     * 各算各的话，首页会说"还有 40 个"，而生成的章节只塞了 25 个。
+     */
+    suspend fun todayDueCount(now: Instant, dailyNewLimit: Int): Int =
+        todaysQueue(now, dailyNewLimit).let { it.reviewWords.size + it.newWords.size }
+
     private data class Decision(val mode: GradeMode, val log: ReviewLogEntity? = null)
 
     private fun decide(word: WordEntity, logs: List<ReviewLogEntity>, now: Instant): Decision {
