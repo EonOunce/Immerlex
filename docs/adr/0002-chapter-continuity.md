@@ -1,6 +1,6 @@
 # ADR-0002: 跨章剧情连贯的做法
 
-- 状态：已采用
+- 状态：已采用（第 1、6 条与"后果"第 1 条由 `docs/adr/0005-story-bible-from-one-prompt.md` 于 2026-10-28 扩写：3 章窗口不足以撑长篇，改为全书逐章梗概 + 故事圣经 + 人物状态表；"只取最新章"改为同题材章节可切换）
 - 日期：2026-10-27
 
 ## 背景
@@ -12,7 +12,7 @@
 1. 章节表新增 `summary` 列（已有），prompt 携带**同题材最近 3 章**的「第N章《标题》：梗概」，按由旧到新排列（`ChapterDao.recentRecaps(genre, 3)`）。
 2. 生成契约里加 `characters` 字段：模型必须列出本章登场角色，格式「名字 · 身份」。
 3. `story_bibles.charactersJson` 真正用起来：每次保存时把本章新角色与档案旧角色合并去重，**新出现的排在前面**，超过 12 条截断——即"最近出场的优先保留，长期不登场的自动淡出"。
-4. 章节编号继续由 `story_bibles.lastChapterNumber` 驱动，因此编号与角色表同为"按题材"两条线，互不污染。
+4. 章节编号继续由 `story_bibles.lastChapterNumber` 驱动，因此编号与角色表同为"按题材"两条线，互不污染。（2026-10-28 由 ADR-0003 修订为取档案与章节表的较大者 +1。）
 5. prompt 模板升版到 `PromptBuilder.VERSION = 2`。
 6. 阅读页改为按当前题材取最新章（`ChapterDao.latest(genre)`），修掉"换了小说类型后阅读页仍显示别的题材章节"的错位；随之删掉不再被调用的 `outline()` / `byId()` / `ChapterHeader`。
 
