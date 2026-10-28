@@ -18,7 +18,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 
 /**
  * Talks to any OpenAI-compatible /chat/completions gateway. Deliberately thin:
@@ -51,13 +50,20 @@ class OpenAiCompatClient(
         }
     }
 
-    override suspend fun probe(): String? = withContext(Dispatchers.IO) {
+    override suspend fun probe(): ProbeResult = withContext(Dispatchers.IO) {
         try {
-            val response =
-                http.newCall(Request.Builder().url(config.modelsUrl()).get().build()).execute()
-            response.use { if (it.isSuccessful) null else "HTTP ${it.code}: ${it.peekBodySnippet()}" }
+            val request = baseBuilder(config.modelsUrl()).get().build()
+            http.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val failure = Probe.classify(response.code, config.apiKey.isNotBlank())
+                ProbeResult(
+                    failure = failure,
+                    models = if (failure == ProbeFailure.NONE) Probe.modelIds(body) else emptyList(),
+                    detail = if (failure == ProbeFailure.NONE) "" else "HTTP ${response.code}: ${body.take(MAX_ERROR_BODY)}",
+                )
+            }
         } catch (e: IOException) {
-            "${e.javaClass.simpleName}: ${e.message.orEmpty()}"
+            ProbeResult(Probe.classify(e), detail = "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
         }
     }
 
@@ -77,12 +83,20 @@ class OpenAiCompatClient(
                 http.newCall(request).execute().use { response ->
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        throw LlmException(response.code, text.take(MAX_ERROR_BODY))
+                        throw LlmException(
+                            response.code,
+                            text.take(MAX_ERROR_BODY),
+                            Probe.classify(response.code, config.apiKey.isNotBlank()),
+                        )
                     }
                     decode(text)
                 }
             } catch (e: IOException) {
-                throw LlmException(0, "${e.javaClass.simpleName}: ${e.message.orEmpty()}")
+                throw LlmException(
+                    0,
+                    "${e.javaClass.simpleName}: ${e.message.orEmpty()}",
+                    Probe.classify(e),
+                )
             }
         }
 
@@ -92,10 +106,6 @@ class OpenAiCompatClient(
         (choice["message"]?.jsonObject?.get("content") ?: choice["text"])
             ?.jsonPrimitive?.content
     }.getOrNull()
-
-    private fun Response.peekBodySnippet(): String =
-        runCatching { body?.string()?.take(MAX_ERROR_BODY).orEmpty() }.getOrNull()
-            ?: "<unreadable body>"
 
     companion object {
         private const val MAX_ERROR_BODY = 400

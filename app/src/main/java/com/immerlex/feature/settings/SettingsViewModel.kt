@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.app.R
 import com.immerlex.app.ui.UiMessage
+import com.immerlex.app.ui.probeDetailOf
+import com.immerlex.app.ui.probeFailureLabel
 import com.immerlex.app.ui.toUiMessage
 import com.immerlex.core.ai.AiConfig
 import com.immerlex.core.ai.ApiKeyStore
 import com.immerlex.core.ai.ChapterGenerator
 import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.OpenAiCompatClient
+import com.immerlex.core.ai.ProviderPreset
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.settings.DEFAULT_FONT_SCALE
@@ -27,10 +30,12 @@ data class SettingsState(
     val apiKey: String = "",
     val keyPersistent: Boolean = true,
     val genre: String = "",
-    val density: Density = Density.DENSE,
+    val density: Density = Density.MEDIUM,
     val dailyNewLimit: Int = AppPreferences.DEFAULT_NEW_LIMIT,
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
+    /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
+    val models: List<String> = emptyList(),
     val bankTotal: Int = 0,
     val bankNew: Int = 0,
     val bankDue: Int = 0,
@@ -75,7 +80,7 @@ class SettingsViewModel(
         prefs.density = _state.value.density
         prefs.dailyNewLimit = _state.value.dailyNewLimit
         keyStore.save(_state.value.apiKey)
-        _state.value = load()
+        _state.value = load().copy(models = _state.value.models)
         _messages.emit(UiMessage(R.string.settings_saved))
     }
 
@@ -85,11 +90,43 @@ class SettingsViewModel(
             _messages.emit(UiMessage(R.string.settings_need_config))
             return@mutate
         }
-        val failure = OpenAiCompatClient(config).probe()
-        _messages.emit(
-            if (failure == null) UiMessage(R.string.settings_probe_ok)
-            else UiMessage(R.string.settings_probe_fail, listOf(failure)),
+        if (config.apiKey.isBlank()) {
+            _messages.emit(UiMessage(R.string.settings_probe_missing_key))
+            return@mutate
+        }
+        val result = OpenAiCompatClient(config).probe()
+        if (result.ok) {
+            // The gateway's own list is the only trustworthy source of model IDs: product
+            // names and API names differ, and the user cannot tell them apart by eye.
+            _state.value = _state.value.copy(models = result.models)
+            _messages.emit(
+                UiMessage(
+                    if (result.models.isEmpty()) R.string.settings_probe_ok
+                    else R.string.settings_probe_ok_models,
+                    listOf(result.models.size),
+                ),
+            )
+        } else {
+            _messages.emit(
+                UiMessage(
+                    probeFailureLabel(result.failure),
+                    listOf(probeDetailOf(result.detail)),
+                ),
+            )
+        }
+    }
+
+    /** Fills the address the user keeps mistyping and offers its known model IDs. */
+    fun applyPreset(preset: ProviderPreset) {
+        _state.value = _state.value.copy(
+            baseUrl = preset.baseUrl,
+            models = preset.knownModels,
+            model = _state.value.model.ifBlank { preset.knownModels.firstOrNull().orEmpty() },
         )
+    }
+
+    fun onPickModel(value: String) {
+        _state.value = _state.value.copy(model = value)
     }
 
     fun generateChapter() = mutate {

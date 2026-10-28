@@ -62,12 +62,32 @@ interface ChapterDao {
     @Insert
     suspend fun insert(entity: ChapterEntity): Long
 
+    @Update
+    suspend fun update(entity: ChapterEntity)
+
+    @Query("SELECT * FROM chapters WHERE id = :id")
+    suspend fun byId(id: Long): ChapterEntity?
+
+    @Query("SELECT id, number, title FROM chapters WHERE genre = :genre ORDER BY number DESC, id DESC")
+    suspend fun titlesForGenre(genre: String): List<ChapterOption>
+
+    @Query("DELETE FROM chapters WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("SELECT * FROM chapters WHERE genre = :genre ORDER BY number DESC LIMIT 1")
     suspend fun latest(genre: String): ChapterEntity?
 
-    @Query("SELECT number, title, summary FROM chapters WHERE genre = :genre ORDER BY number DESC LIMIT :limit")
-    suspend fun recentRecaps(genre: String, limit: Int): List<ChapterRecap>
+    /** [excludeId] keeps a rewritten chapter out of its own recap; pass 0 for a new chapter. */
+    @Query("SELECT number, title, summary FROM chapters WHERE genre = :genre AND id <> :excludeId ORDER BY number ASC, id ASC")
+    suspend fun recaps(genre: String, excludeId: Long): List<ChapterRecap>
 }
+
+/** A row of the chapter switcher on the reading page. */
+data class ChapterOption(
+    val id: Long,
+    val number: Int,
+    val title: String,
+)
 
 data class ChapterRecap(
     val number: Int,
@@ -76,10 +96,14 @@ data class ChapterRecap(
 )
 
 @Dao
-interface ReviewLogDao {    @Insert
+interface ReviewLogDao {
+    @Insert
     suspend fun insert(entity: ReviewLogEntity): Long
 
-    @Query("SELECT * FROM review_logs WHERE wordId = :wordId ORDER BY reviewEpochSec ASC")
+    @Update
+    suspend fun update(entity: ReviewLogEntity)
+
+    @Query("SELECT * FROM review_logs WHERE wordId = :wordId ORDER BY reviewEpochSec ASC, id ASC")
     suspend fun forWord(wordId: Long): List<ReviewLogEntity>
 
     @Query(
@@ -109,4 +133,52 @@ interface StoryBibleDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: StoryBibleEntity): Long
+
+    /** 升级前只存单一梗概与角色表的那些本子，仓库启动时搬一次。 */
+    @Query("SELECT * FROM story_bibles WHERE charactersJson <> '[]' OR synopsis <> ''")
+    suspend fun withLegacyCache(): List<StoryBibleEntity>
+}
+
+@Dao
+interface BibleEntryDao {
+    /** 分区间顺序由 [com.immerlex.core.bible.StoryBibleRepository] 按枚举排，这里只保证同区内稳定。 */
+    @Query("SELECT * FROM bible_entries WHERE genre = :genre ORDER BY ordinal ASC, id ASC")
+    suspend fun forGenre(genre: String): List<BibleEntryEntity>
+
+    @Query("SELECT * FROM bible_entries WHERE id = :id")
+    suspend fun byId(id: Long): BibleEntryEntity?
+
+    @Insert
+    suspend fun insert(entity: BibleEntryEntity): Long
+
+    @Insert
+    suspend fun insertAll(entities: List<BibleEntryEntity>)
+
+    @Update
+    suspend fun update(entity: BibleEntryEntity)
+
+    @Query("DELETE FROM bible_entries WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    /** 重掷：只清掉模型生成的条目，用户手写的原样留着。 */
+    @Query("DELETE FROM bible_entries WHERE genre = :genre AND authoredByUser = 0")
+    suspend fun deleteGenerated(genre: String)
+}
+
+@Dao
+interface CharacterStateDao {
+    @Query("SELECT * FROM character_states WHERE genre = :genre ORDER BY firstChapterNumber ASC, id ASC")
+    suspend fun forGenre(genre: String): List<CharacterStateEntity>
+
+    @Query("SELECT * FROM character_states WHERE id = :id")
+    suspend fun byId(id: Long): CharacterStateEntity?
+
+    @Insert
+    suspend fun insert(entity: CharacterStateEntity): Long
+
+    @Update
+    suspend fun update(entity: CharacterStateEntity)
+
+    @Query("DELETE FROM character_states WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }

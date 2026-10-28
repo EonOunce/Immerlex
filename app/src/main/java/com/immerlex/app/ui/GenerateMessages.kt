@@ -11,5 +11,9 @@ fun GenerateOutcome.toUiMessage(): UiMessage = when (this) {
     )
 
     GenerateOutcome.NoWords -> UiMessage(R.string.gen_no_words)
-    is GenerateOutcome.Failed -> UiMessage(R.string.gen_failed, listOf(detail))
+    // A transport failure reads as "UnknownHostException: ..." raw, which tells a reader
+    // nothing; the probe wording already says what to go fix, so reuse it.
+    is GenerateOutcome.Failed -> failure?.let {
+        UiMessage(probeFailureLabel(it), listOf(probeDetailOf(detail)))
+    } ?: UiMessage(R.string.gen_failed, listOf(detail))
 }

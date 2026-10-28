@@ -2,6 +2,8 @@ package com.immerlex.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,17 +38,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.textFor
 import com.immerlex.core.ai.Density
+import com.immerlex.core.ai.ProviderPresets
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel) {
+fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
-            snackbar.showSnackbar(context.getString(msg.resId, *msg.args.toTypedArray()))
+            snackbar.showSnackbar(context.textFor(msg))
         }
     }
 
@@ -59,6 +64,12 @@ fun SettingsScreen(vm: SettingsViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SectionTitle(stringResource(R.string.settings_ai_section))
+            Text(stringResource(R.string.settings_presets), style = MaterialTheme.typography.labelLarge)
+            ChipRow(
+                options = ProviderPresets.map { it.baseUrl to presetName(it.id) },
+                selected = state.baseUrl.trim().removeSuffix("/"),
+                onPick = { url -> vm.applyPreset(ProviderPresets.first { it.baseUrl == url }) },
+            )
             OutlinedTextField(
                 value = state.baseUrl,
                 onValueChange = vm::onBaseUrl,
@@ -72,6 +83,14 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 singleLine = true,
                 label = { Text(stringResource(R.string.settings_model)) },
             )
+            if (state.models.isNotEmpty()) {
+                Text(stringResource(R.string.settings_model_pick), style = MaterialTheme.typography.labelLarge)
+                ChipRow(
+                    options = state.models.take(MAX_MODEL_CHIPS).map { it to it },
+                    selected = state.model,
+                    onPick = vm::onPickModel,
+                )
+            }
             OutlinedTextField(
                 value = state.apiKey,
                 onValueChange = vm::onApiKey,
@@ -135,6 +154,9 @@ fun SettingsScreen(vm: SettingsViewModel) {
             Button(onClick = vm::generateChapter, enabled = !state.busy) {
                 Text(if (state.busy) stringResource(R.string.settings_working) else stringResource(R.string.settings_generate))
             }
+            OutlinedButton(onClick = onOpenBible) {
+                Text(stringResource(R.string.settings_open_bible))
+            }
 
             SectionTitle(stringResource(R.string.settings_appearance_section))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -185,4 +207,32 @@ private fun densityRange(tier: Density): Int = when (tier) {
     Density.SPARSE -> R.string.density_range_sparse
     Density.MEDIUM -> R.string.density_range_medium
     Density.DENSE -> R.string.density_range_dense
+}
+
+private const val MAX_MODEL_CHIPS = 24
+
+@Composable
+private fun presetName(id: String): String = when (id) {
+    "deepseek" -> stringResource(R.string.settings_preset_deepseek)
+    "zhipu" -> stringResource(R.string.settings_preset_zhipu)
+    "moonshot" -> stringResource(R.string.settings_preset_moonshot)
+    "dashscope" -> stringResource(R.string.settings_preset_dashscope)
+    "openai" -> stringResource(R.string.settings_preset_openai)
+    "openrouter" -> stringResource(R.string.settings_preset_openrouter)
+    else -> id
+}
+
+/** One wrapped row of choice chips; used for the gateway list and the fetched model list. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChipRow(options: List<Pair<String, String>>, selected: String?, onPick: (String) -> Unit) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (value, name) ->
+            FilterChip(onClick = { onPick(value) }, selected = value == selected, label = { Text(name) })
+        }
+    }
 }

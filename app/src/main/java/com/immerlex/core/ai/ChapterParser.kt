@@ -1,5 +1,6 @@
 package com.immerlex.core.ai
 
+import com.immerlex.core.bible.CharacterChange
 import java.util.Locale
 import kotlinx.serialization.json.Json
 
@@ -29,6 +30,8 @@ object ChapterParser {
         title = title,
         summary = summary,
         characters = characters.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+        changes = changes.map { CharacterChange(it.who.trim(), it.what.trim()) }
+            .filter { it.who.isNotEmpty() && it.what.isNotEmpty() },
         paragraphs = paragraphs.map { paragraph ->
             paragraph.mapNotNull { segment ->
                 when (segment.k) {
@@ -84,8 +87,16 @@ object ChapterValidator {
         }
 
         val perKilo = words.size * 1000.0 / maxOf(hanChars, 1)
-        if (perKilo < density.minPerKilo) issues += ValidationIssue("density_low", formatDensity(perKilo))
-        if (perKilo > density.maxPerKilo) issues += ValidationIssue("density_high", formatDensity(perKilo))
+        // 词库本身就限定了可达区间：下限按"每个词出现一次"兜底，上限按"最多重复次数"兜底，
+        // 否则小词库永远不可能达标，模型只能被反复打回。
+        val oncePerWord = requested.size * 1000.0 / maxOf(hanChars, 1)
+        val repeatCeiling = requested.size * density.maxRepeat * 1000.0 / maxOf(hanChars, 1)
+        if (perKilo < minOf(density.minPerKilo.toDouble(), oncePerWord)) {
+            issues += ValidationIssue("density_low", formatDensity(perKilo))
+        }
+        if (perKilo > maxOf(density.maxPerKilo.toDouble(), repeatCeiling)) {
+            issues += ValidationIssue("density_high", formatDensity(perKilo))
+        }
 
         val allowed = requested.map { it.lowercase() }.toSet()
         words.map { it.lookup }.distinct().filter { it !in allowed }.forEach {

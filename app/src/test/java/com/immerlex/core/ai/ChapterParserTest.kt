@@ -1,5 +1,6 @@
 package com.immerlex.core.ai
 
+import com.immerlex.core.bible.CharacterChange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -45,6 +46,25 @@ class ChapterParserTest {
         assertEquals(emptyList<String>(), chapter!!.characters)
     }
 
+    /** 手机上存量的 V2 章节没有 changes 键，读它不该报错，也不该凭空多出人物变化。 */
+    @Test
+    fun v2ChapterWithoutChangesStillParses() {
+        val chapter = ChapterParser.parse(
+            """{"title":"T","summary":"S","characters":["落薇 · 皇后"],"paragraphs":[[{"k":"t","v":"雾"}]]}""",
+        )
+        assertEquals(listOf("落薇 · 皇后"), chapter!!.characters)
+        assertEquals(emptyList<CharacterChange>(), chapter.changes)
+    }
+
+    @Test
+    fun halfEmptyChangeEntriesAreDropped() {
+        val chapter = ChapterParser.parse(
+            """{"title":"T","changes":[{"who":"落薇","what":"  "},{"who":"","what":"死了"},{"who":"刘禧","what":"掌印尚宫"}],
+               "paragraphs":[[{"k":"t","v":"雾"}]]}""",
+        )
+        assertEquals(listOf(CharacterChange("刘禧", "掌印尚宫")), chapter!!.changes)
+    }
+
     @Test
     fun countsOnlyHanCharacters() {
         val f = fixture(paragraphs = 3, blocks = 2, wordsPerParagraph = 1)
@@ -59,10 +79,29 @@ class ChapterParserTest {
     }
 
     @Test
-    fun flagsSparseDensityAgainstDenseTier() {
+    fun flagsSparseDensityWhenTheBankCouldCarryMore() {
         val f = fixture(paragraphs = 10, blocks = 3, wordsPerParagraph = 1)
-        val issues = ChapterValidator.validate(parsed(f), f.words, Density.DENSE, minHanChars = 400)
+        val bank = f.words + (1..20).map { "extra$it" }
+        val issues = ChapterValidator.validate(parsed(f), bank, Density.DENSE, minHanChars = 400)
         assertEquals(listOf("density_low"), issues.map { it.code })
+    }
+
+    @Test
+    fun neverDemandsDensityTheBankCannotSupply() {
+        val f = fixture(paragraphs = 6, blocks = 2, wordsPerParagraph = 1)
+        val issues = ChapterValidator.validate(parsed(f), f.words.take(1), Density.DENSE, minHanChars = 400)
+        assertTrue(issues.none { it.code.startsWith("density") })
+    }
+
+    @Test
+    fun downgradesTierAndLengthTogetherForASmallBank() {
+        assertEquals(Density.SPARSE, Density.bestFor(wordCount = 4, targetHanChars = 900, limit = Density.DENSE))
+        assertEquals(Density.SPARSE, Density.bestFor(12, 900, Density.DENSE))
+        assertEquals(Density.MEDIUM, Density.bestFor(25, 900, Density.DENSE))
+        assertEquals(Density.DENSE, Density.bestFor(32, 900, Density.DENSE))
+        assertEquals(Density.SPARSE, Density.bestFor(45, 900, Density.SPARSE))
+        assertEquals(400, Density.charsFor(4, 900, Density.SPARSE, minChars = 400))
+        assertEquals(900, Density.charsFor(25, 900, Density.MEDIUM, minChars = 400))
     }
 
     @Test

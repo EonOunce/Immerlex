@@ -40,9 +40,17 @@
     <string name="action_close">关闭</string>
 
     <string name="settings_ai_section">AI 接口</string>
+    <string name="settings_presets">常用网关</string>
+    <string name="settings_preset_deepseek">DeepSeek</string>
+    <string name="settings_preset_zhipu">智谱</string>
+    <string name="settings_preset_moonshot">Kimi</string>
+    <string name="settings_preset_dashscope">通义千问</string>
+    <string name="settings_preset_openai">OpenAI</string>
+    <string name="settings_preset_openrouter">OpenRouter</string>
     <string name="settings_base_url">Base URL</string>
-    <string name="settings_base_url_hint">OpenAI 兼容地址，例如 https://api.deepseek.com 或 https://api.openai.com/v1</string>
+    <string name="settings_base_url_hint">OpenAI 兼容地址，填到版本号即可，末尾不用写 /chat/completions</string>
     <string name="settings_model">模型名</string>
+    <string name="settings_model_pick">可点选的模型名</string>
     <string name="settings_api_key">API Key</string>
     <string name="settings_key_hint">密钥保存在系统加密存储中，不会写入日志或备份。</string>
     <string name="settings_key_volatile">本机加密存储不可用，密钥仅在本次启动内保留、不会落盘。</string>
@@ -51,7 +59,14 @@
     <string name="settings_saved">已保存</string>
     <string name="settings_need_config">请先填写 Base URL 与模型名</string>
     <string name="settings_probe_ok">连接成功，接口可用</string>
-    <string name="settings_probe_fail">连接失败：%1$s</string>
+    <string name="settings_probe_ok_models">连接成功，拉到 %1$d 个可用模型，点下面的标签即可填入</string>
+    <string name="settings_probe_missing_key">没带上 API Key：请先填写密钥</string>
+    <string name="settings_probe_unauthorized">API Key 无效或已过期：%1$s</string>
+    <string name="settings_probe_not_found">这个地址没有模型接口，检查 Base URL：%1$s</string>
+    <string name="settings_probe_tls">证书校验失败：%1$s</string>
+    <string name="settings_probe_timeout">请求超时：%1$s</string>
+    <string name="settings_probe_unreachable">连不上网关，检查手机网络：%1$s</string>
+    <string name="settings_probe_http_error">网关返回错误：%1$s</string>
     <string name="settings_generate_section">章节生成</string>
     <string name="settings_genre">小说类型</string>
     <string name="settings_density">嵌词密度</string>
@@ -64,6 +79,47 @@
     <string name="settings_appearance_section">阅读外观</string>
     <string name="settings_font_size">字号</string>
     <string name="settings_dark_mode">深色模式</string>
+
+    <string name="settings_open_bible">查看并编辑故事档案</string>
+
+    <string name="bible_title">故事档案</string>
+    <string name="bible_subtitle">类型：%1$s</string>
+    <string name="bible_back">返回</string>
+    <string name="bible_seed_label">开局想法</string>
+    <string name="bible_seed_hint">写一两句你想看什么，哪怕只有一句“我想看宫斗”。档案从它展开，之后每条都能自己改。</string>
+    <string name="bible_expand">展开成故事档案</string>
+    <string name="bible_reroll">按现在的想法重写档案</string>
+    <string name="bible_working">正在整理档案…</string>
+    <string name="bible_reroll_hint">再点一次上面的按钮会按现在的想法重写这份档案：模型生成的条目会被换掉，你亲手改过的原样保留。</string>
+    <string name="bible_sections_section">档案条目</string>
+    <string name="bible_cast_section">人物状态</string>
+    <string name="bible_empty">还没有档案。写下想法，点上面的“展开成故事档案”让 AI 起草；也可以直接点每栏右边的＋自己写一条。</string>
+    <string name="bible_section_tone">基调</string>
+    <string name="bible_section_protagonist">主角与目标</string>
+    <string name="bible_section_ending">结局倾向</string>
+    <string name="bible_section_forbidden">禁止事项</string>
+    <string name="bible_add_entry">加一条</string>
+    <string name="bible_add_person">加一个人物</string>
+    <string name="bible_edit">编辑</string>
+    <string name="bible_field_text">内容</string>
+    <string name="bible_field_name">人名</string>
+    <string name="bible_field_role">身份</string>
+    <string name="bible_field_status">当前处境</string>
+    <string name="bible_user_badge">我写的</string>
+    <string name="bible_conflict">与第 %1$d 章的写法冲突：%2$s</string>
+    <string name="bible_status_unknown">尚未写到</string>
+    <string name="bible_saved">档案已更新</string>
+    <string name="bible_expanded">档案写好了，回设置页就能生成章节</string>
+    <string name="bible_rejected">模型没给出一份可用的档案，再点一次或把想法写具体些（尝试 %1$d 次）</string>
+    <string name="bible_failed">档案生成失败：%1$s</string>
+    <string name="bible_needs_seed">先写一句想法，再展开成档案</string>
+    <string name="bible_person_exists">这个人已经在档案里了</string>
+    <string name="bible_needs_name">人名不能空着</string>
+    <string name="bible_needs_text">内容不能空着</string>
+    <string name="bible_entry_deleted">已删掉这一条</string>
+    <string name="bible_person_deleted">已删掉 %1$s</string>
+    <string name="bible_delete_entry_body">删掉这一条档案设定。后面的章节已经写过的不受影响。</string>
+    <string name="bible_delete_person_body">删掉这个人物的状态记录，档案里不再向他交代剧情。</string>
 
     <string name="density_sparse">疏</string>
     <string name="density_medium">中</string>
@@ -91,6 +147,21 @@
     <string name="reader_generate_first">写第一章</string>
     <string name="reader_generating">写作中…</string>
     <string name="reader_go_settings">去设置</string>
+
+    <string name="reader_chapters_title">本章目录</string>
+    <string name="reader_chapters_empty">这个题材还没有其它章节。</string>
+    <string name="reader_chapter_entry">%1$s（第 %2$d 章）</string>
+    <string name="reader_chapter_current">%1$s ← 正在读</string>
+    <string name="reader_chapter_delete">删除本章</string>
+    <string name="reader_delete_body">只删掉第 %1$d 章的正文，词库和复习进度都不受影响。</string>
+    <string name="reader_chapter_deleted">已删除第 %1$d 章</string>
+    <string name="reader_rewrite">重写本章</string>
+    <string name="reader_rewrite_body">用本章这 %1$d 个词再写一遍，写好后替换现在这一章。会再调用一次接口。</string>
+    <string name="reader_rewrite_action">重写</string>
+    <string name="reader_rewritten">已重写第 %1$d 章《%2$s》</string>
+    <string name="reader_grade_relearn">刚才点了“忘了”，再点一次算重学一遍。</string>
+    <string name="reader_grade_amend">今天已经复习过，再点只修改上一次的评分，不会多算一次。</string>
+    <string name="reader_grade_not_due">还没到复习时间，点开只是看释义。</string>
 
     <string name="grade_again">忘了</string>
     <string name="grade_hard">困难</string>

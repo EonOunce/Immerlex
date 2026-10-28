@@ -53,8 +53,8 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_GENRE, value.trim()).apply()
 
     var density: Density
-        get() = runCatching { Density.valueOf(prefs.getString(KEY_DENSITY, null) ?: Density.DENSE.name) }
-            .getOrDefault(Density.DENSE)
+        get() = runCatching { Density.valueOf(prefs.getString(KEY_DENSITY, null) ?: Density.MEDIUM.name) }
+            .getOrDefault(Density.MEDIUM)
         set(value) = prefs.edit().putString(KEY_DENSITY, value.name).apply()
 
     var dailyNewLimit: Int

@@ -31,9 +31,13 @@ import com.immerlex.feature.wordbank.WordBankRepository
 import com.immerlex.feature.wordbank.WordBankScreen
 import com.immerlex.feature.reader.ReaderScreen
 import com.immerlex.feature.reader.ReaderViewModel
+import com.immerlex.feature.settings.BibleScreen
+import com.immerlex.feature.settings.BibleViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
 import com.immerlex.feature.wordbank.WordBankViewModel
+
+private const val ROUTE_BIBLE = "bible"
 
 @Composable
 fun ImmerlexRoot() {
@@ -51,6 +55,14 @@ fun ImmerlexRoot() {
                 keyStore = container.apiKeyStore,
                 generator = container.chapterGenerator,
                 wordDao = container.db.wordDao(),
+            )
+        }
+        initializer {
+            BibleViewModel(
+                bible = container.storyBible,
+                expander = container.bibleExpander,
+                prefs = container.prefs,
+                aiConfig = container::aiConfig,
             )
         }
         initializer {
@@ -109,7 +121,11 @@ fun ImmerlexRoot() {
                 }
                 composable(Destinations.SETTINGS.route) {
                     val vm: SettingsViewModel = viewModel(factory = appViewModelFactory)
-                    SettingsScreen(vm)
+                    SettingsScreen(vm, onOpenBible = { navController.navigate(ROUTE_BIBLE) { launchSingleTop = true } })
+                }
+                composable(ROUTE_BIBLE) {
+                    val vm: BibleViewModel = viewModel(factory = appViewModelFactory)
+                    BibleScreen(vm, onBack = { navController.popBackStack() })
                 }
             }
         }

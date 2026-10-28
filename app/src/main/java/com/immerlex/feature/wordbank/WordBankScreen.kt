@@ -49,6 +49,7 @@ import com.immerlex.app.R
 import com.immerlex.app.readPlainText
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.masteryPalette
+import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
@@ -104,7 +105,7 @@ fun WordBankScreen(vm: WordBankViewModel) {
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
-            snackbar.showSnackbar(context.getString(msg.resId, *msg.args.toTypedArray()))
+            snackbar.showSnackbar(context.textFor(msg))
         }
     }
 

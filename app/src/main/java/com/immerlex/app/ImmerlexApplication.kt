@@ -4,8 +4,10 @@ import android.app.Application
 import android.content.Context
 import com.immerlex.core.ai.AiConfig
 import com.immerlex.core.ai.ApiKeyStore
+import com.immerlex.core.ai.BibleExpander
 import com.immerlex.core.ai.ChapterGenerator
 import com.immerlex.core.ai.OpenAiCompatClient
+import com.immerlex.core.bible.StoryBibleRepository
 import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.dict.EcdictDictionary
 import com.immerlex.core.fsrs.Scheduler
@@ -46,14 +48,19 @@ class AppContainer(context: Context) {
     val scheduleService: ScheduleService by lazy {
         ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler)
     }
+    val storyBible: StoryBibleRepository by lazy {
+        StoryBibleRepository(db.storyBibleDao(), db.bibleEntryDao(), db.characterStateDao(), db.chapterDao())
+    }
     val chapterGenerator: ChapterGenerator by lazy {
         ChapterGenerator(
             queue = scheduleService,
             chapterDao = db.chapterDao(),
-            bibleDao = db.storyBibleDao(),
+            story = storyBible,
+            wordDao = db.wordDao(),
             clientFor = { OpenAiCompatClient(aiConfig()) },
         )
     }
+    val bibleExpander: BibleExpander by lazy { BibleExpander(clientFor = { OpenAiCompatClient(aiConfig()) }) }
 
     fun aiConfig(): AiConfig = AiConfig(
         baseUrl = prefs.baseUrl,
