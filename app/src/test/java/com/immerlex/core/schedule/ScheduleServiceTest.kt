@@ -1,6 +1,8 @@
 package com.immerlex.core.schedule
 
 import com.immerlex.core.db.FSRS_STATE_REVIEW
+import com.immerlex.core.db.LOG_KIND_LEARN
+import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
@@ -10,13 +12,15 @@ import com.immerlex.testsupport.FakeWordDao
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScheduleServiceTest {
 
-    private fun parts(zone: ZoneId = UTC) = FakeWordDao().let { words ->
+    private fun parts() = FakeWordDao().let { words ->
         val logs = FakeReviewLogDao()
         Triple(
             ScheduleService(
@@ -28,7 +32,6 @@ class ScheduleServiceTest {
                     maximumInterval = 3650,
                     enableFuzzing = false,
                 ),
-                zone = zone,
             ),
             words,
             logs,
@@ -36,35 +39,185 @@ class ScheduleServiceTest {
     }
 
     @Test
-    fun firstGoodReviewGraduatesToTwoDays() = runBlocking {
+    fun firstExposureIsLearnInBothModes() = runBlocking {
+        val (svc, words, _) = parts()
+        val id = words.insert(WordEntity(word = "resist", source = "test", createdAtSec = 0))
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+
+        assertEquals(WordAccess.Learn, svc.accessFor(words.findById(id)!!, answersHidden = false, now))
+        assertEquals(WordAccess.Learn, svc.accessFor(words.findById(id)!!, answersHidden = true, now))
+    }
+
+    @Test
+    fun learnStartsTheScheduleWithoutCountingAsRecall() = runBlocking {
         val (svc, words, logs) = parts()
         val id = words.insert(WordEntity(word = "resist", source = "test", createdAtSec = 0))
         val now = Instant.parse("2024-01-01T00:00:00Z")
 
-        val updated = svc.review(words.findById(id)!!, Rating.GOOD, "card", now)
+        val result = svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)!!
 
         // Matches FSRS reference vector: new + Good -> interval 2 days.
-        assertEquals(2, updated.intervalDays)
-        assertEquals(now.plus(2, ChronoUnit.DAYS).epochSecond, updated.dueEpochSec)
-        assertEquals(1, updated.reps)
-        assertEquals(0, updated.lapses)
+        assertEquals(2, result.word.intervalDays)
+        assertEquals(now.plus(2, ChronoUnit.DAYS).epochSecond, result.word.dueEpochSec)
+        assertEquals(1, result.word.reps)
+        assertEquals(LOG_KIND_LEARN, result.kind)
+        assertEquals(LOG_KIND_LEARN, logs.items.single().kind)
+        assertNull("阅读页没有题型", logs.items.single().questionType)
+    }
+
+    @Test
+    fun secondLookIsNotLearnedAgain() = runBlocking {
+        val (svc, words, logs) = parts()
+        val id = words.insert(WordEntity(word = "column", source = "test", createdAtSec = 0))
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        assertNull(svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now.plusSeconds(5)))
         assertEquals(1, logs.items.size)
     }
 
     @Test
-    fun againCountsLapseAndKeepsWordDue() = runBlocking {
+    fun learningModeNeverScoresAfterTheFirstLook() = runBlocking {
         val (svc, words, _) = parts()
         val id = words.insert(WordEntity(word = "bin", source = "test", createdAtSec = 0))
-        val t0 = Instant.parse("2024-01-01T00:00:00Z")
-        var w = svc.review(words.findById(id)!!, Rating.AGAIN, "card", t0)
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
 
-        assertEquals(1, w.lapses)
-        assertEquals(1, w.intervalDays) // clamped to minimum 1 day
+        assertEquals(WordAccess.ViewOnly, svc.accessFor(words.findById(id)!!, answersHidden = false, now))
+    }
 
-        val t1 = t0.plus(1, ChronoUnit.DAYS)
-        w = svc.review(w, Rating.GOOD, "card", t1)
-        assertEquals(1, w.lapses)
-        assertEquals(2, w.reps)
+    @Test
+    fun reviewModeGradesAllRatingsWhenDueAndOnlyTheForgottenOneBefore() = runBlocking {
+        val (svc, words, _) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "bin", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        assertEquals(WordAccess.Early, svc.accessFor(words.findById(id)!!, answersHidden = true, now))
+        val later = now.plus(2, ChronoUnit.DAYS)
+        assertEquals(WordAccess.Recall, svc.accessFor(words.findById(id)!!, answersHidden = true, later))
+    }
+
+    @Test
+    fun notDueWordCannotBeRecalledUnlessEarlyIsAllowed() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = seed(words, "harbour", dueInDays = 4)
+        logs.insert(
+            ReviewLogEntity(
+                wordId = id, rating = Rating.GOOD.value, source = SOURCE,
+                reviewEpochSec = now.minus(1, ChronoUnit.DAYS).epochSecond,
+                elapsedDays = 0, scheduledDays = 4,
+                preState = FSRS_STATE_REVIEW,
+                preDueEpochSec = now.plus(4, ChronoUnit.DAYS).epochSecond,
+            ),
+        )
+
+        assertNull(svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = now))
+        assertEquals(1, logs.items.size)
+
+        val early = svc.recall(
+            words.findById(id)!!,
+            Rating.HARD,
+            SOURCE,
+            questionType = "CLOZE",
+            now = now,
+            allowEarly = true,
+        )
+        assertEquals(LOG_KIND_RECALL, early!!.kind)
+        assertEquals("CLOZE", logs.items.last().questionType)
+    }
+
+    @Test
+    fun twoRatingsInTheSameInstantRecordOnce() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "memory", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        val at = now.plus(2, ChronoUnit.DAYS)
+        val first = svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = at)
+        val second = svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = at)
+
+        assertTrue(first != null)
+        assertNull("连点手滑不能多记一次", second)
+        assertEquals(2, logs.items.size)
+        assertEquals(2, words.findById(id)!!.reps)
+    }
+
+    @Test
+    fun repeatedIndependentRecallsAreAllKept() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "ledger", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        val day1 = now.plus(2, ChronoUnit.DAYS)
+        svc.recall(words.findById(id)!!, Rating.AGAIN, SOURCE, now = day1)
+        val day2 = day1.plus(1, ChronoUnit.DAYS)
+        svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = day2)
+
+        assertEquals(3, logs.items.size)
+        assertEquals(listOf(LOG_KIND_LEARN, LOG_KIND_RECALL, LOG_KIND_RECALL), logs.items.map { it.kind })
+        assertEquals("每一次都参与排期", 3, words.findById(id)!!.reps)
+        assertEquals(1, words.findById(id)!!.lapses)
+    }
+
+    @Test
+    fun undoRestoresThePreRatingCardAndDeletesTheLog() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "quay", source = "test", createdAtSec = 0))
+        val learned = svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)!!.word
+
+        val at = now.plus(2, ChronoUnit.DAYS)
+        val result = svc.recall(words.findById(id)!!, Rating.AGAIN, SOURCE, now = at)!!
+        val restored = svc.undo(result.logId, at.plusSeconds(3))!!
+
+        assertEquals("撤销后必须与评分前完全一致", learned, restored.word)
+        assertEquals(LOG_KIND_RECALL, restored.kind)
+        assertEquals(learned, words.findById(id)!!)
+        assertEquals(1, logs.items.size)
+        assertFalse(logs.items.any { it.id == result.logId })
+    }
+
+    @Test
+    fun undoOnlyWorksForTheLastLogInsideTheWindow() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "kiln", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        val at = now.plus(2, ChronoUnit.DAYS)
+        val first = svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = at)!!
+        val second = svc.recall(
+            words.findById(id)!!,
+            Rating.HARD,
+            SOURCE,
+            now = at.plusSeconds(3),
+            allowEarly = true,
+        )!!
+
+        assertNull("只允许撤最后一条", svc.undo(first.logId, at.plusSeconds(4)))
+        assertNull("窗口过了就是真实记录", svc.undo(second.logId, at.plusSeconds(3 + 9)))
+        assertEquals(3, logs.items.size)
+    }
+
+    @Test
+    fun v1LogWithoutSnapshotCannotBeUndone() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = seed(words, "resin")
+        // 升级前的老记录：只有评分，没有评前快照。
+        val legacyId = logs.insert(
+            ReviewLogEntity(
+                wordId = id, rating = Rating.GOOD.value, source = SOURCE,
+                reviewEpochSec = now.epochSecond, elapsedDays = 0, scheduledDays = 2,
+            ),
+        )
+
+        assertNull(svc.undo(legacyId, now.plusSeconds(1)))
+        assertEquals(1, logs.items.size)
     }
 
     @Test
@@ -79,104 +232,8 @@ class ScheduleServiceTest {
         assertEquals(0, queue.reviewWords.size)
     }
 
-    @Test
-    fun fiveTapsOnOneDueWordRecordOneReview() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "memory")
-        val now = Instant.parse("2024-03-01T10:00:00Z")
-
-        repeat(5) { svc.grade(words.findById(id)!!, Rating.GOOD, SOURCE, now) }
-
-        assertEquals(1, logs.items.size)
-        assertEquals(1, words.findById(id)!!.reps)
-    }
-
-    @Test
-    fun amendLandsExactlyWhereTheNewRatingWouldHavePutTheCard() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "column")
-        val now = Instant.parse("2024-03-01T10:00:00Z")
-        svc.grade(words.findById(id)!!, Rating.GOOD, SOURCE, now)
-        val amended = svc.grade(words.findById(id)!!, Rating.HARD, SOURCE, now).word
-
-        val (other, otherWords, _) = parts()
-        val otherId = seed(otherWords, "column")
-        val straight = other.grade(otherWords.findById(otherId)!!, Rating.HARD, SOURCE, now).word
-
-        assertEquals(GradeMode.Amend, svc.gradeModeFor(words.findById(id)!!, now))
-        assertEquals("改分后的卡片必须与一开始就选这个分一致", straight, amended)
-        assertEquals(1, logs.items.size)
-        assertEquals(Rating.HARD.value, logs.items.single().rating)
-        assertEquals(straight.intervalDays, logs.items.single().scheduledDays)
-    }
-
-    @Test
-    fun againThenLearnedBackCountsTwoReviews() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "ledger")
-        val now = Instant.parse("2024-03-01T10:00:00Z")
-
-        assertEquals(GradeMode.Review, svc.grade(words.findById(id)!!, Rating.AGAIN, SOURCE, now).mode)
-        val relearned = svc.grade(words.findById(id)!!, Rating.GOOD, SOURCE, now)
-        assertEquals(GradeMode.Relearn, relearned.mode)
-
-        assertEquals(2, logs.items.size)
-        assertEquals(2, relearned.word.reps)
-        assertEquals(1, relearned.word.lapses)
-    }
-
-    @Test
-    fun thirdTapOfTheDayAmendsInsteadOfRecording() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "quay")
-        val now = Instant.parse("2024-03-01T10:00:00Z")
-        svc.grade(words.findById(id)!!, Rating.AGAIN, SOURCE, now)
-        svc.grade(words.findById(id)!!, Rating.GOOD, SOURCE, now)
-
-        val third = svc.grade(words.findById(id)!!, Rating.HARD, SOURCE, now)
-
-        assertEquals(GradeMode.Amend, third.mode)
-        assertEquals("同日封顶两条", 2, logs.items.size)
-        assertEquals(2, third.word.reps)
-        assertEquals(Rating.HARD.value, logs.items.last().rating)
-    }
-
-    @Test
-    fun wordNotDueYetIsRevealedWithoutScoring() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "harbour", dueInDays = 4)
-
-        val result = svc.grade(words.findById(id)!!, Rating.GOOD, SOURCE, Instant.parse("2024-03-01T10:00:00Z"))
-
-        assertEquals(GradeMode.Reveal, result.mode)
-        assertEquals(0, logs.items.size)
-        assertEquals(words.findById(id)!!, result.word)
-    }
-
-    @Test
-    fun v1LogWithoutSnapshotIsNotAmendable() = runBlocking {
-        val (svc, words, logs) = parts()
-        val id = seed(words, "kiln")
-        val now = Instant.parse("2024-03-01T10:00:00Z")
-        // 升级前的老记录：只有评分，没有评前快照。
-        logs.insert(
-            ReviewLogEntity(
-                wordId = id, rating = Rating.GOOD.value, source = SOURCE,
-                reviewEpochSec = now.epochSecond, elapsedDays = 0, scheduledDays = 2,
-            ),
-        )
-        val notYetDue = words.findById(id)!!.copy(dueEpochSec = now.plus(1, ChronoUnit.DAYS).epochSecond)
-        words.update(notYetDue)
-
-        val result = svc.grade(words.findById(id)!!, Rating.HARD, SOURCE, now)
-
-        assertEquals("没有快照就回滚不了，只能不算分", GradeMode.Reveal, result.mode)
-        assertEquals(1, logs.items.size)
-        assertEquals(Rating.GOOD.value, logs.items.single().rating)
-    }
-
     private suspend fun seed(words: FakeWordDao, word: String, dueInDays: Long? = null): Long {
-        val now = Instant.parse("2024-03-01T10:00:00Z")
+        val now = Instant.parse("2024-01-01T00:00:00Z")
         return words.insert(
             WordEntity(
                 word = word,
@@ -195,6 +252,5 @@ class ScheduleServiceTest {
 
     private companion object {
         const val SOURCE = "reader"
-        val UTC: ZoneId = ZoneId.of("UTC")
     }
 }

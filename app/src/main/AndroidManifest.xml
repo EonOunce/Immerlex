@@ -5,6 +5,13 @@
     <!-- Android 13 起通知要运行时授权；12 及以下这条不影响任何东西。 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Android 11 起有包可见性限制，不声明这条就找不到系统语音引擎，朗读会静默失败。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ImmerlexApplication"
         android:icon="@mipmap/ic_launcher"

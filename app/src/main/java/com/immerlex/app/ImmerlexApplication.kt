@@ -24,10 +24,13 @@ import com.immerlex.core.notify.ReminderScheduler
 import com.immerlex.core.ocr.MlKitOcr
 import com.immerlex.core.ocr.OcrEngine
 import com.immerlex.core.ocr.PdfOcr
+import com.immerlex.core.quiz.AiQuizEnricher
+import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.secret.SecretStore
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.settings.AppPreferences
+import com.immerlex.core.tricky.TrickyRepository
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,8 +92,25 @@ class AppContainer(context: Context) {
     val dailyLoopService: DailyLoopService by lazy {
         DailyLoopService(db.dailyLoopDao(), db.reviewLogDao())
     }
+    // 测验不依赖 API key：AI 只在配置可用时补释义/例句/干扰项，失败静默退化到本地题库。
+    val quizService: QuizService by lazy {
+        QuizService(
+            wordDao = db.wordDao(),
+            logDao = db.reviewLogDao(),
+            chapterDao = db.chapterDao(),
+            trickyDao = db.trickyDao(),
+            schedule = scheduleService,
+            enricher = AiQuizEnricher(
+                clientFor = { OpenAiCompatClient(aiConfig()) },
+                aiUsable = { aiConfig().isUsable },
+            ),
+        )
+    }
     val storyBible: StoryBibleRepository by lazy {
         StoryBibleRepository(db.storyBibleDao(), db.bibleEntryDao(), db.characterStateDao(), db.chapterDao())
+    }
+    val trickyRepository: TrickyRepository by lazy {
+        TrickyRepository(db, db.wordDao(), dictionary)
     }
     val chapterGenerator: ChapterGenerator by lazy {
         ChapterGenerator(

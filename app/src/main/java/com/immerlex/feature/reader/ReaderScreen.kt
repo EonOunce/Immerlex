@@ -1,19 +1,14 @@
 package com.immerlex.feature.reader
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
@@ -22,8 +17,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,27 +29,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
-import com.immerlex.app.ui.LocalAppearance
-import com.immerlex.app.ui.LocalMasteryTones
+import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
-import com.immerlex.core.reader.ReaderSegment
-import com.immerlex.core.reader.ReaderWord
+import com.immerlex.core.db.LOG_KIND_LEARN
 
 @Composable
 fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
@@ -63,9 +55,10 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     var chaptersOpen by remember { mutableStateOf(false) }
     var shelfOpen by remember { mutableStateOf(false) }
     var newBookOpen by remember { mutableStateOf(false) }
-    var tonePickerOpen by remember { mutableStateOf(false) }
+    var composerOpen by remember { mutableStateOf(false) }
     var rewriteOpen by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Long?>(null) }
+    var englishOnly by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
@@ -73,7 +66,24 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    LaunchedEffect(Unit) {
+        vm.undoPrompts.collect { prompt ->
+            val result = snackbar.showSnackbar(
+                message = context.getString(
+                    if (prompt.kind == LOG_KIND_LEARN) {
+                        R.string.reader_grade_saved_learn
+                    } else {
+                        R.string.reader_grade_saved_recall
+                    },
+                ),
+                actionLabel = context.getString(R.string.reader_undo),
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) vm.undo(prompt)
+        }
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             ReaderHeader(
                 title = state.title,
@@ -81,12 +91,15 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
                 number = state.number,
                 mode = state.mode,
                 wordCount = state.wordCount,
-                graded = state.graded,
+                learned = state.learned,
+                recalled = state.recalled,
                 loading = state.loading,
                 hasChapter = state.hasChapter,
                 isShort = state.isShort,
                 generating = state.generating,
+                englishOnly = englishOnly,
                 onSelectMode = vm::setMode,
+                onToggleEnglish = { englishOnly = !englishOnly },
                 onGenerate = vm::generate,
                 onOpenChapters = { chaptersOpen = true },
                 onOpenShelf = { shelfOpen = true },
@@ -98,7 +111,12 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
                     onGenerate = vm::generate,
                     onOpenSettings = onOpenSettings,
                 )
-                else -> ChapterBody(state = state, layoutState = layoutState, onWordTapped = vm::select)
+                else -> ChapterBody(
+                    state = state,
+                    layoutState = layoutState,
+                    englishOnly = englishOnly,
+                    onWordTapped = vm::select,
+                )
             }
         }
     }
@@ -106,9 +124,15 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     state.selected?.let { word ->
         WordCardSheet(
             word = word,
-            gradeMode = state.gradeMode,
+            access = state.access,
             previews = state.previews,
+            tricky = state.tricky,
             onGrade = vm::grade,
+            onToggleTricky = vm::toggleTricky,
+            onLinkTricky = vm::linkTricky,
+            onUnlinkTricky = vm::unlinkTricky,
+            onOpenTricky = vm::openTricky,
+            onAddTricky = vm::addTrickyManual,
             onDismiss = vm::dismissCard,
         )
     }
@@ -133,34 +157,17 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         )
     }
     if (shelfOpen) {
-        BookShelfSheet(
-            books = state.books,
-            shorts = state.shorts,
-            currentBook = state.book,
-            currentChapterId = state.chapterId,
-            readingShort = state.isShort,
-            generating = state.generating,
-            onPickBook = { genre ->
+        ShelfPage(
+            state = state,
+            onSelectBook = vm::switchBook,
+            onOpenShort = vm::openChapter,
+            onNewBook = { newBookOpen = true },
+            onWriteShort = { composerOpen = true },
+            onRequestDeleteShorts = { ids ->
                 shelfOpen = false
-                vm.switchBook(genre)
+                vm.deleteShorts(ids)
             },
-            onPickShort = { id ->
-                shelfOpen = false
-                vm.openChapter(id)
-            },
-            onNewBook = {
-                shelfOpen = false
-                newBookOpen = true
-            },
-            onWriteShort = {
-                shelfOpen = false
-                tonePickerOpen = true
-            },
-            onDeleteShort = { id ->
-                shelfOpen = false
-                deleteTarget = id
-            },
-            onDismiss = { shelfOpen = false },
+            onBack = { shelfOpen = false },
         )
     }
     if (newBookOpen) {
@@ -172,12 +179,13 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
             },
         )
     }
-    if (tonePickerOpen) {
-        ShortTonePicker(
-            onDismiss = { tonePickerOpen = false },
-            onPick = { tone ->
-                tonePickerOpen = false
-                vm.generateShort(tone)
+    if (composerOpen) {
+        ShortComposer(
+            onDismiss = { composerOpen = false },
+            onWrite = { plan ->
+                composerOpen = false
+                shelfOpen = false
+                vm.generateShort(plan)
             },
         )
     }
@@ -194,16 +202,9 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         )
     }
     deleteTarget?.let { id ->
-        val short = state.shorts.find { it.id == id }
         ConfirmDialog(
-            title = stringResource(
-                if (short != null) R.string.reader_short_delete_title else R.string.reader_chapter_delete,
-            ),
-            body = if (short != null) {
-                stringResource(R.string.reader_short_delete_body)
-            } else {
-                stringResource(R.string.reader_delete_body, state.chapters.find { it.id == id }?.number ?: 0)
-            },
+            title = stringResource(R.string.reader_chapter_delete),
+            body = stringResource(R.string.reader_delete_body, state.chapters.find { it.id == id }?.number ?: 0),
             confirmLabel = stringResource(R.string.action_delete),
             onConfirm = {
                 deleteTarget = null
@@ -221,12 +222,15 @@ private fun ReaderHeader(
     number: Int,
     mode: ReaderMode,
     wordCount: Int,
-    graded: Int,
+    learned: Int,
+    recalled: Int,
     loading: Boolean,
     hasChapter: Boolean,
     isShort: Boolean,
     generating: Boolean,
+    englishOnly: Boolean,
     onSelectMode: (ReaderMode) -> Unit,
+    onToggleEnglish: () -> Unit,
     onGenerate: () -> Unit,
     onOpenChapters: () -> Unit,
     onOpenShelf: () -> Unit,
@@ -282,21 +286,27 @@ private fun ReaderHeader(
             }
         }
         if (hasChapter) {
-            Text(
-                if (isShort) {
-                    stringResource(R.string.reader_short_progress, wordCount, graded)
-                } else {
-                    stringResource(R.string.reader_progress, number, wordCount, graded)
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = ImmerlexColors.Meta,
-            )
-            if (mode == ReaderMode.REVIEW) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    stringResource(R.string.reader_review_hint),
+                    if (isShort) {
+                        stringResource(R.string.reader_short_progress, wordCount, learned, recalled)
+                    } else {
+                        stringResource(R.string.reader_progress, number, wordCount, learned, recalled)
+                    },
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = ImmerlexColors.Meta,
                 )
+                TextButton(onClick = onToggleEnglish) {
+                    Text(
+                        stringResource(
+                            if (englishOnly) R.string.reader_english_only_on else R.string.reader_english_only,
+                        ),
+                    )
+                }
             }
         }
         if (generating) {
@@ -306,79 +316,6 @@ private fun ReaderHeader(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-    }
-}
-
-@Composable
-private fun ChapterBody(
-    state: ReaderState,
-    layoutState: MutableState<TextLayoutResult?>,
-    onWordTapped: (ReaderWord) -> Unit,
-) {
-    val wordsByLookup = remember(state.blocks) {
-        state.blocks.flatten().filterIsInstance<ReaderSegment.Word>().associateBy { it.word.lookup }
-    }
-    val tones = LocalMasteryTones.current
-    val fontScale = LocalAppearance.current.fontScale
-    val annotated = remember(state.blocks, state.mode, state.bankWords, tones) {
-        buildChapterText(state.blocks, state.mode, state.bankWords, tones)
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-    ) {
-        Text(
-            text = annotated,
-            style = TextStyle(
-                fontSize = fontScale.sp,
-                lineHeight = (fontScale * 2f).sp,
-                textAlign = TextAlign.Justify,
-                color = MaterialTheme.colorScheme.onBackground,
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 40.dp)
-                .pointerInput(annotated) {
-                    detectTapGestures { offset ->
-                        val layout = layoutState.value ?: return@detectTapGestures
-                        val position = layout.getOffsetForPosition(offset)
-                        annotated.getStringAnnotations(WORD_ANNOTATION_TAG, position, position)
-                            .firstOrNull()?.item
-                            ?.let { lookup -> wordsByLookup[lookup]?.word?.let { onWordTapped(it) } }
-                    }
-                },
-            onTextLayout = { layoutState.value = it },
-        )
-    }
-}
-
-@Composable
-private fun EmptyChapter(
-    generating: Boolean,
-    onGenerate: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(stringResource(R.string.reader_empty), color = ImmerlexColors.Meta, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onGenerate, enabled = !generating) {
-            Text(stringResource(if (generating) R.string.reader_generating else R.string.reader_generate_first))
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onOpenSettings) { Text(stringResource(R.string.reader_go_settings)) }
-    }
-}
-
-@Composable
-private fun CenteredNote(text: String) {
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-        Text(text, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = ImmerlexColors.Meta)
     }
 }
 

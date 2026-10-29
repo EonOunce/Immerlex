@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.bible.BibleSection
 import com.immerlex.core.bible.sectionOf
@@ -74,7 +75,7 @@ fun BibleScreen(vm: BibleViewModel, onBack: () -> Unit) {
     var fieldRole by rememberSaveable { mutableStateOf("") }
     var fieldText by rememberSaveable { mutableStateOf("") }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -115,7 +116,7 @@ fun BibleScreen(vm: BibleViewModel, onBack: () -> Unit) {
                 )
             }
             if (state.entries.isNotEmpty()) {
-                Text(stringResource(R.string.bible_reroll_hint), style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Meta)
+                Spacer(Modifier.height(2.dp))
             }
 
             if (state.entries.isEmpty() && state.cast.isEmpty()) {

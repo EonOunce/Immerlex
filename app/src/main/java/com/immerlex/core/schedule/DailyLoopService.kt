@@ -58,6 +58,18 @@ class DailyLoopService(
         return heatGridOf(logDao.reviewsSince(since), today, weeks, zone)
     }
 
+    /** 趋势图与热力图同源，只是窗口从整周网格换成最近 [days] 天。 */
+    suspend fun trend(now: Instant, days: Int = TREND_DAYS): List<TrendDay> {
+        val today = now.atZone(zone).toLocalDate()
+        val start = today.minusDays((days - 1).toLong())
+        return trendSeriesOf(
+            logDao.reviewsSince(start.atStartOfDay(zone).toEpochSecond()),
+            today,
+            days,
+            zone,
+        )
+    }
+
     private fun epochDay(epochSec: Long): Long =
         Instant.ofEpochSecond(epochSec).atZone(zone).toLocalDate().toEpochDay()
 }

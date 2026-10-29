@@ -21,8 +21,8 @@ android {
         applicationId = "com.immerlex.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.1.0"
+        versionCode = 9
+        versionName = "1.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +70,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     // Room exports each schema version so the migration test can replay v1 into v2.
     sourceSets {

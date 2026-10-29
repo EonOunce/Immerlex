@@ -1,6 +1,5 @@
 package com.immerlex.feature.reader
 
-import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -23,40 +24,47 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
-import com.immerlex.core.ai.ShortTone
 import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.reader.ReaderWord
-import com.immerlex.core.schedule.GradeMode
-import com.immerlex.core.schedule.recorded
-import java.util.Locale
+import com.immerlex.core.schedule.WordAccess
+import com.immerlex.core.tricky.TrickyCard
+import com.immerlex.core.tricky.TrickyWord
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WordCardSheet(
     word: ReaderWord,
-    gradeMode: GradeMode,
+    access: WordAccess,
     previews: List<Pair<Rating, Int>>,
+    tricky: TrickyCard?,
     onGrade: (Rating) -> Unit,
+    onToggleTricky: () -> Unit,
+    onLinkTricky: (TrickyWord) -> Unit,
+    onUnlinkTricky: (TrickyWord) -> Unit,
+    onOpenTricky: (TrickyWord) -> Unit,
+    onAddTricky: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val speak = rememberTtsSpeaker()
+    val speaker = rememberWordSpeaker()
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(word.lookup, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
@@ -64,7 +72,17 @@ fun WordCardSheet(
                     Text(word.ipa, style = MaterialTheme.typography.bodyMedium, color = ImmerlexColors.Meta)
                 }
                 Spacer(Modifier.width(10.dp))
-                TextButton(onClick = { speak(word.lookup) }) { Text(stringResource(R.string.reader_speak)) }
+                TextButton(
+                    onClick = { speaker.speak(word.lookup) },
+                    enabled = speaker.problem != SpeechProblem.NoEngine && speaker.problem != SpeechProblem.NoEnglish,
+                ) { Text(stringResource(R.string.reader_speak)) }
+            }
+            if (speaker.problem != SpeechProblem.None) {
+                Text(
+                    stringResource(speechProblemText(speaker.problem)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             Spacer(Modifier.height(6.dp))
             Text(word.zh.ifBlank { stringResource(R.string.reader_no_gloss) })
@@ -82,30 +100,68 @@ fun WordCardSheet(
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.reader_cannot_grade), color = ImmerlexColors.Meta)
             } else {
-                gradeHint(gradeMode)?.let { hint ->
-                    Text(stringResource(hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(8.dp))
-                }
-                // 未到期的词只给释义：打分按钮压根不出现，手滑也就无从滑起。
-                if (gradeMode != GradeMode.Reveal) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Rating.entries.forEach { rating ->
-                            val days = previews.firstOrNull { it.first == rating }?.second
-                            OutlinedButton(onClick = { onGrade(rating) }) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(stringResource(gradeLabel(rating)))
-                                    if (days != null) {
-                                        Text(
-                                            stringResource(R.string.grade_days, days),
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
+                when (access) {
+                    WordAccess.Learn, WordAccess.Recall -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Rating.entries.forEach { rating ->
+                                val days = previews.firstOrNull { it.first == rating }?.second
+                                OutlinedButton(onClick = { onGrade(rating) }) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(stringResource(gradeLabel(rating)))
+                                        if (days != null) {
+                                            Text(
+                                                stringResource(R.string.grade_days, days),
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
+                        if (access == WordAccess.Learn) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(R.string.reader_note_learn),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ImmerlexColors.Meta,
+                            )
+                        }
                     }
+
+                    WordAccess.Early -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 两个按钮同权重：不引导用户挑"更好看"的那个答案。
+                        OutlinedButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.reader_early_remembered))
+                        }
+                        val days = previews.firstOrNull { it.first == Rating.AGAIN }?.second
+                        OutlinedButton(onClick = { onGrade(Rating.AGAIN) }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(stringResource(R.string.reader_early_forgot))
+                                if (days != null) {
+                                    Text(
+                                        stringResource(R.string.grade_days, days),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    WordAccess.ViewOnly -> Text(
+                        stringResource(R.string.reader_note_learning),
+                        color = ImmerlexColors.Meta,
+                    )
                 }
             }
+            TrickySection(
+                word = word.lookup,
+                card = tricky,
+                onToggle = onToggleTricky,
+                onLink = onLinkTricky,
+                onUnlink = onUnlinkTricky,
+                onOpen = onOpenTricky,
+                onAddManual = onAddTricky,
+            )
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -168,95 +224,6 @@ fun ChapterSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BookShelfSheet(
-    books: List<BookOption>,
-    shorts: List<ChapterOption>,
-    currentBook: String,
-    currentChapterId: Long,
-    readingShort: Boolean,
-    generating: Boolean,
-    onPickBook: (String) -> Unit,
-    onPickShort: (Long) -> Unit,
-    onNewBook: () -> Unit,
-    onWriteShort: () -> Unit,
-    onDeleteShort: (Long) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            Text(
-                stringResource(R.string.reader_shelf),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(stringResource(R.string.shelf_serial), style = MaterialTheme.typography.labelMedium, color = ImmerlexColors.Meta)
-            books.forEach { book ->
-                val current = !readingShort && book.genre == currentBook
-                TextButton(onClick = { onPickBook(book.genre) }, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-                        Text(
-                            text = if (current) stringResource(R.string.shelf_book_current, book.genre) else book.genre,
-                            color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = if (book.chapters == 0) {
-                                stringResource(R.string.shelf_book_empty)
-                            } else {
-                                stringResource(R.string.shelf_book_meta, book.chapters)
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ImmerlexColors.Meta,
-                        )
-                    }
-                }
-            }
-            if (shorts.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.shelf_shorts), style = MaterialTheme.typography.labelMedium, color = ImmerlexColors.Meta)
-                shorts.forEach { short ->
-                    val current = readingShort && short.id == currentChapterId
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onPickShort(short.id) }, modifier = Modifier.weight(1f)) {
-                            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-                                Text(
-                                    text = if (current) {
-                                        stringResource(R.string.shelf_short_current, short.title)
-                                    } else {
-                                        short.title
-                                    },
-                                    color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                        IconButton(onClick = { onDeleteShort(short.id) }) {
-                            Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = stringResource(R.string.reader_short_delete_title),
-                                tint = ImmerlexColors.Meta,
-                            )
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onNewBook, enabled = !generating) {
-                    Text(stringResource(R.string.shelf_new_book))
-                }
-                OutlinedButton(onClick = onWriteShort, enabled = !generating) {
-                    Text(stringResource(if (generating) R.string.reader_generating else R.string.shelf_write_short))
-                }
-            }
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
 @Composable
 fun NewBookDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -271,12 +238,6 @@ fun NewBookDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
                     singleLine = true,
                     label = { Text(stringResource(R.string.shelf_new_book_field)) },
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.shelf_new_book_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ImmerlexColors.Meta,
-                )
             }
         },
         confirmButton = {
@@ -286,48 +247,6 @@ fun NewBookDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
-}
-
-@Composable
-fun ShortTonePicker(onDismiss: () -> Unit, onPick: (ShortTone) -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.shelf_short_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    stringResource(R.string.shelf_short_hint),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ImmerlexColors.Meta,
-                )
-                ShortTone.entries.forEach { tone ->
-                    OutlinedButton(onClick = { onPick(tone) }, modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-                            Text(stringResource(toneLabel(tone)))
-                            Text(
-                                stringResource(toneDescription(tone)),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ImmerlexColors.Meta,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-
-private fun toneLabel(tone: ShortTone): Int = when (tone) {
-    ShortTone.EVERYMAN -> R.string.short_tone_everyman
-    ShortTone.LUSH -> R.string.short_tone_lush
-    ShortTone.COLD -> R.string.short_tone_cold
-}
-
-private fun toneDescription(tone: ShortTone): Int = when (tone) {
-    ShortTone.EVERYMAN -> R.string.short_tone_everyman_desc
-    ShortTone.LUSH -> R.string.short_tone_lush_desc
-    ShortTone.COLD -> R.string.short_tone_cold_desc
 }
 
 private const val MAX_BOOK_NAME = 20
@@ -349,13 +268,6 @@ fun ConfirmDialog(
     )
 }
 
-private fun gradeHint(mode: GradeMode): Int? = when (mode) {
-    GradeMode.Review -> null
-    GradeMode.Relearn -> R.string.reader_grade_relearn
-    GradeMode.Amend -> R.string.reader_grade_amend
-    GradeMode.Reveal -> R.string.reader_grade_not_due
-}
-
 private fun gradeLabel(rating: Rating): Int = when (rating) {
     Rating.AGAIN -> R.string.grade_again
     Rating.HARD -> R.string.grade_hard
@@ -363,20 +275,8 @@ private fun gradeLabel(rating: Rating): Int = when (rating) {
     Rating.EASY -> R.string.grade_easy
 }
 
-@Composable
-private fun rememberTtsSpeaker(): (String) -> Unit {
-    val context = LocalContext.current
-    val engine = remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(context) {
-        engine.value = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                engine.value?.setLanguage(Locale.US)
-            }
-        }
-        onDispose {
-            engine.value?.shutdown()
-            engine.value = null
-        }
-    }
-    return { text -> engine.value?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "immerlex-word") }
+private fun speechProblemText(problem: SpeechProblem): Int = when (problem) {
+    SpeechProblem.NoEngine -> R.string.reader_speak_no_engine
+    SpeechProblem.NoEnglish -> R.string.reader_speak_no_english
+    else -> R.string.reader_speak_failed
 }

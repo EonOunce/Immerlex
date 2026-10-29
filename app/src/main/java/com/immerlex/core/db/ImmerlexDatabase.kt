@@ -16,8 +16,10 @@ import androidx.room.RoomDatabase
         DailyLoopEntity::class,
         BackupRunEntity::class,
         ReadingPositionEntity::class,
+        TrickyWordEntity::class,
+        TrickyLinkEntity::class,
     ],
-    version = 5,
+    version = 8,
     exportSchema = true,
 )
 abstract class ImmerlexDatabase : RoomDatabase() {
@@ -30,6 +32,7 @@ abstract class ImmerlexDatabase : RoomDatabase() {
     abstract fun dailyLoopDao(): DailyLoopDao
     abstract fun backupRunDao(): BackupRunDao
     abstract fun readingPositionDao(): ReadingPositionDao
+    abstract fun trickyDao(): TrickyDao
 
     companion object {
         fun create(context: Context): ImmerlexDatabase =

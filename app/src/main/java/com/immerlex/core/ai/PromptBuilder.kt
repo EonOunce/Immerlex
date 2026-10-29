@@ -16,6 +16,8 @@ data class ChapterRequest(
     val reviewWords: List<WordBrief>,
     /** 三层连贯上下文：档案条目、人物状态、全书梗概（docs/adr/0005）。 */
     val story: StoryContext = StoryContext(),
+    /** 短篇的写法；连载用不到，保持默认值。 */
+    val shortPlan: ShortPlan = ShortPlan(),
 ) {
     val allWords: List<WordBrief> get() = newWords + reviewWords
 }
@@ -100,13 +102,26 @@ $SCHEMA
         """.trimIndent()
     }
 
-    fun shortUser(request: ChapterRequest, tone: ShortTone): String {
+    fun shortUser(request: ChapterRequest, plan: ShortPlan): String {
         val r = request
+        val toneLine = if (plan.isCustomTone) {
+            "腔调（读者自己写的，务必遵守）：${plan.toneBrief}"
+        } else {
+            "腔调：${plan.toneBrief}"
+        }
+        val subjectLine = if (plan.idea.isBlank()) {
+            "- 写什么由你定：从今天要用的这些词里挑一个能装下它们的小故事。"
+        } else {
+            "- 读者指定了这篇写什么：${plan.idea}\n" +
+                "  只展开读者给的这条线，不要另起题材；他没写到的细节由你补全。"
+        }
         return """
 【任务】写一篇单篇自足的中文短篇小说，约 ${r.targetHanChars} 个汉字（1500–2500 之间）。
-目标读者是正在学英语的中文母语者。腔调：${tone.brief}
+目标读者是正在学英语的中文母语者。
+$toneLine
 
 【短篇规则】
+$subjectLine
 - 故事在本篇内开始、在本篇内结束：不要留续集钩子，不要出现"第一章""欲知后事"这类连载痕迹。
 - title 是一个短篇标题，不带"第 N 章"。
 - 不需要连载档案：summary 填空字符串 ""，characters 与 changes 填空数组 []。

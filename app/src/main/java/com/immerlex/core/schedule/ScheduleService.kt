@@ -3,6 +3,8 @@ package com.immerlex.core.schedule
 import com.immerlex.core.db.FSRS_STATE_LEARNING
 import com.immerlex.core.db.FSRS_STATE_RELEARNING
 import com.immerlex.core.db.FSRS_STATE_REVIEW
+import com.immerlex.core.db.LOG_KIND_LEARN
+import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.WordDao
@@ -12,7 +14,8 @@ import com.immerlex.core.fsrs.CardState
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.fsrs.Scheduler
 import java.time.Instant
-import java.time.ZoneId
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class TodayQueue(
     val reviewWords: List<WordEntity>,
@@ -20,30 +23,35 @@ data class TodayQueue(
 )
 
 /**
- * What a tap on a rating button will do to the word's schedule
- * (docs/adr/0004-chapter-word-units.md). The reading page shows its buttons from
- * this same value, so the UI can never promise a scoring the service won't do.
+ * 点开词卡时这次评分会记什么（docs/adr/0012-recall-events-and-quiz-types.md）。
+ * 阅读页的按钮直接由它决定，UI 不会承诺服务端不做的记账。
  */
-enum class GradeMode {
-    /** 到期了：这一算一次复习。 */
-    Review,
+enum class WordAccess {
+    /** 第一次遇到：选评分只建立排期，记一条 learn，不算一次回忆成功。 */
+    Learn,
 
-    /** 今天刚点过"忘了"，再点一次算重学——先不认识、后来认识是真实的学习过程。 */
-    Relearn,
+    /** 答案收起、词也到期：这次评分算一次真实回忆。 */
+    Recall,
 
-    /** 今天已经复习过：这次是修改上一次的评分，复习次数不变。 */
-    Amend,
+    /**
+     * 答案收起、但还没到复习时间。判断发生在点开之前，所以"没想起来"是一次
+     * 诚实的失败回忆，值得记；"想起来了"发生在到期日之前，记了会把间隔推远，
+     * 因此不记账，只收起卡片。
+     */
+    Early,
 
-    /** 没到期、今天也没碰过：只揭示释义，不计分。 */
-    Reveal,
+    /** 只看释义：学习模式，或这个词根本没进词库。 */
+    ViewOnly,
 }
 
-/** 会不会真的多出一笔复习记录——UI 的间隔预览和"本次已复习"计数都跟着它走。 */
-val GradeMode.recorded: Boolean get() = this == GradeMode.Review || this == GradeMode.Relearn
+data class GradeResult(
+    val word: WordEntity,
+    val kind: String,
+    val logId: Long,
+    val undoableUntilSec: Long,
+)
 
-data class GradeResult(val word: WordEntity, val mode: GradeMode) {
-    val recorded: Boolean get() = mode.recorded
-}
+data class UndoResult(val word: WordEntity, val kind: String)
 
 /** Read side of the schedule, so generators can be tested without a database. */
 interface WordQueue {
@@ -54,41 +62,85 @@ class ScheduleService(
     private val wordDao: WordDao,
     private val logDao: ReviewLogDao,
     private val scheduler: Scheduler,
-    private val zone: ZoneId = ZoneId.systemDefault(),
 ) : WordQueue {
 
-    suspend fun gradeModeFor(word: WordEntity, now: Instant = Instant.now()): GradeMode =
-        decide(word, logDao.forWord(word.id), now).mode
+    // 阅读页的双击与测验的快速翻页都可能并发进来；先读日志再写日志必须串行，
+    // 否则同一瞬间两次评分会各自认为"这是唯一一次"，各写一条。
+    private val mutex = Mutex()
 
-    /** One tap on a rating: records, relearns, amends or merely reveals, per [GradeMode]. */
-    suspend fun grade(
+    suspend fun accessFor(
         word: WordEntity,
-        rating: Rating,
-        source: String,
+        answersHidden: Boolean,
         now: Instant = Instant.now(),
-    ): GradeResult {
+    ): WordAccess = mutex.withLock {
         val logs = logDao.forWord(word.id)
-        val decision = decide(word, logs, now)
-        return when (decision.mode) {
-            GradeMode.Review, GradeMode.Relearn ->
-                GradeResult(review(word, rating, source, now), decision.mode)
-
-            GradeMode.Amend -> GradeResult(amend(word, decision.log!!, logs, rating), decision.mode)
-
-            GradeMode.Reveal -> GradeResult(word, decision.mode)
+        when {
+            logs.isEmpty() -> WordAccess.Learn
+            !answersHidden -> WordAccess.ViewOnly
+            isDue(word, now) -> WordAccess.Recall
+            else -> WordAccess.Early
         }
     }
 
-    suspend fun review(
+    /** 第一次看到词：评分只用来初始化 FSRS，记 learn 而不是 recall。 */
+    suspend fun learn(
         word: WordEntity,
         rating: Rating,
         source: String,
         now: Instant = Instant.now(),
-    ): WordEntity {
-        val (updated, log) = evaluate(word, rating, source, now)
-        wordDao.update(updated)
-        logDao.insert(log)
-        return updated
+    ): GradeResult? = mutex.withLock {
+        if (logDao.forWord(word.id).isNotEmpty()) return@withLock null
+        record(word, rating, source, LOG_KIND_LEARN, questionType = null, at = now)
+    }
+
+    /**
+     * 一次独立回忆：先回忆再反馈，记 recall。测验的提前复习传 [allowEarly]；
+     * 与上一次记录相隔不足 [MIN_RECALL_GAP_SECONDS] 的视为连点手滑，不重复记账。
+     */
+    suspend fun recall(
+        word: WordEntity,
+        rating: Rating,
+        source: String,
+        questionType: String? = null,
+        now: Instant = Instant.now(),
+        allowEarly: Boolean = false,
+    ): GradeResult? = mutex.withLock {
+        val logs = logDao.forWord(word.id)
+        if (logs.isEmpty()) return@withLock null
+        if (!allowEarly && !isDue(word, now)) return@withLock null
+        val last = logs.lastOrNull()
+        if (last != null && now.epochSecond - last.reviewEpochSec < MIN_RECALL_GAP_SECONDS) {
+            return@withLock null
+        }
+        record(word, rating, source, LOG_KIND_RECALL, questionType, now)
+    }
+
+    /**
+     * 阅读页的几秒内撤销：删掉最后一条记录，把卡片恢复成评分前的样子。
+     * 之后的评分就按新事实继续累积，不再允许覆盖。
+     */
+    suspend fun undo(logId: Long, now: Instant = Instant.now()): UndoResult? = mutex.withLock {
+        val log = logDao.byId(logId) ?: return@withLock null
+        if (!log.hasPreRatingSnapshot) return@withLock null
+        val age = now.epochSecond - log.reviewEpochSec
+        if (age < 0 || age > UNDO_WINDOW_SECONDS) return@withLock null
+        val logs = logDao.forWord(log.wordId)
+        if (logs.lastOrNull()?.id != log.id) return@withLock null
+        val word = wordDao.findById(log.wordId) ?: return@withLock null
+        val earlier = logs.filterNot { it.id == log.id }
+        val restored = word.copy(
+            stability = log.preStability,
+            difficulty = log.preDifficulty,
+            dueEpochSec = log.preDueEpochSec.takeIf { it != 0L },
+            lastReviewEpochSec = log.preLastReviewEpochSec,
+            fsrsState = log.preState,
+            reps = earlier.size,
+            lapses = earlier.count { it.rating == Rating.AGAIN.value },
+            intervalDays = earlier.lastOrNull()?.scheduledDays ?: 0,
+        )
+        wordDao.update(restored)
+        logDao.deleteById(log.id)
+        UndoResult(restored, log.kind)
     }
 
     /** Interval a rating would produce, without touching the database. */
@@ -110,59 +162,30 @@ class ScheduleService(
     suspend fun todayDueCount(now: Instant, dailyNewLimit: Int): Int =
         todaysQueue(now, dailyNewLimit).let { it.reviewWords.size + it.newWords.size }
 
-    private data class Decision(val mode: GradeMode, val log: ReviewLogEntity? = null)
-
-    private fun decide(word: WordEntity, logs: List<ReviewLogEntity>, now: Instant): Decision {
-        if (word.dueEpochSec == null || word.dueEpochSec <= now.epochSecond) {
-            return Decision(GradeMode.Review)
-        }
-        val today = logs.inReviewOrder().filter { isSameDay(it.reviewEpochSec, now) }
-        val last = today.lastOrNull() ?: return Decision(GradeMode.Reveal)
-        // 同日同词封顶 2 条：只有"忘了"之后那一次允许重学，第三次起一律走修改。
-        if (last.rating == Rating.AGAIN.value && today.size < MAX_SAME_DAY_REVIEWS) {
-            return Decision(GradeMode.Relearn)
-        }
-        // 升级前的老记录没有评前快照，回滚不了，只能当天不再计分。
-        return if (last.hasPreRatingSnapshot) Decision(GradeMode.Amend, last) else Decision(GradeMode.Reveal)
-    }
-
-    /**
-     * 改评分 = 回到那次复习之前，用新分在同一时刻重跑一遍。
-     * 复习条数不变，reps / lapses 由记录重算，所以改分后的卡片与"当初就选这个分"完全一致。
-     */
-    private suspend fun amend(
+    private suspend fun record(
         word: WordEntity,
-        log: ReviewLogEntity,
-        logs: List<ReviewLogEntity>,
         rating: Rating,
-    ): WordEntity {
-        val earlier = logs.filterNot { it.id == log.id }.inReviewOrder()
-        val baseline = word.copy(
-            stability = log.preStability,
-            difficulty = log.preDifficulty,
-            dueEpochSec = log.preDueEpochSec.takeIf { it != 0L },
-            lastReviewEpochSec = log.preLastReviewEpochSec,
-            fsrsState = log.preState,
-            reps = earlier.size,
-            lapses = earlier.count { it.rating == Rating.AGAIN.value },
-            intervalDays = earlier.lastOrNull()?.scheduledDays ?: 0,
-        )
-        val at = Instant.ofEpochSecond(log.reviewEpochSec)
-        val result = scheduler.reviewCard(baseline.toCard(at), rating, at)
-        val updated = baseline.applyCard(result.card, rating, result.log.scheduledDays)
+        source: String,
+        kind: String,
+        questionType: String?,
+        at: Instant,
+    ): GradeResult {
+        val (updated, log) = evaluate(word, rating, source, at, kind, questionType)
         wordDao.update(updated)
-        logDao.update(log.copy(rating = rating.value, scheduledDays = result.log.scheduledDays))
-        return updated
+        val logId = logDao.insert(log)
+        return GradeResult(updated, kind, logId, at.epochSecond + UNDO_WINDOW_SECONDS)
     }
 
-    private fun isSameDay(epochSec: Long, now: Instant): Boolean =
-        Instant.ofEpochSecond(epochSec).atZone(zone).toLocalDate() == now.atZone(zone).toLocalDate()
+    private fun isDue(word: WordEntity, now: Instant): Boolean =
+        word.dueEpochSec == null || word.dueEpochSec <= now.epochSecond
 
     private fun evaluate(
         word: WordEntity,
         rating: Rating,
         source: String,
         at: Instant,
+        kind: String,
+        questionType: String?,
     ): Pair<WordEntity, ReviewLogEntity> {
         val result = scheduler.reviewCard(word.toCard(at), rating, at)
         val updated = word.applyCard(result.card, rating, result.log.scheduledDays)
@@ -178,18 +201,19 @@ class ScheduleService(
             preState = word.fsrsState,
             preDueEpochSec = word.dueEpochSec ?: 0L,
             preLastReviewEpochSec = word.lastReviewEpochSec,
+            kind = kind,
+            questionType = questionType,
         )
     }
 
-    private companion object {
-        /** 同日同词最多两条记录——"忘了"紧接"学回"，再多就是手滑。 */
-        const val MAX_SAME_DAY_REVIEWS = 2
+    companion object {
+        /** 阅读页点错评分后的撤销窗口；过了就是真实记录。 */
+        const val UNDO_WINDOW_SECONDS = 8L
+
+        /** 同一词的两次评分相隔不足这么久，按连点手滑处理，不写第二条。 */
+        const val MIN_RECALL_GAP_SECONDS = 2L
     }
 }
-
-/** 同一秒里的两次点击也要有确定先后：按记录时间，再按行号。 */
-private fun List<ReviewLogEntity>.inReviewOrder(): List<ReviewLogEntity> =
-    sortedWith(compareBy({ it.reviewEpochSec }, { it.id }))
 
 private fun WordEntity.toCard(now: Instant): Card {
     val s = stability

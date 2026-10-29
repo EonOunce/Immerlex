@@ -13,13 +13,19 @@ import com.immerlex.core.db.DailyLoopDao
 import com.immerlex.core.db.DailyLoopEntity
 import com.immerlex.core.db.KIND_SERIAL
 import com.immerlex.core.db.KIND_SHORT
+import com.immerlex.core.db.LOG_KIND_LEARN
+import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.ReviewMoment
 import com.immerlex.core.db.ReviewStats
 import com.immerlex.core.db.RatingCount
+import com.immerlex.core.db.ShortRow
 import com.immerlex.core.db.StoryBibleDao
 import com.immerlex.core.db.StoryBibleEntity
+import com.immerlex.core.db.TrickyDao
+import com.immerlex.core.db.TrickyLinkEntity
+import com.immerlex.core.db.TrickyWordEntity
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.dict.DictEntry
@@ -34,6 +40,8 @@ internal class FakeWordDao : WordDao {
     override suspend fun findByWord(word: String) = items.values.find { it.word == word }
     override suspend fun findByWords(words: List<String>) = items.values.filter { it.word in words }
     override suspend fun findById(id: Long) = items[id]
+    override suspend fun findByIds(ids: List<Long>) = ids.mapNotNull { items[it] }
+    override suspend fun randomWords(limit: Int) = items.values.shuffled().take(limit)
     override suspend fun insert(entity: WordEntity): Long {
         if (items.values.any { it.word == entity.word }) return -1
         val id = nextId++
@@ -44,6 +52,7 @@ internal class FakeWordDao : WordDao {
     override suspend fun update(entity: WordEntity) { items[entity.id] = entity }
     override suspend fun deleteById(id: Long) { items.remove(id) }
     override fun observeAll(): Flow<List<WordEntity>> = flowOf(items.values.sortedBy { it.word })
+    override suspend fun allWords() = items.values.sortedBy { it.word }
     override suspend fun search(query: String, limit: Int) =
         items.values.filter { it.word.contains(query) }.take(limit)
 
@@ -70,6 +79,29 @@ internal class FakeReviewLogDao : ReviewLogDao {
     }
 
     override suspend fun forWord(wordId: Long) = items.filter { it.wordId == wordId }
+
+    override suspend fun byId(id: Long) = items.find { it.id == id }
+
+    override suspend fun deleteById(id: Long) { items.removeAll { it.id == id } }
+
+    override suspend fun forWords(wordIds: List<Long>) = items
+        .filter { it.wordId in wordIds }
+        .sortedWith(compareBy({ it.reviewEpochSec }, { it.id }))
+
+    override suspend fun learnedWordIdsSince(sinceSec: Long) = items
+        .filter { it.kind == LOG_KIND_LEARN && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun recalledWordIdsSince(sinceSec: Long) = items
+        .filter { it.kind == LOG_KIND_RECALL && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun touchedWordIdsSince(sinceSec: Long) = items
+        .filter { it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
 
     override suspend fun update(entity: ReviewLogEntity) {
         val index = items.indexOfFirst { it.id == entity.id }
@@ -148,7 +180,15 @@ internal class FakeChapterDao : ChapterDao {
 
     override suspend fun shortStories() = items.filter { it.kind == KIND_SHORT }
         .sortedWith(compareByDescending<ChapterEntity> { it.createdAtSec }.thenByDescending { it.id })
+        .map { ShortRow(it.id, it.title, it.genre, it.toneText, it.createdAtSec) }
+
+    override suspend fun optionsFor(ids: List<Long>) = items.filter { it.id in ids }
         .map { ChapterOption(it.id, it.number, it.title) }
+
+    override suspend fun recentSegments(limit: Int) = items
+        .sortedWith(compareByDescending<ChapterEntity> { it.createdAtSec }.thenByDescending { it.id })
+        .take(limit)
+        .map { it.segmentsJson }
 }
 
 internal class FakeStoryBibleDao : StoryBibleDao {
@@ -195,6 +235,49 @@ internal class FakeBibleEntryDao : BibleEntryDao {
 
     override suspend fun deleteGenerated(genre: String) {
         items.removeAll { it.genre == genre && !it.authoredByUser }
+    }
+}
+
+internal class FakeTrickyDao : TrickyDao {
+    val words = mutableMapOf<String, TrickyWordEntity>()
+    val links = mutableListOf<TrickyLinkEntity>()
+
+    override suspend fun byWord(word: String) = words[word]
+
+    override suspend fun byWords(words: List<String>) = this.words.filterKeys { it in words }.values.toList()
+
+    override suspend fun all() = words.values.sortedBy { it.word }
+
+    override suspend fun insertIgnore(entity: TrickyWordEntity): Long {
+        words.putIfAbsent(entity.word, entity)
+        return 0
+    }
+
+    override suspend fun fillBlanks(word: String, gloss: String, ipa: String) {
+        val current = words[word] ?: return
+        words[word] = current.copy(
+            gloss = current.gloss.ifEmpty { gloss },
+            ipa = current.ipa.ifEmpty { ipa },
+        )
+    }
+
+    override suspend fun delete(word: String) {
+        words.remove(word)
+        links.removeAll { it.wordA == word || it.wordB == word }
+    }
+
+    override suspend fun linksOf(word: String) = links.filter { it.wordA == word || it.wordB == word }
+
+    override suspend fun insertLink(entity: TrickyLinkEntity) {
+        if (links.none { it.wordA == entity.wordA && it.wordB == entity.wordB }) links += entity
+    }
+
+    override suspend fun deleteLink(a: String, b: String) {
+        links.removeAll { (it.wordA == a && it.wordB == b) || (it.wordA == b && it.wordB == a) }
+    }
+
+    override suspend fun deleteLinksOf(word: String) {
+        links.removeAll { it.wordA == word || it.wordB == word }
     }
 }
 

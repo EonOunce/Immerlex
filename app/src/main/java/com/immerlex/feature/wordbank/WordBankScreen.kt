@@ -48,17 +48,22 @@ import com.immerlex.app.ImmerlexApplication
 import com.immerlex.app.R
 import com.immerlex.app.readPlainText
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.masteryPalette
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.ocr.PdfScan
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
+import com.immerlex.core.word.wordCsvOf
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WordBankScreen(vm: WordBankViewModel) {
@@ -131,6 +136,30 @@ fun WordBankScreen(vm: WordBankViewModel) {
         }
     }
 
+    val exportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val list = runCatching { vm.allWords() }.getOrNull()
+                val written = list != null && withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(wordCsvOf(list).toByteArray(Charsets.UTF_8))
+                        } ?: error("no output stream")
+                    }.isSuccess
+                }
+                snackbar.showSnackbar(
+                    if (written) {
+                        context.getString(R.string.bank_export_done, list.orEmpty().size)
+                    } else {
+                        context.getString(R.string.bank_export_failed)
+                    },
+                )
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
             snackbar.showSnackbar(context.textFor(msg))
@@ -139,6 +168,7 @@ fun WordBankScreen(vm: WordBankViewModel) {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        contentWindowInsets = RootHandledInsets,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAdd = true },
@@ -159,6 +189,10 @@ fun WordBankScreen(vm: WordBankViewModel) {
                     )
                 },
                 onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
+                onExport = {
+                    val stamp = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
+                    exportPicker.launch("immerlex-words-$stamp.csv")
+                },
             )
             pdfNote?.let { note ->
                 Text(
@@ -231,6 +265,7 @@ private fun BankHeader(
     onImport: () -> Unit,
     onImportImage: () -> Unit,
     onImportPdf: () -> Unit,
+    onExport: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -245,6 +280,10 @@ private fun BankHeader(
                 style = MaterialTheme.typography.labelLarge,
                 color = ImmerlexColors.Meta,
             )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onExport, enabled = total > 0) {
+                Text(stringResource(R.string.bank_export))
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

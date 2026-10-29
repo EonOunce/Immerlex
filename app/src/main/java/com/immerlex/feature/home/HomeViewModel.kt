@@ -3,9 +3,11 @@ package com.immerlex.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.core.db.ChapterDao
+import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.HeatDay
 import com.immerlex.core.schedule.ScheduleService
+import com.immerlex.core.schedule.TrendDay
 import com.immerlex.core.settings.AppPreferences
 import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +27,9 @@ data class HomeState(
     val hasChapter: Boolean = false,
     val chapterNumber: Int = 0,
     val heat: List<HeatDay> = emptyList(),
+    val trend: List<TrendDay> = emptyList(),
+    val quizCount: Int = 0,
+    val earlyCount: Int = 0,
 )
 
 /**
@@ -34,6 +39,7 @@ data class HomeState(
 class HomeViewModel(
     private val dailyLoop: DailyLoopService,
     private val schedule: ScheduleService,
+    private val quiz: QuizService,
     private val chapterDao: ChapterDao,
     private val prefs: AppPreferences,
 ) : ViewModel() {
@@ -66,6 +72,10 @@ class HomeViewModel(
             hasChapter = latest != null,
             chapterNumber = latest?.number ?: 0,
             heat = dailyLoop.heatGrid(now),
+            trend = dailyLoop.trend(now),
+            // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
+            quizCount = quiz.dueCandidateIds(now, limit).size,
+            earlyCount = quiz.earlyCandidates(now).size,
         )
     }
 }

@@ -85,4 +85,55 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
-val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+/**
+ * v5 -> v6: 阅读页的易错词。`tricky_words` 不挂词库外键（没入库的词也能标），
+ * `tricky_links` 只存有序对，双向关系靠查询时两边都看，天然不会出现单向行。
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `tricky_words` (`word` TEXT NOT NULL, " +
+                "`gloss` TEXT NOT NULL, `ipa` TEXT NOT NULL, `createdAtSec` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`word`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `tricky_links` (`wordA` TEXT NOT NULL, " +
+                "`wordB` TEXT NOT NULL, `createdAtSec` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`wordA`, `wordB`))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_tricky_links_wordB` ON `tricky_links` (`wordB`)")
+    }
+}
+
+/**
+ * v6 -> v7: 每行复习记录区分"学"与"回忆"，并记住测验题型（docs/adr/0012）。
+ * 老行全部是"先回忆再反馈"的复习，回填 recall；题型当时没记，保持 NULL。
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'recall'")
+        db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `questionType` TEXT")
+    }
+}
+
+/**
+ * v7 -> v8: 短篇不再只有三个预设腔调。`toneText` 存用户自己写的腔调（空 = 用 `genre`
+ * 里那个预设名），`idea` 存"这篇想写什么"。两句都跟着这一篇落库，重写时原样喂回模型。
+ * 连载章节用不到，保持空串。
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `chapters` ADD COLUMN `toneText` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `chapters` ADD COLUMN `idea` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+val MIGRATIONS = arrayOf(
+    MIGRATION_1_2,
+    MIGRATION_2_3,
+    MIGRATION_3_4,
+    MIGRATION_4_5,
+    MIGRATION_5_6,
+    MIGRATION_6_7,
+    MIGRATION_7_8,
+)

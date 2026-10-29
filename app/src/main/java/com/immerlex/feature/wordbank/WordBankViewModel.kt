@@ -41,6 +41,8 @@ class WordBankViewModel(private val repo: WordBankRepository) : ViewModel() {
 
     fun onQueryChange(value: String) { _query.value = value }
 
+    suspend fun allWords(): List<WordEntity> = repo.allWords()
+
     fun addWord(word: String, gloss: String) = launchBusy {
         val message = if (repo.addManual(word, gloss)) {
             UiMessage(R.string.bank_added)

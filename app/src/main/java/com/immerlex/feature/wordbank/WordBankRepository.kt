@@ -26,6 +26,9 @@ class WordBankRepository(
 
     fun observeWords(): Flow<List<WordEntity>> = words.observeAll()
 
+    /** 导出用：整本词库，不受搜索框过滤。 */
+    suspend fun allWords(): List<WordEntity> = withContext(Dispatchers.IO) { words.allWords() }
+
     // First call also copies the 11MB ECDICT asset out of the APK.
     suspend fun importText(text: String, source: String): ImportSummary =
         withContext(Dispatchers.IO) { imports.importWords(WordListParser.parse(text), source) }

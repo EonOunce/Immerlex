@@ -41,6 +41,10 @@ data class ChapterEntity(
     val summary: String = "",
     /** [KIND_SERIAL] = 连载里的一章，[KIND_SHORT] = 单篇自足的短篇。 */
     @ColumnInfo(defaultValue = KIND_SERIAL) val kind: String = KIND_SERIAL,
+    /** 短篇：用户自己写的腔调。空 = 用 [genre] 里那个预设。 */
+    @ColumnInfo(defaultValue = "") val toneText: String = "",
+    /** 短篇：用户说这篇想写什么。空 = 由模型自己定。 */
+    @ColumnInfo(defaultValue = "") val idea: String = "",
 )
 
 const val KIND_SERIAL = "serial"
@@ -77,20 +81,31 @@ data class ReviewLogEntity(
     val reviewEpochSec: Long,
     val elapsedDays: Int,
     val scheduledDays: Int,
-    // 评分前的卡片状态。改评分必须回到这里、再用新评分在原时刻重算，
-    // 否则会把"改一个分"累积成"多复习一次"。见 docs/adr/0004-chapter-word-units.md。
+    // 评分前的卡片状态。阅读页的撤销要回到这里、再用同一评分在原时刻重算，
+    // 否则会把"撤一次"累积成"多复习一次"。见 docs/adr/0012-recall-events-and-quiz-types.md。
     val preStability: Double? = null,
     val preDifficulty: Double? = null,
     val preState: Int = FSRS_STATE_LEARNING,
     // 0 表示"当时还没有排期"（首次复习）；[PRE_DUE_LEGACY] 表示升级前的老记录，没有快照、不可回滚。
     val preDueEpochSec: Long = PRE_DUE_LEGACY,
     val preLastReviewEpochSec: Long? = null,
+    /** [LOG_KIND_LEARN] 或 [LOG_KIND_RECALL]；v6 及更早的行都是真实回忆，默认 recall。 */
+    @ColumnInfo(defaultValue = LOG_KIND_RECALL) val kind: String = LOG_KIND_RECALL,
+    /** 测验题型名（[com.immerlex.core.quiz.QuizType]），阅读页与老记录为空。 */
+    val questionType: String? = null,
 ) {
     val hasPreRatingSnapshot: Boolean get() = preDueEpochSec != PRE_DUE_LEGACY
+    val isLearn: Boolean get() = kind == LOG_KIND_LEARN
 }
 
 /** v1 rows carry no snapshot; ALTER TABLE backfills them with this sentinel. */
 const val PRE_DUE_LEGACY = -1L
+
+/** 第一次看到词、打开释义：只建立排期，不算一次回忆成功。 */
+const val LOG_KIND_LEARN = "learn"
+
+/** 先回忆再反馈的一次记录；阅读复习、测验、提前复习都记这个。 */
+const val LOG_KIND_RECALL = "recall"
 
 @Entity(tableName = "story_bibles", indices = [Index(value = ["genre"], unique = true)])
 data class StoryBibleEntity(
@@ -164,4 +179,27 @@ data class BackupRunEntity(
     val bytes: Long = 0,
     /** 失败时是给人看的短句（"账号或密码不对"），不是堆栈。 */
     val detail: String = "",
+)
+
+/**
+ * 用户手动标出的易错词。不挂 `words` 外键：阅读页里没入库的词也要能标。
+ * [word] 统一小写，[gloss] 可能来自阅读上下文、词库或离线词典，允许为空。
+ */
+@Entity(tableName = "tricky_words")
+data class TrickyWordEntity(
+    @PrimaryKey val word: String,
+    val gloss: String = "",
+    val ipa: String = "",
+    val createdAtSec: Long,
+)
+
+/**
+ * 双向易混关联。只存一份有序对（[wordA] <= [wordB]），查询时两边都看，
+ * 所以 affect→effect 与 effect→affect 天然是同一行，不会出现单向关系。
+ */
+@Entity(tableName = "tricky_links", primaryKeys = ["wordA", "wordB"], indices = [Index("wordB")])
+data class TrickyLinkEntity(
+    val wordA: String,
+    val wordB: String,
+    val createdAtSec: Long,
 )

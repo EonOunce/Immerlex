@@ -10,30 +10,23 @@ import com.immerlex.core.ai.ChapterGenerator
 import com.immerlex.core.ai.ChapterParser
 import com.immerlex.core.ai.GenerateOutcome
 import com.immerlex.core.ai.Segment
-import com.immerlex.core.ai.ShortTone
+import com.immerlex.core.ai.ShortPlan
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.ChapterEntity
-import com.immerlex.core.db.ChapterOption
 import com.immerlex.core.db.KIND_SERIAL
-import com.immerlex.core.db.KIND_SHORT
-import com.immerlex.core.db.READING_BOOK_PREFIX
-import com.immerlex.core.db.READING_SHORT_PREFIX
 import com.immerlex.core.db.ReadingPositionDao
-import com.immerlex.core.db.ReadingPositionEntity
 import com.immerlex.core.db.WordDao
-import com.immerlex.core.db.WordEntity
-import com.immerlex.core.db.bookReadingKey
-import com.immerlex.core.db.shortReadingKey
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.reader.ChapterResolver
-import com.immerlex.core.reader.ReaderSegment
 import com.immerlex.core.reader.ReaderWord
-import com.immerlex.core.schedule.GradeMode
+import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.schedule.ScheduleService
-import com.immerlex.core.schedule.recorded
+import com.immerlex.core.schedule.WordAccess
 import com.immerlex.core.settings.AppPreferences
-import java.time.Instant
+import com.immerlex.core.tricky.TrickyCard
+import com.immerlex.core.tricky.TrickyRepository
+import com.immerlex.core.tricky.TrickyWord
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -42,40 +35,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class ReaderMode { LEARN, REVIEW }
-
-/** 书架上的一本连载书；[chapters] 为 0 表示刚新建、还没写过正文。 */
-data class BookOption(val genre: String, val chapters: Int, val updatedAtSec: Long)
-
-data class ReaderState(
-    val loading: Boolean = true,
-    val hasChapter: Boolean = false,
-    val chapterId: Long = 0,
-    val title: String = "",
-    val number: Int = 0,
-    val kind: String = KIND_SERIAL,
-    val book: String = "",
-    val books: List<BookOption> = emptyList(),
-    val shorts: List<ChapterOption> = emptyList(),
-    val blocks: List<List<ReaderSegment>> = emptyList(),
-    val mode: ReaderMode = ReaderMode.LEARN,
-    val chapters: List<ChapterOption> = emptyList(),
-    val selected: ReaderWord? = null,
-    val gradeMode: GradeMode = GradeMode.Review,
-    val previews: List<Pair<Rating, Int>> = emptyList(),
-    val bankWords: Map<String, WordEntity> = emptyMap(),
-    val graded: Int = 0,
-    val generating: Boolean = false,
-) {
-    val wordCount: Int get() = blocks.flatten().count { it is ReaderSegment.Word }
-    val isShort: Boolean get() = kind == KIND_SHORT
-}
-
 class ReaderViewModel(
     private val chapterDao: ChapterDao,
     private val wordDao: WordDao,
     private val positionDao: ReadingPositionDao,
     private val schedule: ScheduleService,
+    private val trickyRepository: TrickyRepository,
     private val prefs: AppPreferences,
     private val generator: ChapterGenerator,
     private val aiConfig: () -> AiConfig,
@@ -87,6 +52,11 @@ class ReaderViewModel(
 
     private val _messages = MutableSharedFlow<UiMessage>()
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
+
+    private val _undoPrompts = MutableSharedFlow<UndoPrompt>()
+    val undoPrompts: SharedFlow<UndoPrompt> = _undoPrompts.asSharedFlow()
+
+    private val bookmarks = ShelfBookmarks(chapterDao, positionDao, prefs)
 
     init {
         viewModelScope.launch { load() }
@@ -113,7 +83,7 @@ class ReaderViewModel(
     }
 
     /** 短篇：单篇自足，不读也不写故事档案；成功就停在写好的这一篇上。 */
-    fun generateShort(tone: ShortTone) = viewModelScope.launch {
+    fun generateShort(plan: ShortPlan) = viewModelScope.launch {
         if (_state.value.generating) return@launch
         if (!aiConfig().isUsable) {
             _messages.emit(UiMessage(R.string.settings_need_config))
@@ -121,7 +91,7 @@ class ReaderViewModel(
         }
         _state.value = _state.value.copy(generating = true)
         try {
-            val outcome = notifier.runTracked { generator.generateShort(tone, dailyNewLimit = prefs.dailyNewLimit) }
+            val outcome = notifier.runTracked { generator.generateShort(plan, dailyNewLimit = prefs.dailyNewLimit) }
             _messages.emit(outcome.toUiMessage())
             if (outcome is GenerateOutcome.Saved) load(outcome.chapter.id)
         } finally {
@@ -156,23 +126,22 @@ class ReaderViewModel(
     /** 删掉正文不等于删掉学习进度：这里只动 chapters 与阅读位置，一个词都不碰。 */
     fun deleteChapter(id: Long) = viewModelScope.launch {
         val before = _state.value
-        val target = chapterDao.byId(id)
-        val number = before.chapters.find { it.id == id }?.number ?: target?.number ?: 0
-        val deletingCurrentShort = before.isShort && before.chapterId == id
+        val number = before.chapters.find { it.id == id }?.number ?: chapterDao.byId(id)?.number ?: 0
         chapterDao.deleteById(id)
-        positionDao.clearShortByChapter(id)
-        if (deletingCurrentShort) {
-            load(chapterDao.shortStories().firstOrNull()?.id)
-        } else {
-            load(before.chapterId.takeIf { it != id })
+        load(before.chapterId.takeIf { it != id })
+        _messages.emit(UiMessage(R.string.reader_chapter_deleted, listOf(number)))
+    }
+
+    /** 书架上批量删短篇：只有短篇能被选中删除，连载章节要走本章目录逐章删。 */
+    fun deleteShorts(ids: List<Long>) = viewModelScope.launch {
+        if (ids.isEmpty()) return@launch
+        val current = _state.value.chapterId
+        ids.forEach {
+            chapterDao.deleteById(it)
+            positionDao.clearShortByChapter(it)
         }
-        _messages.emit(
-            if (target?.kind == KIND_SHORT) {
-                UiMessage(R.string.reader_short_deleted, listOf(target.title))
-            } else {
-                UiMessage(R.string.reader_chapter_deleted, listOf(number))
-            },
-        )
+        load(if (current in ids) chapterDao.shortStories().firstOrNull()?.id else current)
+        _messages.emit(UiMessage(R.string.reader_shorts_deleted, listOf(ids.size)))
     }
 
     fun openChapter(id: Long) = viewModelScope.launch { load(id) }
@@ -182,78 +151,159 @@ class ReaderViewModel(
         val name = genre.trim().take(MAX_BOOK_NAME)
         if (name.isEmpty()) return@launch
         prefs.genre = name
-        val remembered = positionDao.byKey(bookReadingKey(name))?.chapterId ?: 0
-        val chapter = remembered.takeIf { it != 0L }?.let { chapterDao.byId(it) }
-            ?.takeIf { it.kind == KIND_SERIAL && it.genre == name }
-            ?: chapterDao.latest(name)
-        render(chapter)
+        render(bookmarks.lastChapterOf(name))
     }
 
     fun setMode(mode: ReaderMode) {
         _state.value = _state.value.copy(mode = mode)
     }
 
-    fun select(word: ReaderWord) = viewModelScope.launch {
+    fun select(word: ReaderWord) = viewModelScope.launch { selectNow(word) }
+
+    private suspend fun selectNow(word: ReaderWord) {
         val entity = word.wordId?.let { wordDao.findById(it) }
-        val access = if (entity == null) GradeMode.Reveal else schedule.gradeModeFor(entity)
-        // 修改评分是从"评前状态"重算的，此刻的间隔预览会误导，所以只在真要记账时显示。
-        val previews = entity?.takeIf { access.recorded }
+        val access = entity?.let {
+            schedule.accessFor(it, answersHidden = _state.value.mode == ReaderMode.REVIEW)
+        } ?: WordAccess.ViewOnly
+        val previews = entity?.takeIf { access != WordAccess.ViewOnly }
             ?.let { word -> Rating.entries.map { it to schedule.preview(word, it) } }
             .orEmpty()
-        _state.value = _state.value.copy(selected = word, gradeMode = access, previews = previews)
+        _state.value = _state.value.copy(
+            selected = word,
+            access = access,
+            previews = previews,
+            tricky = null,
+        )
+        val key = word.lookup.trim().lowercase()
+        val card = trickyRepository.card(key)
+        if (_state.value.selected?.lookup?.trim()?.lowercase() == key) {
+            _state.value = _state.value.copy(tricky = card)
+        }
     }
 
     fun dismissCard() {
-        _state.value = _state.value.copy(selected = null, previews = emptyList())
+        _state.value = _state.value.copy(selected = null, previews = emptyList(), tricky = null)
     }
+
+    fun toggleTricky() {
+        val word = _state.value.selected ?: return
+        viewModelScope.launch {
+            applyTricky(word.lookup, trickyRepository.toggle(word.lookup, word.zh, word.ipa))
+        }
+    }
+
+    fun linkTricky(other: TrickyWord) {
+        val word = _state.value.selected ?: return
+        viewModelScope.launch {
+            applyTricky(word.lookup, trickyRepository.link(baseOf(word), other))
+        }
+    }
+
+    fun unlinkTricky(other: TrickyWord) {
+        val word = _state.value.selected ?: return
+        viewModelScope.launch {
+            applyTricky(word.lookup, trickyRepository.unlink(word.lookup, other.word))
+        }
+    }
+
+    fun addTrickyManual(typed: String) {
+        val word = _state.value.selected ?: return
+        viewModelScope.launch {
+            val result = trickyRepository.addManual(baseOf(word), typed)
+            applyTricky(word.lookup, result.card)
+            if (!result.added) _messages.emit(UiMessage(R.string.tricky_duplicate))
+        }
+    }
+
+    /** 点开一个易混词：它可能不在本章正文里，但词卡照样能开。 */
+    fun openTricky(other: TrickyWord) = viewModelScope.launch {
+        val detail = trickyRepository.detail(other.word)
+        selectNow(
+            ReaderWord(
+                lookup = detail.word,
+                zh = detail.gloss,
+                ipa = detail.ipa,
+                def = detail.definition,
+                example = "",
+                wordId = detail.wordId,
+            ),
+        )
+    }
+
+    private fun applyTricky(raw: String, card: TrickyCard) {
+        val selected = _state.value.selected ?: return
+        if (selected.lookup.trim().lowercase() != raw.trim().lowercase()) return
+        _state.value = _state.value.copy(tricky = card)
+    }
+
+    private fun baseOf(word: ReaderWord) =
+        TrickyWord(word.lookup.trim().lowercase(), word.zh, word.ipa)
 
     fun grade(rating: Rating) {
         val selected = _state.value.selected ?: return
+        val access = _state.value.access
         viewModelScope.launch {
             val entity = selected.wordId?.let { wordDao.findById(it) }
-            val result = entity?.let { schedule.grade(it, rating, SOURCE_READER) }
+            val result = entity?.let {
+                when (access) {
+                    WordAccess.Learn -> schedule.learn(it, rating, SOURCE_READER)
+                    WordAccess.Recall -> schedule.recall(it, rating, SOURCE_READER)
+                    WordAccess.Early -> schedule.recall(
+                        it,
+                        rating,
+                        SOURCE_READER,
+                        allowEarly = true,
+                    )
+                    WordAccess.ViewOnly -> null
+                }
+            }
+            val learnedNow = result?.kind == LOG_KIND_LEARN
             _state.value = _state.value.copy(
                 bankWords = result?.let { _state.value.bankWords + (it.word.word.lowercase() to it.word) }
                     ?: _state.value.bankWords,
                 selected = null,
                 previews = emptyList(),
-                graded = _state.value.graded + if (result?.recorded == true) 1 else 0,
+                tricky = null,
+                learned = _state.value.learned + if (result != null && learnedNow) 1 else 0,
+                recalled = _state.value.recalled + if (result != null && !learnedNow) 1 else 0,
             )
+            if (result != null) {
+                _undoPrompts.emit(UndoPrompt(result.logId, result.kind))
+            }
         }
+    }
+
+    fun undo(prompt: UndoPrompt) = viewModelScope.launch {
+        val result = schedule.undo(prompt.logId)
+        if (result == null) {
+            _messages.emit(UiMessage(R.string.reader_undo_expired))
+            return@launch
+        }
+        val learnedNow = result.kind == LOG_KIND_LEARN
+        _state.value = _state.value.copy(
+            bankWords = _state.value.bankWords + (result.word.word.lowercase() to result.word),
+            learned = (_state.value.learned - if (learnedNow) 1 else 0).coerceAtLeast(0),
+            recalled = (_state.value.recalled - if (learnedNow) 0 else 1).coerceAtLeast(0),
+        )
+        _messages.emit(UiMessage(R.string.reader_undo_done))
     }
 
     private suspend fun load(chapterId: Long? = null) {
         val chapter = if (chapterId != null) {
-            chapterDao.byId(chapterId) ?: rememberedChapter()
+            chapterDao.byId(chapterId) ?: bookmarks.remembered()
         } else {
-            rememberedChapter()
+            bookmarks.remembered()
         }
         render(chapter)
     }
 
-    /**
-     * 上次关掉应用时在看的东西：阅读位置表里最新的一行。指向的章节被删了，
-     * 就回这本书的最后一章；整本书都没了，就回设置里的题材。
-     */
-    private suspend fun rememberedChapter(): ChapterEntity? {
-        val position = positionDao.latest() ?: return chapterDao.latest(prefs.genre)
-        val stored = position.chapterId.takeIf { it != 0L }?.let { chapterDao.byId(it) }
-        if (position.key.startsWith(READING_SHORT_PREFIX)) {
-            return stored ?: chapterDao.latest(prefs.genre)
-        }
-        val genre = position.key.removePrefix(READING_BOOK_PREFIX)
-        if (genre.isNotBlank()) prefs.genre = genre
-        return stored?.takeIf { it.kind == KIND_SERIAL && it.genre == prefs.genre }
-            ?: chapterDao.latest(prefs.genre)
-    }
-
     private suspend fun render(chapter: ChapterEntity?) {
         if (chapter != null && chapter.kind == KIND_SERIAL) prefs.genre = chapter.genre
-        val books = booksOf(prefs.genre)
+        val books = bookmarks.books(prefs.genre)
         val shorts = chapterDao.shortStories()
         val parsed = chapter?.segmentsJson?.let { ChapterParser.parse(it) }
         if (chapter == null || parsed == null) {
-            remember(null)
+            bookmarks.remember(null)
             _state.value = _state.value.copy(
                 loading = false,
                 hasChapter = false,
@@ -268,10 +318,13 @@ class ReaderViewModel(
                 blocks = emptyList(),
                 selected = null,
                 previews = emptyList(),
+                tricky = null,
+                learned = 0,
+                recalled = 0,
             )
             return
         }
-        remember(chapter)
+        bookmarks.remember(chapter)
         val lookups = parsed.paragraphs.flatten()
             .filterIsInstance<Segment.Embedded>()
             .map { it.word.lookup }
@@ -297,22 +350,10 @@ class ReaderViewModel(
             chapters = chapters,
             selected = null,
             previews = emptyList(),
+            tricky = null,
+            learned = 0,
+            recalled = 0,
         )
-    }
-
-    private suspend fun booksOf(current: String): List<BookOption> {
-        val rows = chapterDao.serialBooks().map { BookOption(it.genre, it.chapters, it.updatedAtSec) }
-        return if (rows.any { it.genre == current }) rows else rows + BookOption(current, 0, 0)
-    }
-
-    /** 阅读位置：连载按书记，短篇按篇记；最新写入的时间戳决定下次打开落在哪里。 */
-    private suspend fun remember(chapter: ChapterEntity?) {
-        val key = when {
-            chapter == null -> bookReadingKey(prefs.genre)
-            chapter.kind == KIND_SHORT -> shortReadingKey(chapter.id)
-            else -> bookReadingKey(chapter.genre)
-        }
-        positionDao.upsert(ReadingPositionEntity(key, chapter?.id ?: 0, Instant.now().epochSecond))
     }
 
     private companion object {

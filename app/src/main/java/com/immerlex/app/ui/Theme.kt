@@ -1,6 +1,7 @@
 package com.immerlex.app.ui
 
 import android.app.Activity
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -144,3 +145,10 @@ fun ImmerlexTheme(appearance: Appearance, content: @Composable () -> Unit) {
 @Composable
 fun masteryPalette(word: WordEntity): Pair<Color, Color> =
     LocalMasteryTones.current.of(word.mastery())
+
+/**
+ * Feature screens nest their own Scaffold inside the root one, which already padded the host
+ * for the status bar and the bottom bar. Left at the default they avoid both a second time and
+ * every page grows a dead band under the status bar.
+ */
+val RootHandledInsets: WindowInsets = WindowInsets(0, 0, 0, 0)

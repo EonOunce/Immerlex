@@ -18,6 +18,13 @@ interface WordDao {
     @Query("SELECT * FROM words WHERE id = :id")
     suspend fun findById(id: Long): WordEntity?
 
+    @Query("SELECT * FROM words WHERE id IN (:ids)")
+    suspend fun findByIds(ids: List<Long>): List<WordEntity>
+
+    /** 干扰项来源：抽一批词，保证选项不总是同一组。 */
+    @Query("SELECT * FROM words ORDER BY RANDOM() LIMIT :limit")
+    suspend fun randomWords(limit: Int): List<WordEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: WordEntity): Long
 
@@ -29,6 +36,9 @@ interface WordDao {
 
     @Query("SELECT * FROM words ORDER BY word")
     fun observeAll(): Flow<List<WordEntity>>
+
+    @Query("SELECT * FROM words ORDER BY word")
+    suspend fun allWords(): List<WordEntity>
 
     @Query("SELECT * FROM words WHERE word LIKE '%' || :query || '%' OR translation LIKE '%' || :query || '%' ORDER BY word LIMIT :limit")
     suspend fun search(query: String, limit: Int = 100): List<WordEntity>
@@ -84,15 +94,27 @@ interface ChapterDao {
     )
     suspend fun recaps(genre: String, excludeId: Long): List<ChapterRecap>
 
-    /** 书架上的连载书：一行一本，按最近更新时间排。 */
+    /** 书架上的一本连载书：一行一本，按最近更新时间排。 */
     @Query(
         "SELECT genre, COUNT(*) AS chapters, MAX(createdAtSec) AS updatedAtSec FROM chapters " +
             "WHERE kind = 'serial' GROUP BY genre ORDER BY updatedAtSec DESC",
     )
     suspend fun serialBooks(): List<BookRow>
 
-    @Query("SELECT id, number, title FROM chapters WHERE kind = 'short' ORDER BY createdAtSec DESC, id DESC")
-    suspend fun shortStories(): List<ChapterOption>
+    /** 书架上的短篇：标题 + 腔调（预设名，或 custom 时看 [ShortRow.toneText]）。 */
+    @Query(
+        "SELECT id, title, genre, toneText, createdAtSec FROM chapters " +
+            "WHERE kind = 'short' ORDER BY createdAtSec DESC, id DESC",
+    )
+    suspend fun shortStories(): List<ShortRow>
+
+    /** 书架卡片上的"读到第 N 章"：一次把所有阅读位置指向的章号取回，不在循环里查库。 */
+    @Query("SELECT id, number, title FROM chapters WHERE id IN (:ids)")
+    suspend fun optionsFor(ids: List<Long>): List<ChapterOption>
+
+    /** 挖空题找句子用：最近写过的章节正文，连载与短篇都算。 */
+    @Query("SELECT segmentsJson FROM chapters ORDER BY createdAtSec DESC, id DESC LIMIT :limit")
+    suspend fun recentSegments(limit: Int): List<String>
 }
 
 /** A row of the bookshelf's serial section. */
@@ -100,6 +122,16 @@ data class BookRow(
     val genre: String,
     val chapters: Int,
     val updatedAtSec: Long,
+)
+
+/** A row of the bookshelf's short-story section. */
+data class ShortRow(
+    val id: Long,
+    val title: String,
+    /** 腔调预设的枚举名；用户自己写腔调时是 "custom"，原话在 [toneText]。 */
+    val genre: String,
+    val toneText: String,
+    val createdAtSec: Long,
 )
 
 /** A row of the chapter switcher on the reading page. */
@@ -125,6 +157,32 @@ interface ReviewLogDao {
 
     @Query("SELECT * FROM review_logs WHERE wordId = :wordId ORDER BY reviewEpochSec ASC, id ASC")
     suspend fun forWord(wordId: Long): List<ReviewLogEntity>
+
+    @Query("SELECT * FROM review_logs WHERE id = :id")
+    suspend fun byId(id: Long): ReviewLogEntity?
+
+    @Query("DELETE FROM review_logs WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    /** 测验一次要算一批词的题型强度，逐词查会变成 N 次往返。 */
+    @Query("SELECT * FROM review_logs WHERE wordId IN (:wordIds) ORDER BY reviewEpochSec ASC, id ASC")
+    suspend fun forWords(wordIds: List<Long>): List<ReviewLogEntity>
+
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE kind = 'learn' AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun learnedWordIdsSince(sinceSec: Long): List<Long>
+
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE kind = 'recall' AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun recalledWordIdsSince(sinceSec: Long): List<Long>
+
+    /** 今天碰过的词（学过或回忆过），提前复习从这里挑。 */
+    @Query("SELECT DISTINCT wordId FROM review_logs WHERE reviewEpochSec >= :sinceSec")
+    suspend fun touchedWordIdsSince(sinceSec: Long): List<Long>
 
     @Query(
         """
@@ -233,6 +291,10 @@ interface ReadingPositionDao {
     @Query("SELECT * FROM reading_positions WHERE key = :key")
     suspend fun byKey(key: String): ReadingPositionEntity?
 
+    /** 整个书架的位置：每张书卡都要知道自己上次读到哪一章、什么时候。 */
+    @Query("SELECT * FROM reading_positions")
+    suspend fun all(): List<ReadingPositionEntity>
+
     /** 删短篇时清掉它的位置行；连载书的位置行留着，由阅读页改到这本书剩下的最后一章。 */
     @Query("DELETE FROM reading_positions WHERE chapterId = :chapterId AND key LIKE 'short:%'")
     suspend fun clearShortByChapter(chapterId: Long)
@@ -245,4 +307,41 @@ interface BackupRunDao {
 
     @Query("SELECT * FROM backup_runs ORDER BY atSec DESC, id DESC LIMIT 1")
     suspend fun latest(): BackupRunEntity?
+}
+
+@Dao
+interface TrickyDao {
+    @Query("SELECT * FROM tricky_words WHERE word = :word")
+    suspend fun byWord(word: String): TrickyWordEntity?
+
+    @Query("SELECT * FROM tricky_words WHERE word IN (:words)")
+    suspend fun byWords(words: List<String>): List<TrickyWordEntity>
+
+    @Query("SELECT * FROM tricky_words ORDER BY word")
+    suspend fun all(): List<TrickyWordEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(entity: TrickyWordEntity): Long
+
+    /** 先标成易错但没拿到释义时，后来的词卡或词典可以补上，不覆盖已有的非空值。 */
+    @Query(
+        "UPDATE tricky_words SET gloss = CASE WHEN gloss = '' THEN :gloss ELSE gloss END, " +
+            "ipa = CASE WHEN ipa = '' THEN :ipa ELSE ipa END WHERE word = :word",
+    )
+    suspend fun fillBlanks(word: String, gloss: String, ipa: String)
+
+    @Query("DELETE FROM tricky_words WHERE word = :word")
+    suspend fun delete(word: String)
+
+    @Query("SELECT * FROM tricky_links WHERE wordA = :word OR wordB = :word")
+    suspend fun linksOf(word: String): List<TrickyLinkEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertLink(entity: TrickyLinkEntity)
+
+    @Query("DELETE FROM tricky_links WHERE (wordA = :a AND wordB = :b) OR (wordA = :b AND wordB = :a)")
+    suspend fun deleteLink(a: String, b: String)
+
+    @Query("DELETE FROM tricky_links WHERE wordA = :word OR wordB = :word")
+    suspend fun deleteLinksOf(word: String)
 }

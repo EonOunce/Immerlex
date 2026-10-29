@@ -79,11 +79,6 @@ internal fun BackupSection(state: SettingsState, vm: SettingsViewModel) {
         Switch(checked = state.backupAuto, onCheckedChange = vm::onBackupAuto)
     }
     Text(
-        stringResource(R.string.settings_backup_auto_rule),
-        style = MaterialTheme.typography.bodySmall,
-        color = ImmerlexColors.Meta,
-    )
-    Text(
         context.textFor(state.backupLine),
         style = MaterialTheme.typography.bodySmall,
         color = if (state.backupFailed) ImmerlexColors.Rust else ImmerlexColors.Meta,

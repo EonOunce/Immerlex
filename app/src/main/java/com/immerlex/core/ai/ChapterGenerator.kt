@@ -82,7 +82,11 @@ class ChapterGenerator(
         if (words.isEmpty()) return GenerateOutcome.NoWords
         val short = chapter.kind == KIND_SHORT
         val request = if (short) {
-            shortRequest(ShortTone.of(chapter.genre), words, shortCharsFor(words.size))
+            shortRequest(
+                ShortPlan.of(chapter.genre, chapter.toneText, chapter.idea),
+                words,
+                shortCharsFor(words.size),
+            )
         } else {
             buildRequest(
                 genre = chapter.genre,
@@ -106,7 +110,7 @@ class ChapterGenerator(
      * 所以短篇和连载互不干扰。
      */
     suspend fun generateShort(
-        tone: ShortTone,
+        plan: ShortPlan,
         now: Instant = Instant.now(),
         dailyNewLimit: Int = DEFAULT_DAILY_NEW,
     ): GenerateOutcome {
@@ -114,7 +118,7 @@ class ChapterGenerator(
         val words = (today.newWords + today.reviewWords).take(SHORT_WORD_CAP)
         if (words.isEmpty()) return GenerateOutcome.NoWords
         return write(
-            request = shortRequest(tone, words, shortCharsFor(words.size)),
+            request = shortRequest(plan, words, shortCharsFor(words.size)),
             replaceId = null,
             kind = KIND_SHORT,
             minHanChars = MIN_SHORT_HAN_CHARS,
@@ -122,17 +126,18 @@ class ChapterGenerator(
     }
 
     private fun shortRequest(
-        tone: ShortTone,
+        plan: ShortPlan,
         words: List<WordEntity>,
         targetHanChars: Int,
     ) = ChapterRequest(
-        genre = tone.name,
+        genre = plan.genreKey,
         chapterNumber = 0,
         targetHanChars = targetHanChars,
         density = Density.SPARSE,
         newWords = words.filter { it.isNew }.map { it.brief() },
         reviewWords = words.filterNot { it.isNew }.map { it.brief() },
         story = StoryContext(),
+        shortPlan = plan,
     )
 
     private fun shortCharsFor(wordCount: Int): Int =
@@ -181,7 +186,7 @@ class ChapterGenerator(
 
     private fun promptFor(request: ChapterRequest, kind: String): String =
         if (kind == KIND_SHORT) {
-            PromptBuilder.shortUser(request, ShortTone.of(request.genre))
+            PromptBuilder.shortUser(request, request.shortPlan)
         } else {
             PromptBuilder.user(request)
         }
@@ -231,6 +236,8 @@ class ChapterGenerator(
             segmentsJson = ChapterParser.extractJson(rawJson).orEmpty(),
             summary = chapter.summary,
             kind = kind,
+            toneText = request.shortPlan.toneText,
+            idea = request.shortPlan.idea,
         )
         val id = if (replaceId == null) chapterDao.insert(stored) else {
             chapterDao.update(stored)

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Immerlex</string>
+    <string name="app_name">词间</string>
+    <string name="app_subtitle">词在故事之间</string>
 
     <string name="tab_bank">词库</string>
     <string name="tab_reader">阅读</string>
@@ -10,22 +11,28 @@
     <string name="home_title">今日任务</string>
     <string name="home_streak">连续 %1$d 天</string>
     <string name="home_checked_in">今天已打卡</string>
-    <string name="home_not_yet">今天还没打卡：给任意一个词打过分就算</string>
+    <string name="home_not_yet">今天还没打卡</string>
     <string name="home_due">今日到期</string>
     <string name="home_done">今日已完成</string>
-    <string name="home_new_words">其中新词 %1$d 个（受每日新词上限约束）</string>
+    <string name="home_new_words">新词 %1$d 个</string>
     <string name="home_heat_title">背书热力图</string>
-    <string name="home_heat_caption">近 13 周每天背过或复习过的单词数 · 今天 %1$d 个</string>
+    <string name="home_heat_caption">近 13 周 · 今天 %1$d 个</string>
     <string name="home_heat_less">少</string>
     <string name="home_heat_more">多</string>
+    <string name="home_trend_title">近 30 天趋势</string>
+    <string name="home_trend_caption">学习词数</string>
+    <string name="home_trend_start">%1$d 天前</string>
+    <string name="home_trend_today">今天</string>
     <string name="home_makeup_unused">本周补卡：未用</string>
     <string name="home_makeup_used">本周补卡：已用过，本周不再补</string>
     <string name="home_makeup_pending">昨天断了：今天把到期词读完，就自动补回昨天</string>
     <string name="home_loading">正在统计…</string>
     <string name="home_start_first">用今天的词写第一章</string>
     <string name="home_start_reading">开始今日阅读</string>
-    <string name="home_continue">接着读第 %1$d 章；点标题能换回看其它章</string>
-    <string name="home_explain">打卡只要求当天给任意一个词打过分。漏一天不会归零：第二天清空当日到期词就自动补上，每周最多补一次。没有积分、也没有兑换。</string>
+    <string name="home_continue">接着读第 %1$d 章</string>
+    <string name="home_quiz_count">开始测验（%1$d 词）</string>
+    <string name="home_quiz_empty">今天没有要测的词</string>
+    <string name="home_early_count">提前复习（%1$d 个可练）</string>
 
     <string name="bank_title">词库</string>
     <string name="bank_count">共 %1$d 个词</string>
@@ -38,6 +45,9 @@
     <string name="bank_import_txt">导入 txt</string>
     <string name="bank_import_image">截图导入</string>
     <string name="bank_import_pdf">导入 PDF</string>
+    <string name="bank_export">导出 CSV</string>
+    <string name="bank_export_done">已导出 %1$d 个词，可在 Anki 或表格软件里导入</string>
+    <string name="bank_export_failed">导出失败：写不进所选位置，换一个文件夹试试</string>
     <string name="bank_ocr_failed">识别失败，请换一张更清晰的截图</string>
     <string name="bank_ocr_empty">截图里没有可识别的文字</string>
     <string name="bank_pdf_page">正在识别 PDF 第 %1$d/%2$d 页…</string>
@@ -52,7 +62,7 @@
     <string name="bank_deleted">已删除 %1$s</string>
     <string name="bank_delete_title">删除单词</string>
     <string name="bank_delete_body">删除 %1$s 会同时清除它的复习记录，确定吗？</string>
-    <string name="bank_empty_all">词库还是空的。点上方“导入 txt”“截图导入”或“导入 PDF”，也可以点右下角“添加单词”；点列表里的单词能查看释义或删除。</string>
+    <string name="bank_empty_all">词库还是空的，导入或添加一个词开始。</string>
     <string name="bank_empty_search">没有匹配的单词。</string>
     <string name="bank_fsrs_summary">状态：%1$s · 复习 %2$d 次 · 遗忘 %3$d 次 · 当前间隔 %4$d 天</string>
 
@@ -63,6 +73,7 @@
     <string name="action_add">添加</string>
     <string name="action_cancel">取消</string>
     <string name="action_delete">删除</string>
+    <string name="action_back">返回</string>
     <string name="action_close">关闭</string>
 
     <string name="settings_ai_section">AI 接口</string>
@@ -109,9 +120,8 @@
     <string name="settings_reminder_section">每日提醒</string>
     <string name="settings_reminder_on">到期提醒</string>
     <string name="settings_reminder_time">提醒时刻：%1$s</string>
-    <string name="settings_reminder_rule">到点时如果今天还有到期词才提醒；今天一个词都不欠就安静。系统的后台调度可能让它晚到几分钟，不会提前。</string>
     <string name="settings_notify_allow">允许通知</string>
-    <string name="settings_notify_denied">系统里本应用的通知是关着的：点这里授权，或到 设置 → 应用 → Immerlex 里打开。</string>
+    <string name="settings_notify_denied">系统里本应用的通知是关着的：点这里授权，或到 设置 → 应用 → 词间 里打开。</string>
 
     <string name="settings_backup_section">备份与恢复</string>
     <string name="settings_backup_url">网盘地址</string>
@@ -119,12 +129,11 @@
     <string name="settings_backup_account">账号</string>
     <string name="settings_backup_account_hint">坚果云的登录邮箱</string>
     <string name="settings_backup_password">应用密码</string>
-    <string name="settings_backup_password_hint">在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码。填过一次后不再回显，留空表示不改。</string>
+    <string name="settings_backup_password_hint">已保存。留空表示不改，重新填写会覆盖。</string>
     <string name="settings_backup_password_needed">还没存过应用密码：到坚果云「安全设置 → 安全选项」里生成一串，填在这里。</string>
     <string name="settings_backup_save">保存备份设置</string>
     <string name="settings_backup_saved">备份设置已保存</string>
     <string name="settings_backup_auto">每日自动备份</string>
-    <string name="settings_backup_auto_rule">每天一次，有网络时才跑。备份里是词库、章节和复习进度；AI 接口的地址、密钥和模型名不在里面。</string>
     <string name="settings_backup_now">立即备份</string>
     <string name="settings_backup_restore">从云端恢复</string>
     <string name="backup_never">还没备份过。填好上面三项，点“立即备份”试试。</string>
@@ -145,7 +154,7 @@
     <string name="backup_issue_not_gzip">它不是一份备份压缩包（%1$s）</string>
     <string name="backup_issue_not_sqlite">解压以后不是一本数据库</string>
     <string name="backup_issue_no_version">库里没写版本号，认不出它是什么格式</string>
-    <string name="backup_issue_too_new">它来自更新版本的 Immerlex（%1$s），现在这个应用读不了</string>
+    <string name="backup_issue_too_new">它来自更新版本的词间（%1$s），现在这个应用读不了</string>
     <string name="backup_issue_check_failed">数据库自检没通过：%1$s</string>
     <string name="backup_issue_missing_tables">缺了这几张表：%1$s，不像本应用的备份</string>
     <string name="backup_pick_title">选一份要恢复的备份</string>
@@ -185,7 +194,6 @@
     <string name="bible_expand">展开成故事档案</string>
     <string name="bible_reroll">按现在的想法重写档案</string>
     <string name="bible_working">正在整理档案…</string>
-    <string name="bible_reroll_hint">再点一次上面的按钮会按现在的想法重写这份档案：模型生成的条目会被换掉，你亲手改过的原样保留。</string>
     <string name="bible_sections_section">档案条目</string>
     <string name="bible_cast_section">人物状态</string>
     <string name="bible_empty">还没有档案。写下想法，点上面的“展开成故事档案”让 AI 起草；也可以直接点每栏右边的＋自己写一条。</string>
@@ -232,9 +240,26 @@
     <string name="reader_loading">正在载入章节…</string>
     <string name="reader_mode_learn">学习模式</string>
     <string name="reader_mode_review">复习模式</string>
-    <string name="reader_review_hint">释义已隐藏，点单词揭示并打分</string>
-    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 本次已复习 %3$d</string>
+    <string name="reader_english_only">只留英文</string>
+    <string name="reader_english_only_on">显示汉字</string>
+    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 本次已学 %3$d · 本次已回忆 %4$d</string>
     <string name="reader_speak">朗读</string>
+    <string name="reader_speak_no_engine">这台手机没有可用的语音引擎，装一个带英文语音的（例如 Google 语音服务）再回来。</string>
+    <string name="reader_speak_no_english">语音引擎里没有英文语音包：到系统设置 → 语言与输入 → 文字转语音里下载英文。</string>
+    <string name="reader_speak_failed">这句没读出来，再点一次试试。</string>
+    <string name="tricky_title">易错词</string>
+    <string name="tricky_mark">标为易错</string>
+    <string name="tricky_unmark">取消标记</string>
+    <string name="tricky_hint_unmarked">标为易错后，可以给它挂上容易混的词。</string>
+    <string name="tricky_links_title">易混</string>
+    <string name="tricky_links_empty">还没有关联的易混词。</string>
+    <string name="tricky_suggestions">推荐，点一下加入</string>
+    <string name="tricky_manual_label">自己填一个英文单词</string>
+    <string name="tricky_manual_hint">释义会自动从词库或离线词典补全；查不到也能先加进来。</string>
+    <string name="tricky_manual_add">加入</string>
+    <string name="tricky_duplicate">这个词已经在易混里了</string>
+    <string name="tricky_no_gloss">（没查到释义）</string>
+    <string name="tricky_remove">取消关联</string>
     <string name="reader_no_gloss">（暂无释义）</string>
     <string name="reader_not_in_bank">这个词不在你的词库里，只读不排复习</string>
     <string name="reader_cannot_grade">把它加入词库后才能安排复习</string>
@@ -257,37 +282,106 @@
     <string name="reader_rewritten">已重写第 %1$d 章《%2$s》</string>
 
     <string name="reader_shelf">书架</string>
-    <string name="reader_short_progress">短篇 · 本章 %1$d 个词 · 本次已复习 %2$d</string>
-    <string name="reader_short_delete_title">删除这篇短篇</string>
-    <string name="reader_short_delete_body">只删掉这篇短篇的正文，词库和复习进度都不受影响。</string>
-    <string name="reader_short_deleted">已删除短篇《%1$s》</string>
+    <string name="reader_short_progress">短篇 · 本章 %1$d 个词 · 本次已学 %2$d · 本次已回忆 %3$d</string>
+    <string name="reader_note_learn">第一次遇到</string>
+    <string name="reader_note_learning">学习模式不计分</string>
+    <string name="reader_early_remembered">想起来了</string>
+    <string name="reader_early_forgot">没想起来</string>
+    <string name="reader_grade_saved_learn">已加入排期</string>
+    <string name="reader_grade_saved_recall">已记录这次回忆</string>
+    <string name="reader_undo">撤销</string>
+    <string name="reader_undo_done">已撤销这次记录</string>
+    <string name="reader_undo_expired">撤销窗口已过，这次记录保留</string>
+    <string name="reader_shorts_deleted">已删除 %1$d 篇短篇</string>
+    <string name="shelf_close">关闭书架</string>
+    <string name="shelf_delete_count">删除 %1$d 篇</string>
+    <string name="shelf_short_kind">短篇</string>
+    <string name="shelf_now_reached">读到第 %1$d 章</string>
+    <string name="shelf_untitled">未命名</string>
+    <string name="shelf_continue">继续读</string>
     <string name="shelf_serial">连载</string>
     <string name="shelf_shorts">短篇</string>
-    <string name="shelf_book_current">%1$s ← 正在读</string>
-    <string name="shelf_book_meta">%1$d 章</string>
+    <string name="shelf_book_read">读到第 %1$d 章 · %2$s</string>
+    <string name="shelf_book_meta">共 %1$d 章</string>
     <string name="shelf_book_empty">还没写正文</string>
-    <string name="shelf_short_current">%1$s ← 正在读</string>
     <string name="shelf_new_book">新建连载</string>
     <string name="shelf_write_short">写一篇短篇</string>
     <string name="shelf_new_book_title">新建一本连载</string>
     <string name="shelf_new_book_field">书名 / 题材</string>
-    <string name="shelf_new_book_hint">这就是书架上的书名；AI 会把它当作写作题材（例如“宫斗”“修仙”），之后也能在设置里改。</string>
     <string name="shelf_new_book_action">建好</string>
     <string name="shelf_short_title">写一篇短篇</string>
-    <string name="shelf_short_hint">短篇独立成篇，不接前面的章节。最多取今天队列里的 15 个词，写 1500–2500 字。</string>
+    <string name="short_idea_label">这篇想写什么？</string>
     <string name="short_tone_everyman">小人物点题</string>
-    <string name="short_tone_everyman_desc">普通人的具体处境，结尾一个动作或一句话点题。</string>
     <string name="short_tone_lush">情绪华丽</string>
-    <string name="short_tone_lush_desc">意象密集、句子有声，结尾落在情绪最高点。</string>
     <string name="short_tone_cold">设定先行冷结尾</string>
-    <string name="short_tone_cold_desc">先给清晰略带陌生的设定，最后冷处理反转或留白。</string>
-    <string name="reader_grade_relearn">刚才点了“忘了”，再点一次算重学一遍。</string>
-    <string name="reader_grade_amend">今天已经复习过，再点只修改上一次的评分，不会多算一次。</string>
-    <string name="reader_grade_not_due">还没到复习时间，点开只是看释义。</string>
-
+    <string name="short_tone_custom">自己定腔调</string>
+    <string name="short_own_tone_label">用你自己的话说写法</string>
+    <string name="short_write_action">写</string>
     <string name="grade_again">忘了</string>
     <string name="grade_hard">困难</string>
     <string name="grade_good">记得</string>
     <string name="grade_easy">简单</string>
     <string name="grade_days">%1$d 天</string>
+
+    <string name="quiz_title">测验</string>
+    <string name="quiz_loading">正在准备题目…</string>
+    <string name="quiz_empty">今天没有要测的词。先在阅读里学几个新词，或等有词到期。</string>
+    <string name="quiz_progress">第 %1$d/%2$d 题 · %3$s</string>
+    <string name="quiz_type_en_zh">英→中</string>
+    <string name="quiz_type_zh_en">中→英</string>
+    <string name="quiz_type_cloze">句子挖空</string>
+    <string name="quiz_type_definition">释义选词</string>
+    <string name="quiz_prompt_en_zh">选出正确的中文意思</string>
+    <string name="quiz_prompt_zh_en">选出对应的英文单词</string>
+    <string name="quiz_prompt_cloze">补上句子里缺的单词</string>
+    <string name="quiz_prompt_definition">根据英文释义选出单词</string>
+    <string name="quiz_correct">答对了</string>
+    <string name="quiz_wrong">答错了，正确答案是 %1$s</string>
+    <string name="quiz_next">下一题</string>
+    <string name="quiz_finish">完成</string>
+    <string name="quiz_result">本轮 %1$d 题，答对 %2$d 题</string>
+    <string name="quiz_result_wrong_done">有 %1$d 个词答错，已用另一种题型练过一遍（不计分）</string>
+    <string name="quiz_retry_badge">练习 · 不计分</string>
+    <string name="quiz_retry_progress">练习 %1$d/%2$d · %3$s</string>
+    <string name="quiz_retry_done">练习结束</string>
+    <string name="quiz_early_badge">提前复习</string>
+    <string name="quiz_early_result">本组 %1$d 个词，答对 %2$d 个</string>
+    <string name="quiz_again_group">再来一组</string>
+    <string name="quiz_early_empty">今天还没有可提前复习的词：先学几个新词，或复习几个旧词。</string>
+    <string name="quiz_all_options">所有选项的释义</string>
+    <string name="quiz_option_row">%1$s — %2$s</string>
+    <string name="quiz_option_correct">正确</string>
+    <string name="quiz_option_yours">你的选择</string>
+
+    <string name="about_title">关于与规则</string>
+    <string name="about_open">关于与规则</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_lead">把英文词嵌进中文故事里读：先读情节，顺手把词记住。</string>
+
+    <string name="about_checkin_title">关于打卡</string>
+    <string name="about_checkin_body">今天学过或回忆过任意一个词，就算打卡。\n漏一天不会归零：第二天清空当天的到期词，就自动补回昨天，每周最多补一次。\n没有积分，也没有兑换。</string>
+
+    <string name="about_home_title">关于今日页</string>
+    <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。</string>
+
+    <string name="about_reading_title">关于阅读与评分</string>
+    <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点章节标题可以换回看其它章；重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。</string>
+
+    <string name="about_quiz_title">关于测验与计分</string>
+    <string name="about_quiz_body">四种题型：英→中、中→英、句子挖空、英文释义选词（配近义/反义线索）。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词。易错词一开始四种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并列出所有选项的释义。答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。\n提前复习每次取当天碰过、还没到期的 5 个最不稳定词，照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
+
+    <string name="about_reminder_title">关于每日提醒</string>
+    <string name="about_reminder_body">到点时如果今天还有到期词才提醒；一个词都不欠就不打扰。\n系统的后台调度可能让提醒晚几分钟，但不会提前。</string>
+
+    <string name="about_backup_title">关于备份与恢复</string>
+    <string name="about_backup_body">每天自动备份一次，有网络时才跑。\n备份里有词库、章节、复习进度和故事档案；AI 接口的地址、密钥、模型名不在里面，恢复后要重填。\n应用密码在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码；填过一次后不再回显，留空表示不改。\n云端保留最近 30 份，外加每月最后一份。云端文件夹沿用旧名 Immerlex，旧备份都在那里。</string>
+
+    <string name="about_bible_title">关于故事档案</string>
+    <string name="about_bible_body">再点一次“展开成故事档案”会按现在的想法重写：模型生成的条目会被换掉，你亲手改过的原样保留。\n没配 API key 也能逐条手填或删除，AI 只是把一段话展开成初稿。</string>
+
+    <string name="about_shelf_title">关于书架与短篇</string>
+    <string name="about_shelf_body">一本书就是一个题材；新建连载只需起个名字，AI 会把它当作写作题材（例如“宫斗”“修仙”）。\n短篇独立成篇，不接前面的章节；最多取今天队列里的 15 个词，写 1500–2500 字。\n写短篇时可以一句话说明这篇想写什么、也可以自己定腔调；不说就由 AI 自己定。重写这一篇时沿用同样的要求和同一批词。\n书架上长按短篇可以多选删除；删正文不动词库和复习进度。\n阅读位置会自动记住，重开应用回到同一本、同一章。</string>
+
+    <string name="about_bank_title">关于词库</string>
+    <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n点列表里的单词能查看释义或删除。</string>
 </resources>

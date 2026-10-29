@@ -14,6 +14,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,19 +29,27 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.immerlex.app.ui.ImmerlexTheme
+import com.immerlex.core.quiz.QuizMode
 import com.immerlex.feature.home.HomeScreen
 import com.immerlex.feature.home.HomeViewModel
+import com.immerlex.feature.quiz.QuizScreen
+import com.immerlex.feature.quiz.QuizViewModel
 import com.immerlex.feature.wordbank.WordBankRepository
 import com.immerlex.feature.wordbank.WordBankScreen
 import com.immerlex.feature.reader.ReaderScreen
 import com.immerlex.feature.reader.ReaderViewModel
+import com.immerlex.feature.settings.AboutScreen
 import com.immerlex.feature.settings.BibleScreen
 import com.immerlex.feature.settings.BibleViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
 import com.immerlex.feature.wordbank.WordBankViewModel
 
+private const val ROUTE_ABOUT = "about"
 private const val ROUTE_BIBLE = "bible"
+private const val ROUTE_QUIZ = "quiz/{mode}"
+
+private fun quizRoute(mode: QuizMode): String = "quiz/${mode.name}"
 
 @Composable
 fun ImmerlexRoot() {
@@ -77,6 +86,7 @@ fun ImmerlexRoot() {
                 wordDao = container.db.wordDao(),
                 positionDao = container.db.readingPositionDao(),
                 schedule = container.scheduleService,
+                trickyRepository = container.trickyRepository,
                 prefs = container.prefs,
                 generator = container.chapterGenerator,
                 aiConfig = container::aiConfig,
@@ -87,7 +97,14 @@ fun ImmerlexRoot() {
             HomeViewModel(
                 dailyLoop = container.dailyLoopService,
                 schedule = container.scheduleService,
+                quiz = container.quizService,
                 chapterDao = container.db.chapterDao(),
+                prefs = container.prefs,
+            )
+        }
+        initializer {
+            QuizViewModel(
+                quiz = container.quizService,
                 prefs = container.prefs,
             )
         }
@@ -130,7 +147,16 @@ fun ImmerlexRoot() {
             ) {
                 composable(Destinations.HOME.route) {
                     val vm: HomeViewModel = viewModel(factory = appViewModelFactory)
-                    HomeScreen(vm, onStartReading = { goToTab(Destinations.READER) })
+                    HomeScreen(
+                        vm,
+                        onStartReading = { goToTab(Destinations.READER) },
+                        onStartQuiz = {
+                            navController.navigate(quizRoute(QuizMode.DUE)) { launchSingleTop = true }
+                        },
+                        onStartEarly = {
+                            navController.navigate(quizRoute(QuizMode.EARLY)) { launchSingleTop = true }
+                        },
+                    )
                 }
                 composable(Destinations.BANK.route) {
                     val vm: WordBankViewModel = viewModel(factory = appViewModelFactory)
@@ -144,11 +170,26 @@ fun ImmerlexRoot() {
                 }
                 composable(Destinations.SETTINGS.route) {
                     val vm: SettingsViewModel = viewModel(factory = appViewModelFactory)
-                    SettingsScreen(vm, onOpenBible = { navController.navigate(ROUTE_BIBLE) { launchSingleTop = true } })
+                    SettingsScreen(
+                        vm,
+                        onOpenBible = { navController.navigate(ROUTE_BIBLE) { launchSingleTop = true } },
+                        onOpenAbout = { navController.navigate(ROUTE_ABOUT) { launchSingleTop = true } },
+                    )
+                }
+                composable(ROUTE_QUIZ) { entry ->
+                    val mode = QuizMode.entries.firstOrNull {
+                        it.name == entry.arguments?.getString("mode")
+                    } ?: QuizMode.DUE
+                    val vm: QuizViewModel = viewModel(factory = appViewModelFactory)
+                    LaunchedEffect(mode) { vm.start(mode) }
+                    QuizScreen(vm, onExit = { navController.popBackStack() })
                 }
                 composable(ROUTE_BIBLE) {
                     val vm: BibleViewModel = viewModel(factory = appViewModelFactory)
                     BibleScreen(vm, onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_ABOUT) {
+                    AboutScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

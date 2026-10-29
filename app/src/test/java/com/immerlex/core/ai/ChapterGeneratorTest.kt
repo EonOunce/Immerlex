@@ -343,7 +343,7 @@ class ChapterGeneratorTest {
         val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
         val (gen, client) = generator(listOf(encode(f.doc)), f)
 
-        val outcome = gen.generateShort(ShortTone.LUSH)
+        val outcome = gen.generateShort(ShortPlan(tone = ShortTone.LUSH))
 
         assertTrue(outcome is GenerateOutcome.Saved)
         val prompt = client.prompts.single()
@@ -359,7 +359,7 @@ class ChapterGeneratorTest {
         val harness = Harness(story = FakeStory(context = StoryContext(recaps = listOf(RecapLine(1, "旧章", "旧梗概")))))
         val (gen, _) = generator(listOf(encode(f.doc)), f, harness)
 
-        val outcome = gen.generateShort(ShortTone.EVERYMAN) as GenerateOutcome.Saved
+        val outcome = gen.generateShort(ShortPlan(tone = ShortTone.EVERYMAN)) as GenerateOutcome.Saved
 
         assertEquals(KIND_SHORT, outcome.chapter.kind)
         assertEquals(0, outcome.chapter.number)
@@ -373,7 +373,7 @@ class ChapterGeneratorTest {
         val doc = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
         val (gen, client) = generator(listOf(encode(doc.doc)), bankFixture)
 
-        val outcome = gen.generateShort(ShortTone.COLD)
+        val outcome = gen.generateShort(ShortPlan(tone = ShortTone.COLD))
 
         assertTrue(outcome is GenerateOutcome.Saved)
         val prompt = client.prompts.single()
@@ -408,5 +408,72 @@ class ChapterGeneratorTest {
         assertEquals("重写不该新增一行", 1, harness.chapters.items.size)
         assertTrue(client.prompts.single().contains(ShortTone.COLD.brief))
         assertEquals(0, harness.story.outcomes.size)
+    }
+
+    @Test
+    fun aShortWithNoIdeaLeavesTheSubjectToTheModel() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val (gen, client) = generator(listOf(encode(f.doc)), f)
+
+        gen.generateShort(ShortPlan(tone = ShortTone.COLD))
+
+        val prompt = client.prompts.single()
+        assertTrue(prompt.contains("写什么由你定"))
+        assertTrue(prompt.contains("腔调："))
+        assertFalse(prompt.contains("读者自己写的"))
+    }
+
+    @Test
+    fun ownToneAndSubjectReplaceThePresetAndAreStoredWithTheStory() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val harness = Harness()
+        val (gen, client) = generator(listOf(encode(f.doc)), f, harness)
+        val plan = ShortPlan(
+            toneText = "写在深夜的长途货车上，句子要短，结尾不停在道理上",
+            idea = "一个司机把迷路的眼镜猴送到渔港",
+        )
+
+        val outcome = gen.generateShort(plan) as GenerateOutcome.Saved
+
+        val prompt = client.prompts.single()
+        assertTrue(prompt.contains("腔调（读者自己写的，务必遵守）：${plan.toneText}"))
+        assertTrue(prompt.contains("读者指定了这篇写什么：${plan.idea}"))
+        assertFalse("自己写了腔调就不该再叠加预设那一段", prompt.contains(ShortTone.EVERYMAN.brief))
+        assertEquals(CUSTOM_TONE, outcome.chapter.genre)
+        assertEquals(plan.toneText, harness.chapters.items.single().toneText)
+        assertEquals(plan.idea, harness.chapters.items.single().idea)
+    }
+
+    @Test
+    fun shortRewriteReusesTheOwnToneAndSubject() = runBlocking {
+        val f = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1)
+        val harness = Harness()
+        f.words.forEach { harness.words.insert(WordEntity(word = it, source = "test", createdAtSec = 0)) }
+        harness.chapters.insert(
+            chapterRow(0, CUSTOM_TONE, "旧短篇", "")
+                .copy(
+                    segmentsJson = encode(f.doc),
+                    kind = KIND_SHORT,
+                    toneText = "句子要短，结尾不停在道理上",
+                    idea = "一个司机把迷路的眼镜猴送到渔港",
+                ),
+        )
+        val id = harness.chapters.items.single().id
+        val fresh = fixture(paragraphs = 15, blocks = 3, wordsPerParagraph = 1, title = "新短篇")
+        val client = FakeClient(listOf(encode(fresh.doc)))
+        val gen = ChapterGenerator(
+            queue = FakeQueue(TodayQueue(emptyList(), emptyList())),
+            chapterDao = harness.chapters,
+            story = harness.story,
+            wordDao = harness.words,
+            clientFor = { client },
+        )
+
+        val outcome = gen.rewrite(id, Density.MEDIUM) as GenerateOutcome.Saved
+
+        val prompt = client.prompts.single()
+        assertTrue("重写该沿用读者自己写的腔调", prompt.contains("句子要短，结尾不停在道理上"))
+        assertTrue("重写该沿用同一篇的主题", prompt.contains("一个司机把迷路的眼镜猴送到渔港"))
+        assertEquals(CUSTOM_TONE, outcome.chapter.genre)
     }
 }

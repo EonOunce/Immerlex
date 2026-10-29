@@ -45,12 +45,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.ProviderPresets
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
+fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit, onOpenAbout: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -66,7 +67,7 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
 
     BackupDialogs(state, vm)
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -208,11 +209,6 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 OutlinedButton(onClick = { vm.onReminderShift(30) }) { Text("＋") }
             }
-            Text(
-                stringResource(R.string.settings_reminder_rule),
-                style = MaterialTheme.typography.bodySmall,
-                color = ImmerlexColors.Meta,
-            )
             if (!state.notificationsAllowed) {
                 // 权限没给，提醒排得再准也弹不出来，所以这里给一个直接去授权的入口。
                 // Android 13 以下没有这个运行时权限，申请不会弹框，只能把人送到系统设置里。
@@ -240,6 +236,10 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit) {
                 stringResource(R.string.settings_bank_summary, state.bankTotal, state.bankNew, state.bankDue),
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            OutlinedButton(onClick = onOpenAbout) {
+                Text(stringResource(R.string.about_open))
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
