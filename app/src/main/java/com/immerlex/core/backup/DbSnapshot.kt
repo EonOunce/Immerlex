@@ -3,6 +3,8 @@ package com.immerlex.core.backup
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.RoomDatabase
+import com.immerlex.core.db.DbFileSwap
+import com.immerlex.core.db.ImmerlexDatabase
 import java.io.File
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -29,7 +31,7 @@ data class Unpacked(
  * 而不是云端一份"看起来好好的"坏库。
  */
 object DbSnapshot {
-    const val DB_NAME = "immerlex.db"
+    const val DB_NAME = ImmerlexDatabase.NAME
 
     /** v1 起就存在的最老三张表：连这些都没有的文件不是本应用的库。 */
     private val REQUIRED_TABLES = listOf("words", "chapters", "review_logs")
@@ -104,13 +106,10 @@ object DbSnapshot {
     /**
      * 覆盖本地库。调用方必须先 `db.close()`，并且知道应用需要重开一次：
      * 正在跑的 Room 连接不能换文件，热切换会在下一次查询时崩。
+     * 换文件失败会把旧库放回原处，不会留下一台"库没了"的手机。
      */
     fun install(context: Context, sqlite: File) {
-        val target = context.getDatabasePath(DB_NAME)
-        // deleteDatabase 连 -wal / -shm 一起清掉；留着旧的 WAL 会把旧数据盖回新库上。
-        SQLiteDatabase.deleteDatabase(target)
-        target.parentFile?.mkdirs()
-        sqlite.copyTo(target, overwrite = true)
+        DbFileSwap.install(context.getDatabasePath(DB_NAME), sqlite)
     }
 
     private fun readLong(db: SQLiteDatabase, sql: String): Long =

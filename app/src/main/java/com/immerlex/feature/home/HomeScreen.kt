@@ -2,10 +2,12 @@ package com.immerlex.feature.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
+import com.immerlex.app.ui.FishPill
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.core.schedule.HeatDay
 import com.immerlex.core.schedule.TrendDay
@@ -45,6 +48,7 @@ fun HomeScreen(
     onStartReading: () -> Unit,
     onStartQuiz: () -> Unit,
     onStartEarly: () -> Unit,
+    onOpenRoom: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     // 阅读页打完分回到这一栏，数字必须跟着重算，否则"今日完成"会停在进来时的值。
@@ -99,6 +103,8 @@ fun HomeScreen(
             )
         }
 
+        RoommateCard(state, onOpenRoom)
+
         FilledTonalButton(
             onClick = onStartQuiz,
             modifier = Modifier.fillMaxWidth(),
@@ -118,6 +124,42 @@ fun HomeScreen(
             enabled = !state.loading && state.earlyCount > 0,
         ) {
             Text(stringResource(R.string.home_early_count, state.earlyCount))
+        }
+    }
+}
+
+@Composable
+private fun RoommateCard(state: HomeState, onOpenRoom: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenRoom)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (state.roomMet) {
+                        stringResource(R.string.home_room_met, state.roomName)
+                    } else {
+                        stringResource(R.string.home_room_unmet)
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (state.roomMet) {
+                    Spacer(Modifier.weight(1f))
+                    FishPill(state.roomBalance)
+                }
+            }
+            if (state.roomMet && state.roomLine.isNotBlank()) {
+                Text(
+                    state.roomLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ImmerlexColors.Body,
+                )
+            }
         }
     }
 }

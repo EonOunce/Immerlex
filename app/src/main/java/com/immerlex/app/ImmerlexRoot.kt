@@ -34,6 +34,8 @@ import com.immerlex.feature.home.HomeScreen
 import com.immerlex.feature.home.HomeViewModel
 import com.immerlex.feature.quiz.QuizScreen
 import com.immerlex.feature.quiz.QuizViewModel
+import com.immerlex.feature.roommate.RoommateScreen
+import com.immerlex.feature.roommate.RoommateViewModel
 import com.immerlex.feature.wordbank.WordBankRepository
 import com.immerlex.feature.wordbank.WordBankScreen
 import com.immerlex.feature.reader.ReaderScreen
@@ -47,6 +49,7 @@ import com.immerlex.feature.wordbank.WordBankViewModel
 
 private const val ROUTE_ABOUT = "about"
 private const val ROUTE_BIBLE = "bible"
+private const val ROUTE_ROOM = "room"
 private const val ROUTE_QUIZ = "quiz/{mode}"
 
 private fun quizRoute(mode: QuizMode): String = "quiz/${mode.name}"
@@ -100,6 +103,7 @@ fun ImmerlexRoot() {
                 quiz = container.quizService,
                 chapterDao = container.db.chapterDao(),
                 prefs = container.prefs,
+                roommate = container.roommateService,
             )
         }
         initializer {
@@ -107,6 +111,9 @@ fun ImmerlexRoot() {
                 quiz = container.quizService,
                 prefs = container.prefs,
             )
+        }
+        initializer {
+            RoommateViewModel(container.roommateService)
         }
     }
 
@@ -156,6 +163,9 @@ fun ImmerlexRoot() {
                         onStartEarly = {
                             navController.navigate(quizRoute(QuizMode.EARLY)) { launchSingleTop = true }
                         },
+                        onOpenRoom = {
+                            navController.navigate(ROUTE_ROOM) { launchSingleTop = true }
+                        },
                     )
                 }
                 composable(Destinations.BANK.route) {
@@ -187,6 +197,10 @@ fun ImmerlexRoot() {
                 composable(ROUTE_BIBLE) {
                     val vm: BibleViewModel = viewModel(factory = appViewModelFactory)
                     BibleScreen(vm, onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_ROOM) {
+                    val vm: RoommateViewModel = viewModel(factory = appViewModelFactory)
+                    RoommateScreen(vm, onBack = { navController.popBackStack() })
                 }
                 composable(ROUTE_ABOUT) {
                     AboutScreen(onBack = { navController.popBackStack() })

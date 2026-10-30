@@ -33,6 +33,8 @@
     <string name="home_quiz_count">开始测验（%1$d 词）</string>
     <string name="home_quiz_empty">今天没有要测的词</string>
     <string name="home_early_count">提前复习（%1$d 个可练）</string>
+    <string name="home_room_met">去看看 %1$s</string>
+    <string name="home_room_unmet">认识一位室友</string>
 
     <string name="bank_title">词库</string>
     <string name="bank_count">共 %1$d 个词</string>
@@ -382,6 +384,93 @@
     <string name="about_shelf_title">关于书架与短篇</string>
     <string name="about_shelf_body">一本书就是一个题材；新建连载只需起个名字，AI 会把它当作写作题材（例如“宫斗”“修仙”）。\n短篇独立成篇，不接前面的章节；最多取今天队列里的 15 个词，写 1500–2500 字。\n写短篇时可以一句话说明这篇想写什么、也可以自己定腔调；不说就由 AI 自己定。重写这一篇时沿用同样的要求和同一批词。\n书架上长按短篇可以多选删除；删正文不动词库和复习进度。\n阅读位置会自动记住，重开应用回到同一本、同一章。</string>
 
+    <string name="about_room_title">关于室友</string>
+    <string name="about_room_body">小鱼干来自学习：当天每碰过一个词（学过或回忆过，同一个词只算一次），前 5 个每个 2 条，第 6–30 个每个 1 条，第 31 个起每两个词 1 条；满 5 个再 +5。评分后几秒内撤销的那次不算。\n小铺里它每天带三件礼物、两个摊子货；礼物买齐会解锁当天的一道菜，第一口它请，之后可以再做一份。它也卖自己写的东西。\n它也会送你东西：第一次收到你的礼物、隔了几天再见、连续 7 或 30 天、或者就是心情好；每天最多一件，七天最多两件，送过的东西会一直留在「它送的」里，不能卖也不值小鱼干。\n钱、价格、冷却和它送不送都由程序算，模型只写文字。台词本和每天的内容各让模型写一次；没有网络或没配密钥就用本地的句子，进房间不受影响。\n素材来自你选的文件夹里的 GIF，循环播放，按文件名里的动作归类；重复导入不会重复保存。素材只留在本机、不进备份，换手机后重新导入同一个文件夹就能接上；找不到的素材会在房间里提示。</string>
+
     <string name="about_bank_title">关于词库</string>
     <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n点列表里的单词能查看释义或删除。</string>
+
+    <!-- 室友 -->
+    <string name="room_title">室友</string>
+    <string name="room_loading">正在看看它在做什么…</string>
+    <string name="room_intro_title">认识它</string>
+    <string name="room_intro_lead">取个名字，选三样底色；剩下的它自己长。</string>
+    <string name="room_name_label">名字</string>
+    <string name="room_nature_label">性子</string>
+    <string name="room_pace_label">步调</string>
+    <string name="room_face_label">表情</string>
+    <string name="room_nature_direct">直来直去</string>
+    <string name="room_nature_indirect">话留半句</string>
+    <string name="room_nature_quiet">安安静静</string>
+    <string name="room_pace_slow">慢半拍</string>
+    <string name="room_pace_fast">说做就做</string>
+    <string name="room_pace_mood">看心情</string>
+    <string name="room_face_open">写在脸上</string>
+    <string name="room_face_plain">不动声色</string>
+    <string name="room_face_performs">爱演</string>
+    <string name="room_create">就这样</string>
+    <string name="room_touch">摸摸</string>
+    <string name="room_talk">说话</string>
+    <string name="room_outing">出门</string>
+    <string name="room_notebook">小本子</string>
+    <string name="room_shop">小铺</string>
+    <string name="room_assets">素材</string>
+    <string name="room_stage_empty">今天没找到它的动图。</string>
+    <string name="room_no_assets">点「素材」放一张它的动图</string>
+    <string name="room_missing_assets">有 %1$d 张素材找不到；重新导入原来的文件夹就能接上。</string>
+
+    <string name="room_gift_today">它把%1$s放在你手边</string>
+    <string name="room_gift_peek">看看</string>
+    <string name="room_gift_cause_day">%1$s · %2$s</string>
+    <string name="room_cause_first">第一次回礼</string>
+    <string name="room_cause_return">回礼</string>
+    <string name="room_cause_streak">记着你的坚持</string>
+    <string name="room_cause_absence">好久不见</string>
+    <string name="room_cause_whim">就是想送</string>
+
+    <string name="room_near_label">攒着买</string>
+    <string name="room_near_gap">还差 %1$d 条</string>
+    <string name="room_near_ready">够了</string>
+
+    <string name="room_day">%1$d 月 %2$d 日</string>
+    <string name="room_notebook_days">日子</string>
+    <string name="room_notebook_gifts">它送的 %1$d</string>
+    <string name="room_notebook_empty">本子上还什么也没写。</string>
+    <string name="room_notebook_gifts_empty">它还没送过你什么。</string>
+    <string name="room_notebook_work">写了《%1$s》</string>
+
+    <string name="room_shop_works">它写的</string>
+    <string name="room_shop_by_it">它写的一篇</string>
+    <string name="room_write_work">让它写一篇</string>
+    <string name="room_writing">正在写…</string>
+    <string name="room_shop_no_works">还没有上架的东西。</string>
+    <string name="room_shop_gifts">给它带点什么</string>
+    <string name="room_shop_stall">摊子上的</string>
+    <string name="room_shop_recipe">今天的一道菜</string>
+    <string name="room_shop_extra">再做一份</string>
+    <string name="room_shop_owned">已买过</string>
+    <string name="room_read">读</string>
+    <string name="room_shop_buy">买</string>
+    <string name="room_close">收起</string>
+
+    <string name="room_assets_count">已导入 %1$d 张</string>
+    <string name="room_assets_missing">有 %1$d 张找不到</string>
+    <string name="room_assets_hint">选一个文件夹，里面的 GIF 会按文件名里的动作分类。重复导入不会重复保存。</string>
+    <string name="room_importing">正在导入…</string>
+    <string name="room_import_assets">选文件夹导入</string>
+
+    <string name="room_bought_item">它收下了。</string>
+    <string name="room_too_poor">小鱼干不够。</string>
+    <string name="room_already_owned">已经买过了。</string>
+    <string name="room_offer_locked">还差一步。</string>
+    <string name="room_recipe_unlocked">它端出了%1$s</string>
+    <string name="room_recipe_made">又做了一份。</string>
+    <string name="room_missing_item">没有这件东西。</string>
+    <string name="room_work_failed">它今天没写出来，明天再试。</string>
+    <string name="room_work_today_done">今天已经写过一篇了。</string>
+    <string name="room_work_written">写好了《%1$s》</string>
+    <string name="room_bought_work">买下了《%1$s》</string>
+    <string name="room_import_error">没能读这个文件夹。</string>
+    <string name="room_import_done">看了 %1$d 张 GIF，导入 %2$d 张</string>
+    <string name="room_import_partial">有 %1$d 张没读进来。</string>
 </resources>

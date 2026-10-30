@@ -26,6 +26,11 @@ import com.immerlex.core.ocr.OcrEngine
 import com.immerlex.core.ocr.PdfOcr
 import com.immerlex.core.quiz.AiQuizEnricher
 import com.immerlex.core.quiz.QuizService
+import com.immerlex.core.roommate.RoommateAssetStore
+import com.immerlex.core.roommate.RoommateGenerator
+import com.immerlex.core.roommate.RoommateRepository
+import com.immerlex.core.roommate.RoommateService
+import com.immerlex.core.roommate.RoommateSettlement
 import com.immerlex.core.secret.SecretStore
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.ScheduleService
@@ -68,6 +73,7 @@ class ImmerlexApplication : Application(), ReminderHost, BackupHost {
 }
 
 class AppContainer(context: Context) {
+    private val appContext = context.applicationContext
     val db: ImmerlexDatabase by lazy { ImmerlexDatabase.create(context) }
     val dictionary: EcdictDictionary by lazy { EcdictDictionary.openFromAssets(context) }
     val prefs: AppPreferences by lazy { AppPreferences(context) }
@@ -87,7 +93,7 @@ class AppContainer(context: Context) {
     }
     val importRepository: ImportRepository by lazy { ImportRepository(db.wordDao(), dictionary) }
     val scheduleService: ScheduleService by lazy {
-        ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler)
+        ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler, db)
     }
     val dailyLoopService: DailyLoopService by lazy {
         DailyLoopService(db.dailyLoopDao(), db.reviewLogDao())
@@ -131,6 +137,27 @@ class AppContainer(context: Context) {
     val webDavPassword: SecretStore by lazy { SecretStore(context, "webdav_password") }
     val backupService: BackupService by lazy {
         BackupService(context, db, prefs, webDavPassword, db.backupRunDao())
+    }
+
+    // 室友：模型只写内容，规则、钱包和库存都在 core.roommate 里由事务落库。
+    val roommateRepository: RoommateRepository by lazy { RoommateRepository(db) }
+    val roommateAssetStore: RoommateAssetStore by lazy {
+        RoommateAssetStore(appContext, db.roommateAssetDao())
+    }
+    val roommateService: RoommateService by lazy {
+        RoommateService(
+            repo = roommateRepository,
+            settlement = RoommateSettlement(roommateRepository),
+            generator = RoommateGenerator(
+                clientFor = { OpenAiCompatClient(aiConfig()) },
+                aiUsable = { aiConfig().isUsable },
+            ),
+            store = roommateAssetStore,
+            streakProvider = { now ->
+                val queue = scheduleService.todaysQueue(now, prefs.dailyNewLimit)
+                dailyLoopService.info(now, queue.reviewWords.size + queue.newWords.size).streakDays
+            },
+        )
     }
 
     fun aiConfig(): AiConfig = AiConfig(

@@ -128,6 +128,101 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+/**
+ * v8 -> v9: 室友。全部是新表，不动任何老列——小说、复习、词库原样保留。
+ * `rm_ledger.dedupeKey` 唯一索引就是"同一个词同一天只发一次"的硬约束；
+ * `rm_evidence` 的复合主键保证一个习惯一天最多一条证据。
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_profile` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, " +
+                "`nature` TEXT NOT NULL, `pace` TEXT NOT NULL, `face` TEXT NOT NULL, " +
+                "`persona` TEXT NOT NULL, `createdAtSec` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_assets` (`assetId` TEXT NOT NULL, `fileName` TEXT NOT NULL, " +
+                "`tag` TEXT NOT NULL, `bytes` INTEGER NOT NULL, `importedAtSec` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`assetId`))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_assets_tag` ON `rm_assets` (`tag`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_events` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`dayKey` INTEGER NOT NULL, `atSec` INTEGER NOT NULL, `kind` TEXT NOT NULL, " +
+                "`body` TEXT NOT NULL, `assetId` TEXT, `choiceA` TEXT NOT NULL, `choiceB` TEXT NOT NULL, " +
+                "`chosen` INTEGER NOT NULL, `openLoop` INTEGER NOT NULL, `sourceId` INTEGER NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_events_dayKey` ON `rm_events` (`dayKey`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_events_atSec` ON `rm_events` (`atSec`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_ledger` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`atSec` INTEGER NOT NULL, `dayKey` INTEGER NOT NULL, `amount` INTEGER NOT NULL, " +
+                "`reason` TEXT NOT NULL, `dedupeKey` TEXT NOT NULL, `note` TEXT NOT NULL)",
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_rm_ledger_dedupeKey` ON `rm_ledger` (`dedupeKey`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_ledger_dayKey` ON `rm_ledger` (`dayKey`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_habits` (`habitId` TEXT NOT NULL, `label` TEXT NOT NULL, " +
+                "`learnedDay` INTEGER NOT NULL, `learnedAtSec` INTEGER NOT NULL, PRIMARY KEY(`habitId`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_evidence` (`habitId` TEXT NOT NULL, `dayKey` INTEGER NOT NULL, " +
+                "`eventId` INTEGER NOT NULL, `atSec` INTEGER NOT NULL, PRIMARY KEY(`habitId`, `dayKey`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_inventory` (`itemId` TEXT NOT NULL, " +
+                "`acquiredAtSec` INTEGER NOT NULL, `used` INTEGER NOT NULL, PRIMARY KEY(`itemId`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_works` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`title` TEXT NOT NULL, `body` TEXT NOT NULL, `price` INTEGER NOT NULL, " +
+                "`createdAtSec` INTEGER NOT NULL, `purchased` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_state` (`id` INTEGER NOT NULL, `lastSettledDay` INTEGER NOT NULL, " +
+                "`lastEpisodeDay` INTEGER NOT NULL, `lastAiDay` INTEGER NOT NULL, " +
+                "`lastVisitSec` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+    }
+}
+
+/**
+ * v9 -> v10: 室友开始过日子。台词本、每日内容包、铺子里的商品、它送的礼物各占一张新表；
+ * `rm_state` 只多一个"台词本已经问过模型"的标记。老账本、老事件、老素材原样保留。
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_lines` (`action` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, " +
+                "`line` TEXT NOT NULL, PRIMARY KEY(`action`, `ordinal`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_daily` (`dayKey` INTEGER NOT NULL, `source` TEXT NOT NULL, " +
+                "`coquetry` TEXT NOT NULL, `petGiftName` TEXT NOT NULL, `petGiftStory` TEXT NOT NULL, " +
+                "`petGiftLine` TEXT NOT NULL, `coquetryUsed` INTEGER NOT NULL DEFAULT 0, " +
+                "`createdAtSec` INTEGER NOT NULL, PRIMARY KEY(`dayKey`))",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_offers` (`offerId` TEXT NOT NULL, `dayKey` INTEGER NOT NULL, " +
+                "`channel` TEXT NOT NULL, `name` TEXT NOT NULL, `story` TEXT NOT NULL, " +
+                "`reaction` TEXT NOT NULL, `followUp` TEXT NOT NULL, `price` INTEGER NOT NULL, " +
+                "`purchased` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `requires` TEXT NOT NULL, " +
+                "`source` TEXT NOT NULL, `createdAtSec` INTEGER NOT NULL, PRIMARY KEY(`offerId`))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_offers_dayKey` ON `rm_offers` (`dayKey`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_offers_channel` ON `rm_offers` (`channel`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `rm_pet_gifts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`dayKey` INTEGER NOT NULL, `atSec` INTEGER NOT NULL, `name` TEXT NOT NULL, " +
+                "`story` TEXT NOT NULL, `line` TEXT NOT NULL, `cause` TEXT NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_rm_pet_gifts_dayKey` ON `rm_pet_gifts` (`dayKey`)")
+        db.execSQL("ALTER TABLE `rm_state` ADD COLUMN `linebookAiDone` INTEGER NOT NULL DEFAULT 0")
+        // 固定商品目录被每日小铺取代；旧购买记录仍在 rm_events 里，库存表不再有含义。
+        db.execSQL("DROP TABLE IF EXISTS `rm_inventory`")
+    }
+}
+
 val MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -136,4 +231,6 @@ val MIGRATIONS = arrayOf(
     MIGRATION_5_6,
     MIGRATION_6_7,
     MIGRATION_7_8,
+    MIGRATION_8_9,
+    MIGRATION_9_10,
 )

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.quiz.QuizService
+import com.immerlex.core.roommate.RoommateService
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.HeatDay
 import com.immerlex.core.schedule.ScheduleService
@@ -30,6 +31,10 @@ data class HomeState(
     val trend: List<TrendDay> = emptyList(),
     val quizCount: Int = 0,
     val earlyCount: Int = 0,
+    val roomMet: Boolean = false,
+    val roomName: String = "",
+    val roomLine: String = "",
+    val roomBalance: Int = 0,
 )
 
 /**
@@ -42,6 +47,7 @@ class HomeViewModel(
     private val quiz: QuizService,
     private val chapterDao: ChapterDao,
     private val prefs: AppPreferences,
+    private val roommate: RoommateService,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -60,6 +66,7 @@ class HomeViewModel(
         val queue = schedule.todaysQueue(now, limit)
         val info = dailyLoop.info(now, queue.reviewWords.size + queue.newWords.size)
         val latest = chapterDao.latest(prefs.genre)
+        val room = roommate.hook(now)
         _state.value = HomeState(
             loading = false,
             due = info.dueCount,
@@ -76,6 +83,10 @@ class HomeViewModel(
             // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
             quizCount = quiz.dueCandidateIds(now, limit).size,
             earlyCount = quiz.earlyCandidates(now).size,
+            roomMet = room.met,
+            roomName = room.name,
+            roomLine = room.line,
+            roomBalance = room.balance,
         )
     }
 }

@@ -1,8 +1,10 @@
 package com.immerlex.core.schedule
 
+import androidx.room.withTransaction
 import com.immerlex.core.db.FSRS_STATE_LEARNING
 import com.immerlex.core.db.FSRS_STATE_RELEARNING
 import com.immerlex.core.db.FSRS_STATE_REVIEW
+import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogDao
@@ -62,6 +64,8 @@ class ScheduleService(
     private val wordDao: WordDao,
     private val logDao: ReviewLogDao,
     private val scheduler: Scheduler,
+    /** 生产环境传入，把"改卡片 + 写日志"放进同一个 Room 事务；无库的单测可省略。 */
+    private val database: ImmerlexDatabase? = null,
 ) : WordQueue {
 
     // 阅读页的双击与测验的快速翻页都可能并发进来；先读日志再写日志必须串行，
@@ -138,11 +142,12 @@ class ScheduleService(
             lapses = earlier.count { it.rating == Rating.AGAIN.value },
             intervalDays = earlier.lastOrNull()?.scheduledDays ?: 0,
         )
-        wordDao.update(restored)
-        logDao.deleteById(log.id)
+        write {
+            wordDao.update(restored)
+            logDao.deleteById(log.id)
+        }
         UndoResult(restored, log.kind)
     }
-
     /** Interval a rating would produce, without touching the database. */
     fun preview(word: WordEntity, rating: Rating, now: Instant = Instant.now()): Int =
         scheduler.reviewCard(word.toCard(now), rating, now).log.scheduledDays
@@ -171,10 +176,16 @@ class ScheduleService(
         at: Instant,
     ): GradeResult {
         val (updated, log) = evaluate(word, rating, source, at, kind, questionType)
-        wordDao.update(updated)
-        val logId = logDao.insert(log)
+        val logId = write {
+            wordDao.update(updated)
+            logDao.insert(log)
+        }
         return GradeResult(updated, kind, logId, at.epochSecond + UNDO_WINDOW_SECONDS)
     }
+
+    /** 卡片与日志必须同生同死：崩在两次写之间会留下"分了级但没有记录"的卡片。 */
+    private suspend fun <T> write(block: suspend () -> T): T =
+        if (database != null) database.withTransaction { block() } else block()
 
     private fun isDue(word: WordEntity, now: Instant): Boolean =
         word.dueEpochSec == null || word.dueEpochSec <= now.epochSecond
