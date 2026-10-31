@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizQuestion
+import com.immerlex.core.quiz.QuizResume
+import com.immerlex.core.quiz.QuizResumeStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.settings.AppPreferences
@@ -14,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 enum class QuizPhase { LOADING, EMPTY, QUESTION, DONE, ERROR }
@@ -56,6 +60,7 @@ data class QuizState(
 class QuizViewModel(
     private val quiz: QuizService,
     private val prefs: AppPreferences,
+    private val resume: QuizResumeStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuizState())
@@ -67,13 +72,25 @@ class QuizViewModel(
     private var practiceQuestions: List<QuizQuestion> = emptyList()
     private var excluded: Set<Long> = emptySet()
     private var started = false
+    private val saveLock = Mutex()
 
     /** 路由进入时调用一次；配置变更后重复调用不能把进度清掉。 */
     fun start(mode: QuizMode) {
         if (started) return
         started = true
         _state.value = QuizState(phase = QuizPhase.LOADING, mode = mode)
-        plan(mode)
+        viewModelScope.launch {
+            val saved = try {
+                resume.load(mode)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 读不到就当没存过：重排一组，不能因为一行坏数据把用户卡在"正在准备题目"。
+                null
+            }
+            if (saved != null && restore(saved)) return@launch
+            plan(mode)
+        }
     }
 
     fun answer(index: Int) {
@@ -82,14 +99,16 @@ class QuizViewModel(
         if (current.answered || index !in question.options.indices) return
         val correct = question.options[index].correct
         _state.value = current.afterAnswer(index, correct)
-        if (current.practice) return
-        if (!correct) {
-            wrong += question
-            if (alternatives.containsKey(question.wordId)) {
-                _state.value = _state.value.copy(practiceQueued = true)
+        if (!current.practice) {
+            if (!correct) {
+                wrong += question
+                if (alternatives.containsKey(question.wordId)) {
+                    _state.value = _state.value.copy(practiceQueued = true)
+                }
             }
+            viewModelScope.launch { quiz.record(question, correct) }
         }
-        viewModelScope.launch { quiz.record(question, correct) }
+        persist()
     }
 
     fun next() {
@@ -106,6 +125,7 @@ class QuizViewModel(
                 chosen = null,
                 correct = false,
             )
+            persist()
             return
         }
         startPracticeOrFinish()
@@ -171,6 +191,7 @@ class QuizViewModel(
         }
         if (session.isEmpty) {
             _state.value = _state.value.copy(phase = QuizPhase.EMPTY, question = null)
+            clearSaved(mode)
             return@launch
         }
         questions = session.questions
@@ -185,6 +206,7 @@ class QuizViewModel(
             roundTotal = questions.size,
             group = _state.value.group,
         )
+        persist()
     }
 
     private fun publishStage(stage: QuizStage) {
@@ -209,6 +231,7 @@ class QuizViewModel(
             wrongCount = wrong.size,
             practiceQueued = false,
         )
+        persist()
     }
 
     private fun showPractice(index: Int) {
@@ -218,6 +241,7 @@ class QuizViewModel(
             chosen = null,
             correct = false,
         )
+        persist()
     }
 
     private fun finish() {
@@ -227,5 +251,66 @@ class QuizViewModel(
             practice = false,
             wrongCount = wrong.size,
         )
+        clearSaved(_state.value.mode)
+    }
+
+    /** 回到上次没做完的那一组：题目与进度原样复原，作答记录早已写过，不重考不重记。 */
+    private fun restore(saved: QuizResume): Boolean {
+        if (saved.questions.isEmpty()) return false
+        questions = saved.questions
+        alternatives = saved.alternatives
+        practiceQuestions = if (saved.inPractice) {
+            saved.wrongIds.mapNotNull { alternatives[it] }
+        } else {
+            emptyList()
+        }
+        wrong.clear()
+        wrong += saved.wrongIds.mapNotNull { id -> saved.questions.firstOrNull { it.wordId == id } }
+        excluded = saved.excludedIds
+        val current = if (saved.inPractice) practiceQuestions[saved.index] else questions[saved.index]
+        _state.value = QuizState(
+            phase = QuizPhase.QUESTION,
+            mode = saved.mode,
+            question = current,
+            index = saved.index,
+            total = if (saved.inPractice) practiceQuestions.size else questions.size,
+            chosen = saved.chosen,
+            correct = saved.correct,
+            correctCount = saved.correctCount,
+            roundTotal = questions.size,
+            wrongCount = wrong.size,
+            group = saved.group,
+            practice = saved.inPractice,
+            practiceQueued = !saved.inPractice && wrong.any { alternatives.containsKey(it.wordId) },
+        )
+        return true
+    }
+
+    private fun snapshot(): QuizResume? {
+        val current = _state.value
+        if (current.phase != QuizPhase.QUESTION) return null
+        return QuizResume(
+            mode = current.mode,
+            questions = questions,
+            alternatives = alternatives,
+            wrongIds = wrong.map { it.wordId },
+            excludedIds = excluded,
+            index = current.index,
+            inPractice = current.practice,
+            chosen = current.chosen,
+            correct = current.correct,
+            correctCount = current.correctCount,
+            group = current.group,
+        )
+    }
+
+    /** 按提问顺序排队写库：后一次状态一定盖住前一次，不会出现旧进度把新进度写回去。 */
+    private fun persist() {
+        val saved = snapshot() ?: return
+        viewModelScope.launch { saveLock.withLock { resume.save(saved) } }
+    }
+
+    private fun clearSaved(mode: QuizMode) {
+        viewModelScope.launch { saveLock.withLock { resume.clear(mode) } }
     }
 }

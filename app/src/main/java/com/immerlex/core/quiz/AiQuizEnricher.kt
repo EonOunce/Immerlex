@@ -4,7 +4,7 @@ import com.immerlex.core.ai.LlmClient
 import com.immerlex.core.db.WordEntity
 import kotlinx.coroutines.CancellationException
 
-/** 一次会话最多补这么多词，避免把整本词库塞进 prompt。 */
+/** 一次会话最多补这么多词，避免把整本词库塞进 prompt；上限跟一组题数一致，40 个词一次问完。 */
 class AiQuizEnricher(
     private val clientFor: () -> LlmClient,
     private val aiUsable: () -> Boolean = { true },
@@ -29,7 +29,7 @@ class AiQuizEnricher(
 
     private companion object {
         /** 到点就掐断；慢的网关再等也不会在几十秒内变快。 */
-        const val TIMEOUT_MS = 20_000L
-        const val MAX_WORDS = 30
+        const val TIMEOUT_MS = 45_000L
+        const val MAX_WORDS = 40
     }
 }

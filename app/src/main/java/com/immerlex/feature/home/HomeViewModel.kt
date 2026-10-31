@@ -3,6 +3,8 @@ package com.immerlex.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.immerlex.core.db.ChapterDao
+import com.immerlex.core.quiz.QuizMode
+import com.immerlex.core.quiz.QuizResumeStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.roommate.RoommateService
 import com.immerlex.core.schedule.DailyLoopService
@@ -30,6 +32,7 @@ data class HomeState(
     val heat: List<HeatDay> = emptyList(),
     val trend: List<TrendDay> = emptyList(),
     val quizCount: Int = 0,
+    val quizResumable: Boolean = false,
     val earlyCount: Int = 0,
     val roomMet: Boolean = false,
     val roomName: String = "",
@@ -45,6 +48,7 @@ class HomeViewModel(
     private val dailyLoop: DailyLoopService,
     private val schedule: ScheduleService,
     private val quiz: QuizService,
+    private val resume: QuizResumeStore,
     private val chapterDao: ChapterDao,
     private val prefs: AppPreferences,
     private val roommate: RoommateService,
@@ -81,8 +85,10 @@ class HomeViewModel(
             heat = dailyLoop.heatGrid(now),
             trend = dailyLoop.trend(now),
             // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
-            // 一组最多 20 题，入口显示的就是这一组能测多少，不是候选池总数。
+            // 一组最多 40 题，入口显示的就是这一组能测多少，不是候选池总数。
             quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),
+            // 答完最后一题却没点完成时候选已经清零，入口只有靠存下的会话才还能进去。
+            quizResumable = resume.has(QuizMode.DUE),
             earlyCount = quiz.earlyCandidates(now).size,
             roomMet = room.met,
             roomName = room.name,

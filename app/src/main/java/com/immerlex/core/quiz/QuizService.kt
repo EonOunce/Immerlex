@@ -220,8 +220,8 @@ class QuizService(
         now.atZone(zone).toLocalDate().atStartOfDay(zone).toEpochSecond()
 
     companion object {
-        /** 一组最多 20 题：48 个到期词一次全塞进去，AI 慢的时候用户会以为卡死。 */
-        const val SESSION_LIMIT = 20
+        /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */
+        const val SESSION_LIMIT = 40
         const val EARLY_GROUP_SIZE = 5
         const val SOURCE_QUIZ = "quiz"
         private const val POOL_SIZE = 200

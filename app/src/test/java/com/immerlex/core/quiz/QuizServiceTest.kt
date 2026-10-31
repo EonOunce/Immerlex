@@ -103,14 +103,14 @@ class QuizServiceTest {
     }
 
     @Test
-    fun aDueSessionStopsAtTwentyWordsAndKeepsTheMostOverdue() = runBlocking {
+    fun aDueSessionStopsAtFortyWordsAndKeepsTheMostOverdue() = runBlocking {
         val (service, words, logs) = parts()
-        val ids = (1..25).map { index -> seedDue(words, logs, "w$index", daysOverdue = index.toLong()) }
+        val ids = (1..45).map { index -> seedDue(words, logs, "w$index", daysOverdue = index.toLong()) }
 
         val session = service.planDue(now, dailyNewLimit = 10, seed = 7)
 
         assertEquals(QuizService.SESSION_LIMIT, session.questions.size)
-        assertEquals("逾期最久的 20 个留下，剩下 5 个明天再考", ids.drop(5).toSet(), session.wordIds)
+        assertEquals("逾期最久的 40 个留下，剩下一组再考", ids.drop(5).toSet(), session.wordIds)
     }
 
     @Test

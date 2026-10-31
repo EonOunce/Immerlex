@@ -220,3 +220,13 @@ data class QuizMaterialEntity(
     val distractors: String = "[]",
     val createdAtSec: Long,
 )
+
+/**
+ * 没做完的那一组题：题目、做到第几题、已答对几题都塞进 [payload]。
+ * 主键是 `DUE` / `EARLY`，两种入口各留一份，互不覆盖；做完或换组时按入口删除。
+ */
+@Entity(tableName = "quiz_session")
+data class QuizSessionEntity(
+    @PrimaryKey val mode: String,
+    val payload: String,
+)

@@ -378,3 +378,18 @@ interface QuizMaterialDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<QuizMaterialEntity>)
 }
+
+@Dao
+interface QuizSessionDao {
+    @Query("SELECT * FROM quiz_session WHERE mode = :mode")
+    suspend fun byMode(mode: String): QuizSessionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: QuizSessionEntity)
+
+    @Query("DELETE FROM quiz_session WHERE mode = :mode")
+    suspend fun delete(mode: String)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM quiz_session WHERE mode = :mode)")
+    suspend fun exists(mode: String): Boolean
+}

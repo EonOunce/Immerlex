@@ -105,6 +105,7 @@ fun ImmerlexRoot() {
                 dailyLoop = container.dailyLoopService,
                 schedule = container.scheduleService,
                 quiz = container.quizService,
+                resume = container.quizResumeStore,
                 chapterDao = container.db.chapterDao(),
                 prefs = container.prefs,
                 roommate = container.roommateService,
@@ -114,6 +115,7 @@ fun ImmerlexRoot() {
             QuizViewModel(
                 quiz = container.quizService,
                 prefs = container.prefs,
+                resume = container.quizResumeStore,
             )
         }
         initializer {

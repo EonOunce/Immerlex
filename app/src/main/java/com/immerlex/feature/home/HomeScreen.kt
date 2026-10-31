@@ -108,13 +108,13 @@ fun HomeScreen(
         FilledTonalButton(
             onClick = onStartQuiz,
             modifier = Modifier.fillMaxWidth(),
-            enabled = !state.loading && state.quizCount > 0,
+            enabled = !state.loading && (state.quizCount > 0 || state.quizResumable),
         ) {
             Text(
-                if (state.quizCount > 0) {
-                    stringResource(R.string.home_quiz_count, state.quizCount)
-                } else {
-                    stringResource(R.string.home_quiz_empty)
+                when {
+                    state.quizResumable -> stringResource(R.string.home_quiz_resume)
+                    state.quizCount > 0 -> stringResource(R.string.home_quiz_count, state.quizCount)
+                    else -> stringResource(R.string.home_quiz_empty)
                 },
             )
         }

@@ -26,6 +26,7 @@ import com.immerlex.core.ocr.OcrEngine
 import com.immerlex.core.ocr.PdfOcr
 import com.immerlex.core.quiz.AiQuizEnricher
 import com.immerlex.core.quiz.QuizMaterialStore
+import com.immerlex.core.quiz.QuizResumeStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.roommate.RoommateAssetStore
 import com.immerlex.core.roommate.RoommateGenerator
@@ -114,6 +115,7 @@ class AppContainer(context: Context) {
             material = QuizMaterialStore(db.quizMaterialDao()),
         )
     }
+    val quizResumeStore: QuizResumeStore by lazy { QuizResumeStore(db.quizSessionDao()) }
     val storyBible: StoryBibleRepository by lazy {
         StoryBibleRepository(db.storyBibleDao(), db.bibleEntryDao(), db.characterStateDao(), db.chapterDao())
     }
