@@ -25,6 +25,7 @@ import com.immerlex.core.ocr.MlKitOcr
 import com.immerlex.core.ocr.OcrEngine
 import com.immerlex.core.ocr.PdfOcr
 import com.immerlex.core.quiz.AiQuizEnricher
+import com.immerlex.core.quiz.QuizMaterialStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.roommate.RoommateAssetStore
 import com.immerlex.core.roommate.RoommateGenerator
@@ -110,6 +111,7 @@ class AppContainer(context: Context) {
                 clientFor = { OpenAiCompatClient(aiConfig()) },
                 aiUsable = { aiConfig().isUsable },
             ),
+            material = QuizMaterialStore(db.quizMaterialDao()),
         )
     }
     val storyBible: StoryBibleRepository by lazy {

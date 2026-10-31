@@ -15,6 +15,9 @@ import com.immerlex.core.db.KIND_SERIAL
 import com.immerlex.core.db.KIND_SHORT
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.LOG_SOURCE_READER
+import com.immerlex.core.db.QuizMaterialDao
+import com.immerlex.core.db.QuizMaterialEntity
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.ReviewMoment
@@ -103,6 +106,19 @@ internal class FakeReviewLogDao : ReviewLogDao {
         .map { it.wordId }
         .distinct()
 
+    override suspend fun readerLearnedIdsAmong(wordIds: List<Long>) = items
+        .filter { it.source == LOG_SOURCE_READER && it.wordId in wordIds }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun readerRecalledIdsSinceAmong(wordIds: List<Long>, sinceSec: Long) = items
+        .filter {
+            it.kind == LOG_KIND_RECALL && it.source == LOG_SOURCE_READER &&
+                it.reviewEpochSec >= sinceSec && it.wordId in wordIds
+        }
+        .map { it.wordId }
+        .distinct()
+
     override suspend fun update(entity: ReviewLogEntity) {
         val index = items.indexOfFirst { it.id == entity.id }
         check(index >= 0) { "amend targeted a log that is not in the table" }
@@ -138,6 +154,16 @@ internal class FakeDictionary(private val entries: Map<String, DictEntry> = empt
     companion object {
         fun entry(word: String, translation: String, phonetic: String = "", definition: String = "") =
             word.lowercase() to DictEntry(word, phonetic, translation, definition)
+    }
+}
+
+internal class FakeQuizMaterialDao : QuizMaterialDao {
+    val items = mutableMapOf<Long, QuizMaterialEntity>()
+
+    override suspend fun byWordIds(wordIds: List<Long>) = wordIds.mapNotNull { items[it] }
+
+    override suspend fun upsertAll(entities: List<QuizMaterialEntity>) {
+        entities.forEach { items[it.wordId] = it }
     }
 }
 
@@ -266,7 +292,11 @@ internal class FakeTrickyDao : TrickyDao {
         links.removeAll { it.wordA == word || it.wordB == word }
     }
 
+    override suspend fun allLinks() = links.sortedWith(compareBy({ it.wordA }, { it.wordB }))
+
     override suspend fun linksOf(word: String) = links.filter { it.wordA == word || it.wordB == word }
+
+    override suspend fun linksAmong(words: List<String>) = links.filter { it.wordA in words || it.wordB in words }
 
     override suspend fun insertLink(entity: TrickyLinkEntity) {
         if (links.none { it.wordA == entity.wordA && it.wordB == entity.wordB }) links += entity

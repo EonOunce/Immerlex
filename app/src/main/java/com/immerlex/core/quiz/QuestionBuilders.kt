@@ -18,19 +18,7 @@ class EnToZhBuilder : QuestionBuilder {
     override val type = QuizType.EN_ZH
 
     override fun build(word: WordEntity, context: QuestionContext): QuizQuestion? {
-        val correct = word.translation.trim()
-        if (correct.isBlank()) return null
-        val extra = context.enrichment.of(word)?.distractors.orEmpty()
-            .map { Choice(it.zh.trim(), it.zh.trim()) }
-        val options = optionsOf(
-            correct = Choice(correct, correct),
-            candidates = context.pool
-                .filter { it.id != word.id }
-                .map { Choice(it.translation.trim(), it.translation.trim()) }
-                .filter { it.text.isNotBlank() },
-            extra = extra,
-            seed = context.seed + word.id,
-        ) ?: return null
+        val options = optionsFor(word, context, Face.GLOSS) ?: return null
         return QuizQuestion(
             wordId = word.id,
             word = word.word,
@@ -106,45 +94,66 @@ val DEFAULT_QUESTION_BUILDERS: List<QuestionBuilder> = listOf(
     DefinitionBuilder(),
 )
 
-private fun wordOptions(word: WordEntity, context: QuestionContext): List<QuizOption>? {
-    val correctGloss = word.translation.trim().ifBlank { word.definition.trim() }
-    if (correctGloss.isBlank()) return null
-    val extra = context.enrichment.of(word)?.distractors.orEmpty()
-        .map { Choice(it.word.trim(), it.zh.trim()) }
-    return optionsOf(
-        correct = Choice(word.word, correctGloss),
-        candidates = context.pool
-            .filter { it.id != word.id }
-            .map { Choice(it.word, it.translation.trim().ifBlank { it.definition.trim() }) }
-            .filter { it.text.isNotBlank() && it.gloss.isNotBlank() },
-        extra = extra.filter { it.text.isNotBlank() && it.gloss.isNotBlank() },
-        seed = context.seed + word.id,
-    )
-}
+private fun wordOptions(word: WordEntity, context: QuestionContext): List<QuizOption>? =
+    optionsFor(word, context, Face.WORD)
 
-private fun optionsOf(
-    correct: Choice,
-    candidates: List<Choice>,
-    extra: List<Choice>,
-    seed: Long,
-): List<QuizOption>? {
-    val correctKey = correct.text.trim().lowercase()
-    val distractors = (candidates + extra)
-        .filter { it.text.isNotBlank() && it.gloss.isNotBlank() }
-        .filter { it.text.trim().lowercase() != correctKey }
+/** 选项的面：英文单词本身，还是中文释义——两种题型只是取的面不同，来源顺序一样。 */
+private enum class Face { WORD, GLOSS }
+
+private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): List<QuizOption>? {
+    val correct = correctChoice(word, face) ?: return null
+    val key = correct.text.trim().lowercase()
+    val confusable = context.confusables[word.id].orEmpty()
+        .mapNotNull { choice(it.word, it.zh, face) }
+        .filterNot { it.text.trim().lowercase() == key }
         .distinctBy { it.text.trim().lowercase() }
-        .sortedBy { stableHash(it.text.trim().lowercase(), seed) }
-        .take(MAX_DISTRACTORS)
-    if (distractors.isEmpty()) return null
-    return (listOf(correct) + distractors)
-        .sortedBy { stableHash(it.text.trim().lowercase(), seed + 31) }
+    val ai = context.enrichment.of(word)?.distractors.orEmpty().mapNotNull { choice(it.word, it.zh, face) }
+    val bank = context.pool
+        .filter { it.id != word.id }
+        .mapNotNull { choice(it.word, it.translation, face) }
+    val kept = confusable.take(KEEP_CONFUSABLES)
+    val fixed = kept.map { it.text.trim().lowercase() }.toSet()
+    val rest = (confusable.drop(kept.size) + ai + bank)
+        .filterNot { val text = it.text.trim().lowercase(); text == key || text in fixed }
+        .distinctBy { it.text.trim().lowercase() }
+    val picked = kept + rotate(rest, context.attempts[word.id] ?: 0, MAX_DISTRACTORS - kept.size)
+    if (picked.isEmpty()) return null
+    return (listOf(correct) + picked)
+        .sortedBy { stableHash(it.text.trim().lowercase(), context.seed + 31) }
         .map {
             QuizOption(
                 text = it.text,
                 gloss = it.gloss,
-                correct = it.text == correct.text,
+                correct = it.text.trim().lowercase() == key,
             )
         }
+}
+
+private fun correctChoice(word: WordEntity, face: Face): Choice? {
+    val zh = word.translation.trim()
+    if (zh.isBlank()) return null
+    return when (face) {
+        Face.WORD -> Choice(word.word.trim(), zh.ifBlank { word.definition.trim() })
+        Face.GLOSS -> Choice(zh, zh)
+    }
+}
+
+private fun choice(en: String, zh: String, face: Face): Choice? {
+    val word = en.trim()
+    val gloss = zh.trim()
+    if (word.isEmpty() || gloss.isEmpty()) return null
+    return if (face == Face.WORD) Choice(word, gloss) else Choice(gloss, gloss)
+}
+
+/**
+ * 同一个词第 N 次被考，就从候选池的第 N×3 格开始抽，抽完一圈再回头。
+ * 用户标过的易混词最多固定留两个，其余位置每次都换——避免连着几次看到同一道题。
+ */
+private fun rotate(items: List<Choice>, attempt: Int, size: Int): List<Choice> {
+    if (size <= 0 || items.isEmpty()) return emptyList()
+    if (items.size <= size) return items
+    val start = Math.floorMod(attempt * size, items.size)
+    return (items.drop(start) + items.take(start)).distinctBy { it.text.lowercase() }.take(size)
 }
 
 private fun stableHash(text: String, seed: Long): Long =
@@ -157,3 +166,4 @@ private fun blankWord(text: String, word: String): String? {
 }
 
 private const val MAX_DISTRACTORS = 3
+private const val KEEP_CONFUSABLES = 2

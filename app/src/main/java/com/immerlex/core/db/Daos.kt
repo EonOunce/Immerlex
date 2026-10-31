@@ -184,6 +184,23 @@ interface ReviewLogDao {
     @Query("SELECT DISTINCT wordId FROM review_logs WHERE reviewEpochSec >= :sinceSec")
     suspend fun touchedWordIdsSince(sinceSec: Long): List<Long>
 
+    /**
+     * 阅读页的颜色只听阅读页自己的记录：测验和提前复习排的是同一个词，
+     * 但不改它在正文里的颜色。所以这两个查询都钉死 `source = 'reader'`。
+     */
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE source = 'reader' AND wordId IN (:wordIds)",
+    )
+    suspend fun readerLearnedIdsAmong(wordIds: List<Long>): List<Long>
+
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE kind = 'recall' AND source = 'reader' AND reviewEpochSec >= :sinceSec " +
+            "AND wordId IN (:wordIds)",
+    )
+    suspend fun readerRecalledIdsSinceAmong(wordIds: List<Long>, sinceSec: Long): List<Long>
+
     @Query(
         """
         SELECT COUNT(*) as total,
@@ -333,8 +350,15 @@ interface TrickyDao {
     @Query("DELETE FROM tricky_words WHERE word = :word")
     suspend fun delete(word: String)
 
+    @Query("SELECT * FROM tricky_links ORDER BY wordA, wordB")
+    suspend fun allLinks(): List<TrickyLinkEntity>
+
     @Query("SELECT * FROM tricky_links WHERE wordA = :word OR wordB = :word")
     suspend fun linksOf(word: String): List<TrickyLinkEntity>
+
+    /** 测验一次要一批词的易混关系，逐词查会变成 N 次往返。 */
+    @Query("SELECT * FROM tricky_links WHERE wordA IN (:words) OR wordB IN (:words)")
+    suspend fun linksAmong(words: List<String>): List<TrickyLinkEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertLink(entity: TrickyLinkEntity)
@@ -344,4 +368,13 @@ interface TrickyDao {
 
     @Query("DELETE FROM tricky_links WHERE wordA = :word OR wordB = :word")
     suspend fun deleteLinksOf(word: String)
+}
+
+@Dao
+interface QuizMaterialDao {
+    @Query("SELECT * FROM quiz_material WHERE wordId IN (:wordIds)")
+    suspend fun byWordIds(wordIds: List<Long>): List<QuizMaterialEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(entities: List<QuizMaterialEntity>)
 }

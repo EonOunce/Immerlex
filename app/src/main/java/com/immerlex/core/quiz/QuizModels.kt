@@ -55,5 +55,9 @@ data class QuestionContext(
     /** 小写单词 → 已挖空的句子，来自最近写过的章节。 */
     val sentences: Map<String, List<String>> = emptyMap(),
     val enrichment: QuizEnrichment = QuizEnrichment(),
+    /** 用户手动标过的易混词，比任何候选池都优先。 */
+    val confusables: Map<Long, List<EnrichedDistractor>> = emptyMap(),
+    /** 这个词被考过几次——决定这一轮从候选池的哪一格开始抽选项。 */
+    val attempts: Map<Long, Int> = emptyMap(),
     val seed: Long = 0,
 )

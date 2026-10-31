@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.schedule.ReaderTone
 import com.immerlex.core.settings.Appearance
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
@@ -39,6 +40,13 @@ data class MasteryTones(
         Mastery.NEW -> new
         Mastery.LEARNING -> learning
         Mastery.MASTERED -> mastered
+    }
+
+    /** 正文里的第三种颜色借同一对蓝：词库列表问"掌握没有"，正文问"今天该不该复习"。 */
+    fun of(tone: ReaderTone): Pair<Color, Color> = when (tone) {
+        ReaderTone.NEW -> new
+        ReaderTone.LEARNED -> learning
+        ReaderTone.DUE -> mastered
     }
 }
 

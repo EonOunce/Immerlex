@@ -47,7 +47,7 @@
     <string name="bank_import_txt">导入 txt</string>
     <string name="bank_import_image">截图导入</string>
     <string name="bank_import_pdf">导入 PDF</string>
-    <string name="bank_export">导出 CSV</string>
+    <string name="bank_export">导出</string>
     <string name="bank_export_done">已导出 %1$d 个词，可在 Anki 或表格软件里导入</string>
     <string name="bank_export_failed">导出失败：写不进所选位置，换一个文件夹试试</string>
     <string name="bank_ocr_failed">识别失败，请换一张更清晰的截图</string>
@@ -262,6 +262,18 @@
     <string name="tricky_duplicate">这个词已经在易混里了</string>
     <string name="tricky_no_gloss">（没查到释义）</string>
     <string name="tricky_remove">取消关联</string>
+    <string name="bank_tricky">易混词管理</string>
+    <string name="tricky_page_title">易混词管理</string>
+    <string name="tricky_page_empty">还没有易混词。用「批量新增」一行加一组，或在阅读页点词标为易错。</string>
+    <string name="tricky_group_size">%1$d 个词</string>
+    <string name="tricky_group_add">加词</string>
+    <string name="tricky_member_remove">移出这一组</string>
+    <string name="tricky_word_delete">删除这个易错词</string>
+    <string name="tricky_batch">批量新增</string>
+    <string name="tricky_batch_label">一行一组</string>
+    <string name="tricky_batch_hint">同一组的词用「,」或「，」隔开，不同组各占一行。</string>
+    <string name="tricky_batch_empty">每行至少要写两个词</string>
+    <string name="tricky_groups_added">已加入 %1$d 组</string>
     <string name="reader_no_gloss">（暂无释义）</string>
     <string name="reader_not_in_bank">这个词不在你的词库里，只读不排复习</string>
     <string name="reader_cannot_grade">把它加入词库后才能安排复习</string>
@@ -289,9 +301,7 @@
     <string name="reader_note_learning">学习模式不计分</string>
     <string name="reader_early_remembered">想起来了</string>
     <string name="reader_early_forgot">没想起来</string>
-    <string name="reader_grade_saved_learn">已加入排期</string>
-    <string name="reader_grade_saved_recall">已记录这次回忆</string>
-    <string name="reader_undo">撤销</string>
+    <string name="reader_undo_word">撤销 %1$s</string>
     <string name="reader_undo_done">已撤销这次记录</string>
     <string name="reader_undo_expired">撤销窗口已过，这次记录保留</string>
     <string name="reader_shorts_deleted">已删除 %1$d 篇短篇</string>
@@ -327,6 +337,13 @@
 
     <string name="quiz_title">测验</string>
     <string name="quiz_loading">正在准备题目…</string>
+    <string name="quiz_stage_words">正在取今天要测的词…</string>
+    <string name="quiz_stage_records">正在读取学习记录…</string>
+    <string name="quiz_stage_ai">正在请求 AI 出题…</string>
+    <string name="quiz_stage_build">正在生成题目…</string>
+    <string name="quiz_error">题目没准备好。可以重试，或先回阅读。</string>
+    <string name="quiz_retry">重试</string>
+    <string name="quiz_again_due">再测一组</string>
     <string name="quiz_empty">今天没有要测的词。先在阅读里学几个新词，或等有词到期。</string>
     <string name="quiz_progress">第 %1$d/%2$d 题 · %3$s</string>
     <string name="quiz_type_en_zh">英→中</string>
@@ -385,17 +402,19 @@
     <string name="about_shelf_body">一本书就是一个题材；新建连载只需起个名字，AI 会把它当作写作题材（例如“宫斗”“修仙”）。\n短篇独立成篇，不接前面的章节；最多取今天队列里的 15 个词，写 1500–2500 字。\n写短篇时可以一句话说明这篇想写什么、也可以自己定腔调；不说就由 AI 自己定。重写这一篇时沿用同样的要求和同一批词。\n书架上长按短篇可以多选删除；删正文不动词库和复习进度。\n阅读位置会自动记住，重开应用回到同一本、同一章。</string>
 
     <string name="about_room_title">关于室友</string>
-    <string name="about_room_body">小鱼干来自学习：当天每碰过一个词（学过或回忆过，同一个词只算一次），前 5 个每个 2 条，第 6–30 个每个 1 条，第 31 个起每两个词 1 条；满 5 个再 +5。评分后几秒内撤销的那次不算。\n小铺里它每天带三件礼物、两个摊子货；礼物买齐会解锁当天的一道菜，第一口它请，之后可以再做一份。它也卖自己写的东西。\n它也会送你东西：第一次收到你的礼物、隔了几天再见、连续 7 或 30 天、或者就是心情好；每天最多一件，七天最多两件，送过的东西会一直留在「它送的」里，不能卖也不值小鱼干。\n钱、价格、冷却和它送不送都由程序算，模型只写文字。台词本和每天的内容各让模型写一次；没有网络或没配密钥就用本地的句子，进房间不受影响。\n素材来自你选的文件夹里的 GIF，循环播放，按文件名里的动作归类；重复导入不会重复保存。素材只留在本机、不进备份，换手机后重新导入同一个文件夹就能接上；找不到的素材会在房间里提示。</string>
+    <string name="about_room_body">小鱼干来自学习：当天每碰过一个词（学过或回忆过，同一个词只算一次），前 5 个每个 2 条，第 6–30 个每个 1 条，第 31 个起每两个词 1 条；满 5 个再 +5。评分后几秒内撤销的那次不算。\n小铺里它每天带三件礼物、两个摊子货；礼物买齐会解锁当天的一道菜，第一口它请，之后可以再做一份。它也卖自己写的东西。\n它也会送你东西：第一次收到你的礼物、隔了几天再见、连续 7 或 30 天、或者就是心情好；每天最多一件，七天最多两件，送过的东西会一直留在「它送的」里，不能卖也不值小鱼干。\n钱、价格、冷却和它送不送都由程序算，模型只写文字。台词本和每天的内容各让模型写一次；没有网络或没配密钥就用本地的句子，进房间不受影响。\n点它的名字可以改名片：改完只会让它重想第一句话和台词本，小鱼干、小本子和买过的东西都留着。\n素材来自你选的文件夹里的 GIF，循环播放，按文件名里的动作归类；重复导入不会重复保存。素材只留在本机、不进备份，换手机后重新导入同一个文件夹就能接上；找不到的素材会在房间里提示。</string>
 
     <string name="about_bank_title">关于词库</string>
-    <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n点列表里的单词能查看释义或删除。</string>
+    <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n点列表里的单词能查看释义或删除。\n在阅读页点词可以标为易错，并挂上容易混的词；「易混词管理」把这些词按组列出，一组里的词互相都能看到对方。可以往组里加词、把词移出去，也可以批量新增：一行写一组，组内的词用逗号隔开。移出一组只断关系，词还留着易错标记；只有落单的词被删掉时才取消标记。</string>
 
     <!-- 室友 -->
     <string name="room_title">室友</string>
     <string name="room_loading">正在看看它在做什么…</string>
     <string name="room_intro_title">认识它</string>
-    <string name="room_intro_lead">取个名字，选三样底色；剩下的它自己长。</string>
+    <string name="room_intro_lead">名字、三样底色，再多留一句设定。定好之后它就来见你。</string>
     <string name="room_name_label">名字</string>
+    <string name="room_setting_label">再留一句设定（可跳过）</string>
+    <string name="room_setting_hint">它该怎么相处、喜欢什么、别碰什么</string>
     <string name="room_nature_label">性子</string>
     <string name="room_pace_label">步调</string>
     <string name="room_face_label">表情</string>
@@ -409,6 +428,14 @@
     <string name="room_face_plain">不动声色</string>
     <string name="room_face_performs">爱演</string>
     <string name="room_create">就这样</string>
+    <string name="room_setup_title">它正在收拾东西</string>
+    <string name="room_setup_first_line">它在想见到你的第一句话说什么…</string>
+    <string name="room_setup_linebook">它在本子上写以后要跟你说的话…</string>
+    <string name="room_setup_failed">它没能把东西搬进来。再试一次。</string>
+
+    <string name="room_card_title">它的名片</string>
+    <string name="room_card_save">改好了</string>
+    <string name="room_card_note">改完它会重新想一遍见着你时说的第一句话，以及以后要跟你说的话。小鱼干、小本子和已经买过的东西都不动。</string>
     <string name="room_touch">摸摸</string>
     <string name="room_talk">说话</string>
     <string name="room_outing">出门</string>

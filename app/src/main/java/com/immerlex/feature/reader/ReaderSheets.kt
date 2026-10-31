@@ -49,7 +49,10 @@ fun WordCardSheet(
     access: WordAccess,
     previews: List<Pair<Rating, Int>>,
     tricky: TrickyCard?,
+    graded: Boolean,
+    undo: UndoPrompt?,
     onGrade: (Rating) -> Unit,
+    onUndo: () -> Unit,
     onToggleTricky: () -> Unit,
     onLinkTricky: (TrickyWord) -> Unit,
     onUnlinkTricky: (TrickyWord) -> Unit,
@@ -99,7 +102,7 @@ fun WordCardSheet(
                 Text(stringResource(R.string.reader_not_in_bank), color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.reader_cannot_grade), color = ImmerlexColors.Meta)
-            } else {
+            } else if (!graded) {
                 when (access) {
                     WordAccess.Learn, WordAccess.Recall -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -153,6 +156,7 @@ fun WordCardSheet(
                     )
                 }
             }
+            undo?.let { UndoRow(it, onUndo) }
             TrickySection(
                 word = word.lookup,
                 card = tricky,
@@ -164,6 +168,15 @@ fun WordCardSheet(
             )
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** 撤销挂在词卡里并写清是哪个词：底部浮条挡正文，也对不上刚点的是哪一个。 */
+@Composable
+private fun UndoRow(undo: UndoPrompt, onUndo: () -> Unit) {
+    Spacer(Modifier.height(10.dp))
+    TextButton(onClick = onUndo) {
+        Text(stringResource(R.string.reader_undo_word, undo.word))
     }
 }
 

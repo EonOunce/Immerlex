@@ -2,19 +2,14 @@ package com.immerlex.core.roommate
 
 import android.net.Uri
 import com.immerlex.core.db.RM_CHANNEL_GIFT
-import com.immerlex.core.db.RM_CHANNEL_NEAR
 import com.immerlex.core.db.RM_CHANNEL_RECIPE
-import com.immerlex.core.db.RM_KIND_EPISODE
 import com.immerlex.core.db.RM_KIND_NOTE
-import com.immerlex.core.db.RM_PACK_AI
-import com.immerlex.core.db.RM_PACK_LOCAL
-import com.immerlex.core.db.RoommateDailyEntity
 import com.immerlex.core.db.RoommateEventEntity
+import com.immerlex.core.db.RoommateOfferEntity
 import com.immerlex.core.db.RoommateProfileEntity
 import com.immerlex.core.db.RoommateWorkEntity
 import java.io.File
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -48,7 +43,10 @@ class RoommateService(
     private val streakProvider: suspend (Instant) -> Int = { 0 },
 ) {
     private val gifts = RoommateGiftService(repo, zone)
+    private val personaWriter = RoommatePersona(repo, generator, zone)
+    private val daily = RoommateDaily(repo, generator, gifts, zone)
     private val cursors = ConcurrentHashMap<String, AtomicInteger>()
+    private var onStage: String? = null
     private val prep = Mutex()
 
     fun dayOf(now: Instant = Instant.now()): Long =
@@ -63,6 +61,7 @@ class RoommateService(
         val profile = repo.profile() ?: return@withLock buildView(now, day)
         ensureLinebook()
         ensureDaily(now, profile)
+        onStage = repo.episode(day)?.assetId
         gifts.proactive(profile, day, streakProvider(now), now)
         repo.saveState(repo.state().copy(lastVisitSec = now.epochSecond))
         buildView(now, day)
@@ -99,40 +98,35 @@ class RoommateService(
     fun assetFile(assetId: String?): File? =
         assetId?.let { store.fileOf(it) }?.takeIf { it.exists() }
 
-    suspend fun createProfile(name: String, nature: String, pace: String, face: String, now: Instant) {
-        val clean = name.trim().take(8).ifBlank { "小室友" }
-        val profile = Persona(clean, nature, pace, face)
-        repo.runTransaction {
-            repo.saveProfile(
-                RoommateProfileEntity(
-                    name = clean,
-                    nature = nature,
-                    pace = pace,
-                    face = face,
-                    persona = profile.card,
-                    createdAtSec = now.epochSecond,
-                ),
-            )
-            repo.saveState(repo.state().copy(lastSettledDay = dayOf(now) - 1))
-            repo.insertEvent(
-                RoommateEventEntity(
-                    dayKey = dayOf(now),
-                    atSec = now.epochSecond,
-                    kind = RM_KIND_NOTE,
-                    body = "今天你们认识了。它记住了你叫它「$clean」。",
-                ),
-            )
-        }
-        repo.saveLinebook(RoommateText.linebook())
-    }
+    /** 建档：名字、三样底色与设定一次定好，之后由 [updatePersona] 改。 */
+    suspend fun createProfile(
+        name: String,
+        nature: String,
+        pace: String,
+        face: String,
+        setting: String,
+        now: Instant,
+        onStage: (RoommateSetupStage) -> Unit = {},
+    ): CreatedRoommate = personaWriter.create(name, nature, pace, face, setting, now, onStage)
 
-    /** 台词本只向模型要一次；失败就用本地六句，之后不再重试。 */
+    /** 改名片：只有第一句话和台词本跟着重发，其余一概不碰。 */
+    suspend fun updatePersona(
+        name: String,
+        nature: String,
+        pace: String,
+        face: String,
+        setting: String,
+        now: Instant,
+        onStage: (RoommateSetupStage) -> Unit = {},
+    ): CreatedRoommate? = personaWriter.update(name, nature, pace, face, setting, now, onStage)
+
+    /** 台词本只向模型要一次；建档时已经要过了，这里只服务没走过新流程的老室友。 */
     suspend fun upgradeLinebook(now: Instant = Instant.now()): Boolean {
         val profile = repo.profile() ?: return false
         val state = repo.state()
         if (state.linebookAiDone) return false
         repo.saveState(state.copy(linebookAiDone = true))
-        val ai = generator.linebook(context(profile, dayOf(now))) ?: return false
+        val ai = generator.linebook(repo.episodeContext(profile, dayOf(now))) ?: return false
         repo.saveLinebook(ai)
         return true
     }
@@ -141,109 +135,16 @@ class RoommateService(
      * 今天的一包本地内容先落库，保证断网也有东西看。
      * 攒钱目标只保留一件：已有未买的目标就不再新建，价格也永不改。
      */
-    suspend fun ensureDaily(now: Instant = Instant.now(), profile: RoommateProfileEntity? = null): Boolean {
-        if (profile == null && repo.profile() == null) return false
-        val day = dayOf(now)
-        repo.daily(day)?.let { return false }
-        // 升级上来的老用户今天可能已经有见闻（v2.0），不能再往时间线上叠一条。
-        val episode = repo.episode(day)
-        val loop = repo.openLoops(1).firstOrNull()
-        val activeNear = repo.activeNear()
-        val nearPrice = activeNear?.price ?: OfferPolicy.nearPrice(repo.balance())
-        val pack = RoommateText.dailyPack(day, loop?.body, nearPrice)
-        val asset = RoommateAssets.pick(repo.assets(), RoomAction.TOUCH, day)
-        val offers = packOffers(pack, day, nearPrice, now.epochSecond, RM_PACK_LOCAL)
-            .filterNot { it.channel == RM_CHANNEL_NEAR && activeNear != null }
-        repo.runTransaction {
-            repo.saveDaily(dailyOf(pack, day, now.epochSecond, RM_PACK_LOCAL))
-            val eventId = episode?.id ?: repo.insertEvent(
-                RoommateEventEntity(
-                    dayKey = day,
-                    atSec = now.epochSecond,
-                    kind = RM_KIND_EPISODE,
-                    body = pack.episode.line,
-                    choiceA = pack.episode.choiceA,
-                    choiceB = pack.episode.choiceB,
-                    assetId = asset?.assetId,
-                ),
-            )
-            repo.saveOffers(offers)
-            if (episode == null) {
-                repo.saveState(repo.state().copy(lastEpisodeDay = day))
-                loop?.let { repo.closeLoop(it.id) }
-                recordHabit(pack.episode.habit, day, eventId, now)
-            }
-        }
-        return true
-    }
+    suspend fun ensureDaily(now: Instant = Instant.now(), profile: RoommateProfileEntity? = null): Boolean =
+        daily.ensure(now, dayOf(now), profile)
 
     /**
      * 一天最多一次 AI 改写；先落 lastAiDay 再发请求，失败也不反复烧调用。
      * 只替换还没买下的礼物与摊子；菜谱解锁后保持原样，攒钱目标只换内容不换价格。
      */
     suspend fun upgradeDaily(now: Instant = Instant.now()): RoomView? {
-        val profile = repo.profile() ?: return null
         val day = dayOf(now)
-        val state = repo.state()
-        if (state.lastAiDay == day) return null
-        repo.saveState(state.copy(lastAiDay = day))
-        val daily = repo.daily(day) ?: return null
-        val activeNear = repo.activeNear()
-        val nearPrice = activeNear?.price ?: OfferPolicy.nearPrice(repo.balance())
-        val fallback = RoommateText.dailyPack(day, repo.openLoops(1).firstOrNull()?.body, nearPrice)
-        val context = dailyContext(profile, day, now, nearPrice)
-        val pack = generator.daily(context, fallback) ?: return null
-        val episode = repo.episode(day) ?: return null
-        val assetId = pack.episode.assetTag?.let { tag ->
-            repo.assets().firstOrNull { it.tag == tag }?.assetId
-        }
-        repo.runTransaction {
-            repo.updateEvent(
-                episode.copy(
-                    body = pack.episode.line,
-                    choiceA = pack.episode.choiceA,
-                    choiceB = pack.episode.choiceB,
-                    assetId = assetId ?: episode.assetId,
-                ),
-            )
-            repo.saveDaily(
-                daily.copy(
-                    source = RM_PACK_AI,
-                    coquetry = pack.coquetry.joinToString("\n"),
-                    petGiftName = pack.petGift?.name.orEmpty(),
-                    petGiftStory = pack.petGift?.story.orEmpty(),
-                    petGiftLine = pack.petGift?.line.orEmpty(),
-                ),
-            )
-            val old = repo.offersOfDay(day).associateBy { it.offerId }
-            val fresh = packOffers(pack, day, nearPrice, now.epochSecond, RM_PACK_AI)
-                .mapNotNull { row ->
-                    val existing = old[row.offerId]
-                    when {
-                        existing?.purchased == true -> null
-                        row.channel == RM_CHANNEL_NEAR -> null
-                        row.channel == RM_CHANNEL_RECIPE && existing?.hidden == false -> null
-                        existing == null -> row
-                        else -> row.copy(hidden = existing.hidden)
-                    }
-                }
-            repo.saveOffers(fresh)
-            if (activeNear != null && activeNear.source == RM_PACK_LOCAL && pack.near != null) {
-                repo.saveOffers(
-                    listOf(
-                        activeNear.copy(
-                            name = pack.near.name,
-                            story = pack.near.story,
-                            reaction = pack.near.reaction,
-                            followUp = pack.near.followUp,
-                            source = RM_PACK_AI,
-                        ),
-                    ),
-                )
-            }
-            recordHabit(pack.episode.habit, day, episode.id, now)
-        }
-        repo.revealRecipeIfReady(day, now.epochSecond)
+        if (!daily.upgrade(now, day)) return null
         return buildView(now, day)
     }
 
@@ -258,10 +159,24 @@ class RoommateService(
 
     suspend fun interact(action: RoomAction, now: Instant = Instant.now()): Interaction {
         val day = dayOf(now)
-        val asset = RoommateAssets.pick(repo.assets(), action, day * 24 + now.epochSecond / 3600)
+        val asset = nextAsset(action)
         if (action == RoomAction.OUTING) writeOutingNote(day, now)
         val line = if (action == RoomAction.OUTING) nextLine(action) else coquetry(day) ?: nextLine(action)
-        return Interaction(asset?.assetId, line)
+        return Interaction(asset, line)
+    }
+
+    /** 房间开着的时候自己换脸：不用点它，它也会动。 */
+    suspend fun idleAsset(): String? = nextAsset(null)
+
+    /** 一次互动一张新脸：正在放的这张跳过，除非池子里只有它。 */
+    private suspend fun nextAsset(action: RoomAction?): String? {
+        val assets = repo.assets()
+        if (assets.isEmpty()) return null
+        val key = "asset:" + (action?.key ?: "any")
+        val index = cursors.computeIfAbsent(key) { AtomicInteger() }.getAndIncrement()
+        val asset = RoommateAssets.next(assets, action, index, onStage) ?: return null
+        onStage = asset.assetId
+        return asset.assetId
     }
 
     suspend fun shop(now: Instant = Instant.now()): ShopView {
@@ -270,25 +185,33 @@ class RoommateService(
         return shopOf(repo.offersOfDay(day), repo.activeNear(), repo.works(), balance)
     }
 
-    suspend fun buyOffer(offerId: String, now: Instant = Instant.now()): PurchaseOutcome {
+    suspend fun buy(offerId: String, now: Instant = Instant.now()): Purchase {
         val day = dayOf(now)
         val outcome = repo.purchaseOffer(offerId, now.epochSecond, day)
-        if (outcome is PurchaseOutcome.Ok) {
-            val offer = repo.offer(offerId)
-            val profile = repo.profile()
-            if (offer?.channel == RM_CHANNEL_GIFT && profile != null) {
-                gifts.response(profile, day, now)
-            }
+        if (outcome !is PurchaseOutcome.Ok) return Purchase(outcome)
+        val offer = repo.offer(offerId)
+        val profile = repo.profile()
+        if (offer?.channel == RM_CHANNEL_GIFT && profile != null) {
+            gifts.response(profile, day, now)
         }
-        return outcome
+        return Purchase(outcome, offer?.let(::momentOf))
     }
+
+    /** 买下的一件东西换来两句话：它当时的反应进对话框，之后发生的事算旁白。 */
+    private fun momentOf(offer: RoommateOfferEntity): RoomMoment =
+        // 菜谱的 reaction 是第一次免费那口时说的话，之后每份的反应存在 followUp 里。
+        if (offer.channel == RM_CHANNEL_RECIPE) {
+            RoomMoment(offer.followUp, "")
+        } else {
+            RoomMoment(offer.reaction, offer.followUp)
+        }
 
     /** 一天只写一篇；已有正文才上架，不让用户付钱赌生成。 */
     suspend fun writeWork(now: Instant = Instant.now()): RoommateWorkEntity? {
         val day = dayOf(now)
         if (repo.workCountOfDay(day) > 0) return null
         val profile = repo.profile() ?: return null
-        val generated = generator.work(context(profile, day))
+        val generated = generator.work(repo.episodeContext(profile, day))
         val (title, body) = generated?.let { it.title to it.body } ?: RoommateText.work(day)
         val id = repo.addWork(title, body, now.epochSecond, day)
         return repo.work(id)
@@ -306,8 +229,10 @@ class RoommateService(
     private suspend fun buildView(now: Instant, day: Long): RoomView {
         val assets = repo.assets()
         val balance = repo.balance()
+        val profile = repo.profile()
         return RoomView(
-            profile = repo.profile()?.toPersona(),
+            profile = profile?.toPersona(),
+            setting = profile?.setting.orEmpty(),
             episode = repo.episodeView(day),
             balance = balance,
             earnedToday = repo.earnedOn(day),
@@ -336,9 +261,9 @@ class RoommateService(
 
     /** 一天最多一句撒娇；出门不算。 */
     private suspend fun coquetry(day: Long): String? {
-        val daily = repo.daily(day) ?: return null
-        if (daily.coquetryUsed) return null
-        val lines = daily.coquetry.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        val row = repo.daily(day) ?: return null
+        if (row.coquetryUsed) return null
+        val lines = row.coquetry.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) return null
         repo.markCoquetryUsed(day)
         return lines.first()
@@ -351,56 +276,6 @@ class RoommateService(
         if (episode.assetId != null) return
         val asset = RoommateAssets.pick(repo.assets(), RoomAction.TOUCH, day) ?: return
         repo.updateEvent(episode.copy(assetId = asset.assetId))
-    }
-
-    private suspend fun recordHabit(
-        habit: String?,
-        day: Long,
-        eventId: Long,
-        now: Instant,
-    ) {
-        val label = HabitPolicy.normalize(habit.orEmpty()) ?: return
-        val habitId = label.lowercase()
-        val learned = repo.habit(habitId) != null
-        if (!learned) repo.addEvidence(habitId, day, eventId, now.epochSecond)
-        if (HabitPolicy.shouldLearn(repo.evidenceDays(habitId), day, learned)) {
-            repo.learnHabit(habitId, label, day, now.epochSecond)
-        }
-    }
-
-    private suspend fun context(profile: RoommateProfileEntity, day: Long): EpisodeContext {
-        val recent = repo.recentEvents(8)
-            .filterNot { it.dayKey == day && it.kind == RM_KIND_EPISODE }
-            .map { it.body }
-            .filter { it.isNotBlank() }
-        return EpisodeContext(
-            name = profile.name,
-            persona = profile.persona,
-            recent = recent,
-            habits = repo.habits().map { it.label },
-            openLoop = repo.openLoops(1).firstOrNull()?.body,
-            assetTags = repo.assets().map { it.tag }.distinct(),
-        )
-    }
-
-    private suspend fun dailyContext(
-        profile: RoommateProfileEntity,
-        day: Long,
-        now: Instant,
-        nearPrice: Int,
-    ): DailyContext {
-        val start = LocalDate.ofEpochDay(day).atStartOfDay(zone()).toEpochSecond()
-        val touched = repo.touches(start, now.epochSecond + 1)
-            .map { it.wordKey }
-            .distinct()
-            .takeLast(MAX_TOUCHED_WORDS)
-        return DailyContext(
-            episode = context(profile, day),
-            touchedWords = touched,
-            balance = repo.balance(),
-            nearPrice = nearPrice,
-            recentGifts = gifts.all().take(3).map { it.name },
-        )
     }
 
     private suspend fun writeOutingNote(day: Long, now: Instant) {
@@ -416,26 +291,10 @@ class RoommateService(
         )
     }
 
-    private fun dailyOf(
-        pack: DailyPack,
-        day: Long,
-        atSec: Long,
-        source: String,
-    ): RoommateDailyEntity = RoommateDailyEntity(
-        dayKey = day,
-        source = source,
-        coquetry = pack.coquetry.joinToString("\n"),
-        petGiftName = pack.petGift?.name.orEmpty(),
-        petGiftStory = pack.petGift?.story.orEmpty(),
-        petGiftLine = pack.petGift?.line.orEmpty(),
-        createdAtSec = atSec,
-    )
-
     private companion object {
         const val OUTING_NOTE_GAP_SECONDS = 3 * 60 * 60L
         const val NOTEBOOK_DAYS = 30L
         const val LINEBOOK_SIZE = 6
-        const val MAX_TOUCHED_WORDS = 8
     }
 }
 

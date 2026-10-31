@@ -45,8 +45,8 @@ internal fun ChapterBody(
     }
     val tones = LocalMasteryTones.current
     val fontScale = LocalAppearance.current.fontScale
-    val annotated = remember(state.blocks, state.mode, state.bankWords, tones, englishOnly) {
-        buildChapterText(state.blocks, state.mode, state.bankWords, tones, englishOnly)
+    val annotated = remember(state.blocks, state.mode, state.bankWords, state.marks, state.marksAtSec, tones, englishOnly) {
+        buildChapterText(state.blocks, state.mode, state.bankWords, tones, state.marks, state.marksAtSec, englishOnly)
     }
     Column(
         modifier = Modifier

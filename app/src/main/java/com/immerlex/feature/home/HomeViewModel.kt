@@ -81,7 +81,8 @@ class HomeViewModel(
             heat = dailyLoop.heatGrid(now),
             trend = dailyLoop.trend(now),
             // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
-            quizCount = quiz.dueCandidateIds(now, limit).size,
+            // 一组最多 20 题，入口显示的就是这一组能测多少，不是候选池总数。
+            quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),
             earlyCount = quiz.earlyCandidates(now).size,
             roomMet = room.met,
             roomName = room.name,

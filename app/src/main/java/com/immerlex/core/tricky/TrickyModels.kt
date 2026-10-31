@@ -23,3 +23,11 @@ data class TrickyDetail(
 )
 
 data class AddTrickyResult(val card: TrickyCard, val added: Boolean)
+
+/**
+ * 管理页上的一组易混词：组是关系图上的连通分量，所以没挂上任何词的易错词也自成一组。
+ * [key] 用组里第一个词，连通分量互不相交，所以它在列表里是唯一的。
+ */
+data class TrickyGroup(val key: String, val members: List<TrickyWord>) {
+    val words: List<String> get() = members.map { it.word }
+}

@@ -26,6 +26,10 @@ data class RoommateProfileEntity(
     val face: String,
     /** 由三项维度落成的性格卡正文。 */
     val persona: String,
+    /** 建档时用户额外留的设定；老室友没有这一句，保持空串。 */
+    @ColumnInfo(defaultValue = "''") val setting: String = "",
+    /** 它建档时说的第一句话；老室友为空，不在房间里补演。 */
+    @ColumnInfo(defaultValue = "''") val introLine: String = "",
     val createdAtSec: Long,
 )
 

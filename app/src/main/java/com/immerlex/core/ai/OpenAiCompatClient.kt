@@ -30,7 +30,10 @@ class OpenAiCompatClient(
 
     private val jsonParser = Json { ignoreUnknownKeys = true }
 
-    override suspend fun complete(system: String, user: String): String {
+    override suspend fun complete(system: String, user: String): String =
+        complete(system, user, config.timeoutSeconds * 1_000L)
+
+    override suspend fun complete(system: String, user: String, timeoutMillis: Long): String {
         val body = buildJsonObject {
             put("model", config.model)
             put("temperature", config.temperature)
@@ -45,7 +48,7 @@ class OpenAiCompatClient(
             .post(body.toRequestBody(JSON_TYPE))
             .build()
 
-        return call(request) { text ->
+        return call(request, timeoutMillis) { text ->
             extractContent(text) ?: throw LlmException(0, "response has no message content")
         }
     }
@@ -77,10 +80,14 @@ class OpenAiCompatClient(
         put("content", content)
     }
 
-    private suspend fun <T> call(request: Request, decode: (String) -> T): T =
+    private suspend fun <T> call(request: Request, timeoutMillis: Long?, decode: (String) -> T): T =
         withContext(Dispatchers.IO) {
             try {
-                http.newCall(request).execute().use { response ->
+                val call = http.newCall(request)
+                if (timeoutMillis != null) {
+                    call.timeout().timeout(timeoutMillis, TimeUnit.MILLISECONDS)
+                }
+                call.execute().use { response ->
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         throw LlmException(

@@ -45,11 +45,14 @@ import com.immerlex.feature.settings.BibleScreen
 import com.immerlex.feature.settings.BibleViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
+import com.immerlex.feature.tricky.TrickyScreen
+import com.immerlex.feature.tricky.TrickyViewModel
 import com.immerlex.feature.wordbank.WordBankViewModel
 
 private const val ROUTE_ABOUT = "about"
 private const val ROUTE_BIBLE = "bible"
 private const val ROUTE_ROOM = "room"
+private const val ROUTE_TRICKY = "tricky"
 private const val ROUTE_QUIZ = "quiz/{mode}"
 
 private fun quizRoute(mode: QuizMode): String = "quiz/${mode.name}"
@@ -87,6 +90,7 @@ fun ImmerlexRoot() {
             ReaderViewModel(
                 chapterDao = container.db.chapterDao(),
                 wordDao = container.db.wordDao(),
+                logDao = container.db.reviewLogDao(),
                 positionDao = container.db.readingPositionDao(),
                 schedule = container.scheduleService,
                 trickyRepository = container.trickyRepository,
@@ -114,6 +118,9 @@ fun ImmerlexRoot() {
         }
         initializer {
             RoommateViewModel(container.roommateService)
+        }
+        initializer {
+            TrickyViewModel(container.trickyRepository)
         }
     }
 
@@ -170,7 +177,9 @@ fun ImmerlexRoot() {
                 }
                 composable(Destinations.BANK.route) {
                     val vm: WordBankViewModel = viewModel(factory = appViewModelFactory)
-                    WordBankScreen(vm)
+                    WordBankScreen(vm, onOpenTricky = {
+                        navController.navigate(ROUTE_TRICKY) { launchSingleTop = true }
+                    })
                 }
                 composable(Destinations.READER.route) {
                     val vm: ReaderViewModel = viewModel(factory = appViewModelFactory)
@@ -201,6 +210,10 @@ fun ImmerlexRoot() {
                 composable(ROUTE_ROOM) {
                     val vm: RoommateViewModel = viewModel(factory = appViewModelFactory)
                     RoommateScreen(vm, onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_TRICKY) {
+                    val vm: TrickyViewModel = viewModel(factory = appViewModelFactory)
+                    TrickyScreen(vm, onBack = { navController.popBackStack() })
                 }
                 composable(ROUTE_ABOUT) {
                     AboutScreen(onBack = { navController.popBackStack() })

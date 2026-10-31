@@ -223,6 +223,33 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
+/**
+ * v10 -> v11: 室友建档从"先建再偷偷补"变成"一次定好"。
+ * `setting` 存用户多留的一句话，`introLine` 存它当时说的第一句；老室友两列都是空串，
+ * 不补演、不覆盖已经长出来的性格。
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `rm_profile` ADD COLUMN `setting` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `rm_profile` ADD COLUMN `introLine` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+/**
+ * v11 -> v12: 测验素材落库。一张新表，别的都不动——一个词的英文释义、例句和易混候选池
+ * 只在第一次考它时向模型要一回，之后出题读这一行。
+ */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `quiz_material` (`wordId` INTEGER NOT NULL, " +
+                "`definition` TEXT NOT NULL DEFAULT '', `example` TEXT NOT NULL DEFAULT '', " +
+                "`distractors` TEXT NOT NULL DEFAULT '[]', `createdAtSec` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`wordId`))",
+        )
+    }
+}
+
 val MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -233,4 +260,6 @@ val MIGRATIONS = arrayOf(
     MIGRATION_7_8,
     MIGRATION_8_9,
     MIGRATION_9_10,
+    MIGRATION_10_11,
+    MIGRATION_11_12,
 )

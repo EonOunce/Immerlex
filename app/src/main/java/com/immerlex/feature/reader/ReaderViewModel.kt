@@ -15,12 +15,12 @@ import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.ChapterEntity
 import com.immerlex.core.db.KIND_SERIAL
 import com.immerlex.core.db.ReadingPositionDao
+import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.reader.ChapterResolver
 import com.immerlex.core.reader.ReaderWord
-import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.schedule.WordAccess
 import com.immerlex.core.settings.AppPreferences
@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 class ReaderViewModel(
     private val chapterDao: ChapterDao,
     private val wordDao: WordDao,
+    private val logDao: ReviewLogDao,
     private val positionDao: ReadingPositionDao,
     private val schedule: ScheduleService,
     private val trickyRepository: TrickyRepository,
@@ -53,10 +54,16 @@ class ReaderViewModel(
     private val _messages = MutableSharedFlow<UiMessage>()
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
-    private val _undoPrompts = MutableSharedFlow<UndoPrompt>()
-    val undoPrompts: SharedFlow<UndoPrompt> = _undoPrompts.asSharedFlow()
-
     private val bookmarks = ShelfBookmarks(chapterDao, positionDao, prefs)
+
+    private val grading = ReaderGrading(
+        scope = viewModelScope,
+        state = _state,
+        messages = _messages,
+        wordDao = wordDao,
+        logDao = logDao,
+        schedule = schedule,
+    )
 
     init {
         viewModelScope.launch { load() }
@@ -64,26 +71,33 @@ class ReaderViewModel(
 
     fun reload() = viewModelScope.launch { load() }
 
-    fun generate() = viewModelScope.launch {
-        if (_state.value.generating) return@launch
-        if (!aiConfig().isUsable) {
-            _messages.emit(UiMessage(R.string.settings_need_config))
-            return@launch
-        }
-        _state.value = _state.value.copy(generating = true)
-        try {
-            val outcome = notifier.runTracked {
-                generator.generate(prefs.genre, prefs.density, prefs.dailyNewLimit)
-            }
-            _messages.emit(outcome.toUiMessage())
-            if (outcome is GenerateOutcome.Saved) load()
-        } finally {
-            _state.value = _state.value.copy(generating = false)
-        }
+    fun generate() = writing {
+        notifier.runTracked { generator.generate(prefs.genre, prefs.density, prefs.dailyNewLimit) }
     }
 
     /** 短篇：单篇自足，不读也不写故事档案；成功就停在写好的这一篇上。 */
-    fun generateShort(plan: ShortPlan) = viewModelScope.launch {
+    fun generateShort(plan: ShortPlan) = writing(after = { load(it.chapter.id) }) {
+        notifier.runTracked { generator.generateShort(plan, dailyNewLimit = prefs.dailyNewLimit) }
+    }
+
+    /** 重写本章：换一批同词的正文，编号与词的复习状态都不动。 */
+    fun rewrite() {
+        val chapterId = _state.value.chapterId
+        if (chapterId == 0L) return
+        writing(
+            after = { load(chapterId) },
+            note = { UiMessage(R.string.reader_rewritten, listOf(it.chapter.number, it.chapter.title)) },
+        ) {
+            notifier.runTracked { generator.rewrite(chapterId, prefs.density) }
+        }
+    }
+
+    /** 生成、短篇、重写共用一套闸门：正在写就先退，没配 key 就提示，进度挂 generating。 */
+    private fun writing(
+        after: suspend (GenerateOutcome.Saved) -> Unit = { load() },
+        note: (GenerateOutcome.Saved) -> UiMessage = { it.toUiMessage() },
+        action: suspend () -> GenerateOutcome,
+    ) = viewModelScope.launch {
         if (_state.value.generating) return@launch
         if (!aiConfig().isUsable) {
             _messages.emit(UiMessage(R.string.settings_need_config))
@@ -91,33 +105,13 @@ class ReaderViewModel(
         }
         _state.value = _state.value.copy(generating = true)
         try {
-            val outcome = notifier.runTracked { generator.generateShort(plan, dailyNewLimit = prefs.dailyNewLimit) }
-            _messages.emit(outcome.toUiMessage())
-            if (outcome is GenerateOutcome.Saved) load(outcome.chapter.id)
-        } finally {
-            _state.value = _state.value.copy(generating = false)
-        }
-    }
-
-    /** 重写本章：换一批同词的正文，编号与词的复习状态都不动。 */
-    fun rewrite() = viewModelScope.launch {
-        val chapterId = _state.value.chapterId
-        if (chapterId == 0L || _state.value.generating) return@launch
-        if (!aiConfig().isUsable) {
-            _messages.emit(UiMessage(R.string.settings_need_config))
-            return@launch
-        }
-        _state.value = _state.value.copy(generating = true)
-        try {
-            val outcome = notifier.runTracked { generator.rewrite(chapterId, prefs.density) }
-            _messages.emit(
-                if (outcome is GenerateOutcome.Saved) {
-                    UiMessage(R.string.reader_rewritten, listOf(outcome.chapter.number, outcome.chapter.title))
-                } else {
-                    outcome.toUiMessage()
-                },
-            )
-            if (outcome is GenerateOutcome.Saved) load(chapterId)
+            val outcome = action()
+            if (outcome is GenerateOutcome.Saved) {
+                _messages.emit(note(outcome))
+                after(outcome)
+            } else {
+                _messages.emit(outcome.toUiMessage())
+            }
         } finally {
             _state.value = _state.value.copy(generating = false)
         }
@@ -173,16 +167,13 @@ class ReaderViewModel(
             access = access,
             previews = previews,
             tricky = null,
+            graded = false,
         )
         val key = word.lookup.trim().lowercase()
         val card = trickyRepository.card(key)
         if (_state.value.selected?.lookup?.trim()?.lowercase() == key) {
             _state.value = _state.value.copy(tricky = card)
         }
-    }
-
-    fun dismissCard() {
-        _state.value = _state.value.copy(selected = null, previews = emptyList(), tricky = null)
     }
 
     fun toggleTricky() {
@@ -241,51 +232,16 @@ class ReaderViewModel(
 
     fun grade(rating: Rating) {
         val selected = _state.value.selected ?: return
-        val access = _state.value.access
-        viewModelScope.launch {
-            val entity = selected.wordId?.let { wordDao.findById(it) }
-            val result = entity?.let {
-                when (access) {
-                    WordAccess.Learn -> schedule.learn(it, rating, SOURCE_READER)
-                    WordAccess.Recall -> schedule.recall(it, rating, SOURCE_READER)
-                    WordAccess.Early -> schedule.recall(
-                        it,
-                        rating,
-                        SOURCE_READER,
-                        allowEarly = true,
-                    )
-                    WordAccess.ViewOnly -> null
-                }
-            }
-            val learnedNow = result?.kind == LOG_KIND_LEARN
-            _state.value = _state.value.copy(
-                bankWords = result?.let { _state.value.bankWords + (it.word.word.lowercase() to it.word) }
-                    ?: _state.value.bankWords,
-                selected = null,
-                previews = emptyList(),
-                tricky = null,
-                learned = _state.value.learned + if (result != null && learnedNow) 1 else 0,
-                recalled = _state.value.recalled + if (result != null && !learnedNow) 1 else 0,
-            )
-            if (result != null) {
-                _undoPrompts.emit(UndoPrompt(result.logId, result.kind))
-            }
-        }
+        grading.grade(selected, _state.value.access, rating)
     }
 
-    fun undo(prompt: UndoPrompt) = viewModelScope.launch {
-        val result = schedule.undo(prompt.logId)
-        if (result == null) {
-            _messages.emit(UiMessage(R.string.reader_undo_expired))
-            return@launch
-        }
-        val learnedNow = result.kind == LOG_KIND_LEARN
-        _state.value = _state.value.copy(
-            bankWords = _state.value.bankWords + (result.word.word.lowercase() to result.word),
-            learned = (_state.value.learned - if (learnedNow) 1 else 0).coerceAtLeast(0),
-            recalled = (_state.value.recalled - if (learnedNow) 0 else 1).coerceAtLeast(0),
-        )
-        _messages.emit(UiMessage(R.string.reader_undo_done))
+    fun undo() = grading.undo()
+
+    /** 词卡的收起与评分后的收起走同一套：预览与易混卡一起清掉。 */
+    fun dismissCard() = closeCard()
+
+    private fun closeCard() {
+        _state.value = _state.value.cardClosed()
     }
 
     private suspend fun load(chapterId: Long? = null) {
@@ -298,29 +254,21 @@ class ReaderViewModel(
     }
 
     private suspend fun render(chapter: ChapterEntity?) {
+        grading.cancelTimers()
         if (chapter != null && chapter.kind == KIND_SERIAL) prefs.genre = chapter.genre
         val books = bookmarks.books(prefs.genre)
         val shorts = chapterDao.shortStories()
         val parsed = chapter?.segmentsJson?.let { ChapterParser.parse(it) }
         if (chapter == null || parsed == null) {
             bookmarks.remember(null)
-            _state.value = _state.value.copy(
-                loading = false,
-                hasChapter = false,
-                chapterId = 0,
-                title = "",
-                number = 0,
-                kind = KIND_SERIAL,
-                book = prefs.genre,
+            _state.value = _state.value.showing(
+                chapter = null,
+                blocks = emptyList(),
+                bank = emptyMap(),
+                chapters = emptyList(),
                 books = books,
                 shorts = shorts,
-                chapters = emptyList(),
-                blocks = emptyList(),
-                selected = null,
-                previews = emptyList(),
-                tricky = null,
-                learned = 0,
-                recalled = 0,
+                book = prefs.genre,
             )
             return
         }
@@ -335,29 +283,19 @@ class ReaderViewModel(
         } else {
             emptyList()
         }
-        _state.value = _state.value.copy(
-            loading = false,
-            hasChapter = true,
-            chapterId = chapter.id,
-            title = chapter.title,
-            number = chapter.number,
-            kind = chapter.kind,
-            book = prefs.genre,
+        _state.value = _state.value.showing(
+            chapter = chapter,
+            blocks = ChapterResolver.resolve(parsed, bank),
+            bank = bank,
+            chapters = chapters,
             books = books,
             shorts = shorts,
-            blocks = ChapterResolver.resolve(parsed, bank),
-            bankWords = bank,
-            chapters = chapters,
-            selected = null,
-            previews = emptyList(),
-            tricky = null,
-            learned = 0,
-            recalled = 0,
+            book = prefs.genre,
         )
+        grading.refreshMarks()
     }
 
     private companion object {
-        const val SOURCE_READER = "reader"
         const val MAX_BOOK_NAME = 20
     }
 }

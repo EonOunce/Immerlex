@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizQuestion
 import com.immerlex.core.quiz.QuizService
+import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.settings.AppPreferences
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,11 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class QuizPhase { LOADING, EMPTY, QUESTION, DONE }
+enum class QuizPhase { LOADING, EMPTY, QUESTION, DONE, ERROR }
 
 data class QuizState(
     val phase: QuizPhase = QuizPhase.LOADING,
     val mode: QuizMode = QuizMode.DUE,
+    val stage: QuizStage = QuizStage.COLLECTING,
     /** true 表示当前是答错后的当堂重练：不写记录、不计分。 */
     val practice: Boolean = false,
     val question: QuizQuestion? = null,
@@ -108,13 +111,14 @@ class QuizViewModel(
         startPracticeOrFinish()
     }
 
-    /** 提前复习结果页的"再来一组"：避开刚考过的词，再从今天碰过的词里取 5 个。 */
+    /** 提前复习结果页的"再来一组"：避开刚考过的词；到期组也用它把剩余的到期词分批测完。 */
     fun again() {
         val current = _state.value
-        if (current.phase != QuizPhase.DONE || current.mode != QuizMode.EARLY) return
+        if (current.phase != QuizPhase.DONE) return
         excluded = excluded + questions.map { it.wordId }
         _state.value = current.copy(
             phase = QuizPhase.LOADING,
+            stage = QuizStage.COLLECTING,
             group = current.group + 1,
             question = null,
             index = 0,
@@ -126,16 +130,44 @@ class QuizViewModel(
             wrongCount = 0,
             practice = false,
         )
-        plan(QuizMode.EARLY)
+        plan(current.mode)
+    }
+
+    /** 出题失败后重试同一组；不能把用户永远停在"正在准备题目"。 */
+    fun retry() {
+        val current = _state.value
+        if (current.phase != QuizPhase.ERROR) return
+        _state.value = QuizState(
+            phase = QuizPhase.LOADING,
+            mode = current.mode,
+            stage = QuizStage.COLLECTING,
+            group = current.group,
+        )
+        plan(current.mode)
     }
 
     private fun plan(mode: QuizMode) = viewModelScope.launch {
-        val session = withContext(Dispatchers.Default) {
-            val now = Instant.now()
-            when (mode) {
-                QuizMode.DUE -> quiz.planDue(now, prefs.dailyNewLimit)
-                QuizMode.EARLY -> quiz.planEarly(now, excluded)
+        val session = try {
+            withContext(Dispatchers.Default) {
+                val now = Instant.now()
+                when (mode) {
+                    QuizMode.DUE -> quiz.planDue(
+                        now = now,
+                        dailyNewLimit = prefs.dailyNewLimit,
+                        onStage = ::publishStage,
+                    )
+                    QuizMode.EARLY -> quiz.planEarly(
+                        now = now,
+                        excludeWordIds = excluded,
+                        onStage = ::publishStage,
+                    )
+                }
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(phase = QuizPhase.ERROR, question = null)
+            return@launch
         }
         if (session.isEmpty) {
             _state.value = _state.value.copy(phase = QuizPhase.EMPTY, question = null)
@@ -153,6 +185,10 @@ class QuizViewModel(
             roundTotal = questions.size,
             group = _state.value.group,
         )
+    }
+
+    private fun publishStage(stage: QuizStage) {
+        _state.value = _state.value.copy(stage = stage)
     }
 
     private fun startPracticeOrFinish() {

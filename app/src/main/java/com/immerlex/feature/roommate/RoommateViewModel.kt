@@ -13,11 +13,14 @@ import com.immerlex.core.roommate.Persona
 import com.immerlex.core.roommate.PetGiftView
 import com.immerlex.core.roommate.PurchaseOutcome
 import com.immerlex.core.roommate.RoomAction
+import com.immerlex.core.roommate.RoomMoment
 import com.immerlex.core.roommate.RoomView
 import com.immerlex.core.roommate.RoommateService
+import com.immerlex.core.roommate.RoommateSetupStage
 import com.immerlex.core.roommate.ShopView
 import java.io.File
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,6 +33,9 @@ import kotlinx.coroutines.launch
 data class RoommateState(
     val loading: Boolean = true,
     val persona: Persona? = null,
+    val setting: String = "",
+    val creating: Boolean = false,
+    val createStage: RoommateSetupStage? = null,
     val episode: Episode? = null,
     val balance: Int = 0,
     val earnedToday: Int = 0,
@@ -41,6 +47,8 @@ data class RoommateState(
     val near: OfferCard? = null,
     val stageFile: File? = null,
     val reply: String? = null,
+    val narration: String? = null,
+    val shopNarration: String? = null,
     val importing: Boolean = false,
     val writingWork: Boolean = false,
     val notebook: List<RoommateEventEntity> = emptyList(),
@@ -57,6 +65,7 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
     private var upgradeAttempted = false
+    private var surfacedGiftId: Long? = null
 
     init {
         viewModelScope.launch {
@@ -68,12 +77,64 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
     /** 每次真正进入房间都算一次到访；它可能在这里送东西。 */
     fun refresh() = viewModelScope.launch { openRoom() }
 
-    fun create(name: String, nature: String, pace: String, face: String) = viewModelScope.launch {
-        service.createProfile(name, nature, pace, face, Instant.now())
-        upgradeAttempted = false
-        openRoom()
-        warmUp()
-    }
+    /** 建档要等模型：第一句话和整本台词都在这一步生成，之后不再后台补。 */
+    fun create(name: String, nature: String, pace: String, face: String, setting: String) =
+        viewModelScope.launch {
+            if (_state.value.creating) return@launch
+            _state.update { it.copy(creating = true, createStage = RoommateSetupStage.FIRST_LINE) }
+            val created = try {
+                service.createProfile(name, nature, pace, face, setting, Instant.now()) { stage ->
+                    _state.update { it.copy(createStage = stage) }
+                }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(creating = false, createStage = null) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(creating = false, createStage = null) }
+                _messages.emit(UiMessage(R.string.room_setup_failed))
+                return@launch
+            }
+            upgradeAttempted = false
+            openRoom()
+            _state.update { it.copy(creating = false, createStage = null, reply = created.introLine) }
+            warmUp()
+        }
+
+    /**
+     * 改名片：名字、三样底色、设定变了，只有第一句话和台词本跟着重发。
+     * 余额、小本子、它送的东西、已经买下的都留在原处，所以这里一次都不碰它们。
+     */
+    fun updatePersona(name: String, nature: String, pace: String, face: String, setting: String) =
+        viewModelScope.launch {
+            if (_state.value.creating) return@launch
+            _state.update { it.copy(creating = true, createStage = RoommateSetupStage.FIRST_LINE) }
+            val updated = try {
+                service.updatePersona(name, nature, pace, face, setting, Instant.now()) { stage ->
+                    _state.update { it.copy(createStage = stage) }
+                }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(creating = false, createStage = null) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(creating = false, createStage = null) }
+                _messages.emit(UiMessage(R.string.room_setup_failed))
+                return@launch
+            }
+            if (updated == null) {
+                _state.update { it.copy(creating = false, createStage = null) }
+                return@launch
+            }
+            openRoom()
+            _state.update {
+                it.copy(
+                    creating = false,
+                    createStage = null,
+                    persona = updated.persona,
+                    reply = updated.introLine,
+                    narration = null,
+                )
+            }
+        }
 
     fun interact(action: RoomAction) = viewModelScope.launch {
         val result = service.interact(action)
@@ -81,8 +142,15 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
             it.copy(
                 stageFile = service.assetFile(result.assetId) ?: it.stageFile,
                 reply = result.line,
+                narration = null,
             )
         }
+    }
+
+    fun rotateStage() = viewModelScope.launch {
+        val assetId = service.idleAsset() ?: return@launch
+        val file = service.assetFile(assetId) ?: return@launch
+        _state.update { it.copy(stageFile = file) }
     }
 
     fun choose(choice: Int) = viewModelScope.launch {
@@ -90,7 +158,7 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
         if (episode.chosen != 0) return@launch
         val reply = service.choose(episode.id, choice) ?: return@launch
         openRoom()
-        _state.update { it.copy(reply = reply) }
+        _state.update { it.copy(reply = reply, narration = null) }
     }
 
     fun openNotebook() = viewModelScope.launch {
@@ -99,11 +167,16 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
         }
     }
 
-    fun openShop() = viewModelScope.launch { reloadShop() }
+    /** 开小铺时清掉上一次买下去的旁白：小铺里只显示刚才那一下，房间里的原话不动。 */
+    fun openShop() = viewModelScope.launch {
+        _state.update { it.copy(shopNarration = null) }
+        reloadShop()
+    }
 
     fun buyOffer(offerId: String) = viewModelScope.launch {
         val isRecipe = _state.value.shop?.recipe?.offerId == offerId
-        when (val outcome = service.buyOffer(offerId)) {
+        val purchase = service.buy(offerId)
+        when (val outcome = purchase.outcome) {
             is PurchaseOutcome.Ok -> {
                 _messages.emit(UiMessage(if (isRecipe) R.string.room_recipe_made else R.string.room_bought_item))
                 outcome.unlockedRecipe?.let {
@@ -111,6 +184,8 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
                 }
                 reloadShop()
                 openRoom()
+                // 房间刷新时可能把「它送的东西」顶上来，但刚买下这件东西的话更新，让它说这句。
+                purchase.moment?.let(::surface)
             }
 
             PurchaseOutcome.TooPoor -> _messages.emit(UiMessage(R.string.room_too_poor))
@@ -181,10 +256,13 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
     }
 
     private fun apply(view: RoomView) {
+        val gift = view.petGiftToday?.takeIf { it.id != surfacedGiftId }
+        gift?.let { surfacedGiftId = it.id }
         _state.update { old ->
             old.copy(
                 loading = false,
                 persona = view.profile,
+                setting = view.setting,
                 episode = view.episode,
                 balance = view.balance,
                 earnedToday = view.earnedToday,
@@ -195,6 +273,19 @@ class RoommateViewModel(private val service: RoommateService) : ViewModel() {
                 petGiftToday = view.petGiftToday,
                 near = view.near,
                 stageFile = service.assetFile(view.episode?.assetId) ?: old.stageFile,
+                reply = gift?.line?.ifBlank { null } ?: old.reply,
+                narration = gift?.story?.ifBlank { null } ?: old.narration,
+            )
+        }
+    }
+
+    /** 刚发生的一件事：它说的话进对话框，旁白落在房间下面；小铺开着时同一句旁白也顶到标题下面。 */
+    private fun surface(moment: RoomMoment) {
+        _state.update {
+            it.copy(
+                reply = moment.line.ifBlank { it.reply },
+                narration = moment.narration.ifBlank { null },
+                shopNarration = moment.narration.ifBlank { null },
             )
         }
     }

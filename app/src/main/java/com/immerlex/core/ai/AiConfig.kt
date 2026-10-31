@@ -16,6 +16,13 @@ interface LlmClient {
     /** @return raw assistant text, usually a JSON object but possibly fenced. */
     suspend fun complete(system: String, user: String): String
 
+    /**
+     * 单次调用限时。阅读/生成用默认长超时，测验这种"可等可不等"的补全用短超时，
+     * 到点必须真的掐断连接，不能只取消协程让底层阻塞读继续挂两分钟。
+     */
+    suspend fun complete(system: String, user: String, timeoutMillis: Long): String =
+        complete(system, user)
+
     /** Hits the gateway's own model list, which doubles as the connectivity and key check. */
     suspend fun probe(): ProbeResult
 }

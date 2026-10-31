@@ -56,13 +56,25 @@ class QuizEnrichmentParserTest {
     @Test
     fun capsLongTextAndExtraDistractors() {
         val long = "x".repeat(400)
-        val distractors = (1..5).joinToString(",") { """{"word":"w$it","zh":"释义$it"}""" }
+        val distractors = (1..10).joinToString(",") { """{"word":"w$it","zh":"释义$it"}""" }
         val raw = """{"items":[{"word":"harbour","definition":"$long","example":"","distractors":[$distractors]}]}"""
 
         val entry = QuizEnrichmentParser.parse(raw, words).of(words[0])!!
 
         assertEquals(200, entry.definition.length)
-        assertEquals(3, entry.distractors.size)
+        assertEquals("候选池要够轮换，但也不能让模型无限写", 8, entry.distractors.size)
+    }
+
+    @Test
+    fun theWordItselfNeverComesBackAsADistractor() {
+        val raw = """
+            {"items":[{"word":"harbour","definition":"","example":"",
+              "distractors":[{"word":"Harbour","zh":"港口"},{"word":"dock","zh":"码头"}]}]}
+        """.trimIndent()
+
+        val entry = QuizEnrichmentParser.parse(raw, words).of(words[0])!!
+
+        assertEquals(listOf("dock"), entry.distractors.map { it.word })
     }
 
     @Test

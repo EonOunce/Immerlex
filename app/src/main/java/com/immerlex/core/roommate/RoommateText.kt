@@ -39,6 +39,18 @@ object RoommateText {
     fun choiceReply(dayKey: Long, chosen: Int): String =
         replies[Math.floorMod(dayKey + chosen, replies.size.toLong()).toInt()]
 
+    private val introLines = listOf(
+        "它把行李箱的拉链拉上，抬头看了你一眼，说以后请多关照。",
+        "它站在门口没敢直接进，先把鞋摆整齐，才问你坐哪儿合适。",
+        "它把随身的东西一样样摆上桌，摆完又觉得太满，收回了两样。",
+        "它话不多，先把你桌上的杯子洗干净了，才说要住哪一边。",
+        "它进门就看见了窗边那块地方，问能不能归它。",
+    )
+
+    /** 建档时它说的第一句；没有 API key 也要有这句话，否则房间空着不像刚认识。 */
+    fun introLine(dayKey: Long): String =
+        introLines[Math.floorMod(dayKey, introLines.size.toLong()).toInt()]
+
     /** 离线时它自己"写"的东西。有正文才能上架，不拿空卡片占位。 */
     fun work(dayKey: Long): Pair<String, String> {
         val title = listOf("窗边手记", "今天没做成的事", "一把伞的下午", "数到第七样")[

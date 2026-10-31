@@ -66,5 +66,35 @@ class RoommateAssetsTest {
     @Test
     fun withoutAssetsThereIsNothingToDraw() {
         assertNull(RoommateAssets.pick(emptyList(), RoomAction.TALK, seed = 1))
+        assertNull(RoommateAssets.next(emptyList(), RoomAction.TALK, cursor = 0, onStage = null))
+    }
+
+    @Test
+    fun nextNeverRepeatsWhatIsAlreadyOnStage() {
+        val assets = listOf(asset("a", "吹鼻子"), asset("b", "摇铃"), asset("c", "眨眼"))
+        val picked = RoommateAssets.next(assets, RoomAction.TALK, cursor = 0, onStage = "a")
+        assertTrue(picked?.assetId != "a")
+    }
+
+    @Test
+    fun nextKeepsPlayingTheOnlyAssetItHas() {
+        val assets = listOf(asset("a", "吹鼻子"))
+        assertEquals("a", RoommateAssets.next(assets, RoomAction.TOUCH, cursor = 3, onStage = "a")?.assetId)
+    }
+
+    @Test
+    fun nextWalksThroughTheWholePool() {
+        val assets = listOf(asset("a", "吹鼻子"), asset("b", "摇铃"), asset("c", "眨眼"))
+        val seen = (0..5).mapNotNull {
+            RoommateAssets.next(assets, null, cursor = it, onStage = null)?.assetId
+        }.toSet()
+        assertEquals(setOf("a", "b", "c"), seen)
+    }
+
+    @Test
+    fun nextPrefersTagsThatMatchTheAction() {
+        val assets = listOf(asset("a", "吹鼻子"), asset("b", "生气"), asset("c", "眨眼"))
+        val picked = RoommateAssets.next(assets, RoomAction.TALK, cursor = 0, onStage = null)
+        assertTrue(RoomAction.TALK.keywords.any { picked!!.tag.contains(it) })
     }
 }

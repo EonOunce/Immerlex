@@ -4,11 +4,14 @@ import com.immerlex.core.db.FSRS_STATE_REVIEW
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogEntity
+import com.immerlex.core.db.TrickyLinkEntity
+import com.immerlex.core.db.TrickyWordEntity
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.fsrs.Scheduler
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.testsupport.FakeChapterDao
+import com.immerlex.testsupport.FakeQuizMaterialDao
 import com.immerlex.testsupport.FakeReviewLogDao
 import com.immerlex.testsupport.FakeTrickyDao
 import com.immerlex.testsupport.FakeWordDao
@@ -29,7 +32,21 @@ class QuizServiceTest {
     private fun parts(): Triple<QuizService, FakeWordDao, FakeReviewLogDao> {
         val words = FakeWordDao()
         val logs = FakeReviewLogDao()
-        val schedule = ScheduleService(
+        return Triple(service(words, logs, FakeTrickyDao()), words, logs)
+    }
+
+    private fun service(
+        words: FakeWordDao,
+        logs: FakeReviewLogDao,
+        tricky: FakeTrickyDao,
+        enricher: QuizEnricher? = null,
+        material: QuizMaterialStore? = null,
+    ): QuizService = QuizService(
+        wordDao = words,
+        logDao = logs,
+        chapterDao = FakeChapterDao(),
+        trickyDao = tricky,
+        schedule = ScheduleService(
             wordDao = words,
             logDao = logs,
             scheduler = Scheduler(
@@ -38,20 +55,11 @@ class QuizServiceTest {
                 maximumInterval = 3650,
                 enableFuzzing = false,
             ),
-        )
-        return Triple(
-            QuizService(
-                wordDao = words,
-                logDao = logs,
-                chapterDao = FakeChapterDao(),
-                trickyDao = FakeTrickyDao(),
-                schedule = schedule,
-                zone = ZoneId.of("Asia/Shanghai"),
-            ),
-            words,
-            logs,
-        )
-    }
+        ),
+        enricher = enricher,
+        material = material,
+        zone = ZoneId.of("Asia/Shanghai"),
+    )
 
     @Test
     fun dueCandidatesAreDueWordsPlusWordsLearnedTodayMinusRecalledToday() = runBlocking {
@@ -92,6 +100,17 @@ class QuizServiceTest {
                 assertNotEquals("答错后换一种题型练", question.type, retry.type)
             }
         }
+    }
+
+    @Test
+    fun aDueSessionStopsAtTwentyWordsAndKeepsTheMostOverdue() = runBlocking {
+        val (service, words, logs) = parts()
+        val ids = (1..25).map { index -> seedDue(words, logs, "w$index", daysOverdue = index.toLong()) }
+
+        val session = service.planDue(now, dailyNewLimit = 10, seed = 7)
+
+        assertEquals(QuizService.SESSION_LIMIT, session.questions.size)
+        assertEquals("逾期最久的 20 个留下，剩下 5 个明天再考", ids.drop(5).toSet(), session.wordIds)
     }
 
     @Test
@@ -143,12 +162,105 @@ class QuizServiceTest {
         assertFalse(due in candidates)
     }
 
-    private suspend fun seedDue(words: FakeWordDao, logs: FakeReviewLogDao, name: String): Long {
+    @Test
+    fun aWordIsAskedOfTheModelOnceAndReadFromTheTableAfterThat() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val store = FakeQuizMaterialDao()
+        val asked = mutableListOf<Long>()
+        val service = service(
+            words,
+            logs,
+            FakeTrickyDao(),
+            RecordingEnricher(asked),
+            QuizMaterialStore(store),
+        )
+        val due = seedDue(words, logs, "harbour")
+
+        val first = service.planDue(now, dailyNewLimit = 10, seed = 1)
+        val second = service.planDue(now, dailyNewLimit = 10, seed = 2)
+
+        assertEquals("第二次出题一个字都不该再问", listOf(due), asked)
+        assertEquals(1, store.items.size)
+        second.questions.forEach { question ->
+            assertEquals(1, question.options.count { it.correct })
+            assertTrue(question.options.size >= 2)
+        }
+        assertEquals(first.questions.single().wordId, second.questions.single().wordId)
+    }
+
+    @Test
+    fun nothingComeBackFromTheModelMeansTheWordIsAskedAgain() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val store = FakeQuizMaterialDao()
+        val asked = mutableListOf<Long>()
+        val service = service(
+            words,
+            logs,
+            FakeTrickyDao(),
+            RecordingEnricher(asked, answerWith = emptyList()),
+            QuizMaterialStore(store),
+        )
+        seedDue(words, logs, "harbour")
+
+        service.planDue(now, dailyNewLimit = 10, seed = 1)
+        service.planDue(now, dailyNewLimit = 10, seed = 2)
+
+        assertTrue(store.items.isEmpty())
+        assertEquals(2, asked.count())
+    }
+
+    @Test
+    fun aConfusableTheUserMarkedOutranksTheStoredPool() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val tricky = FakeTrickyDao()
+        tricky.insertLink(TrickyLinkEntity(wordA = "harbour", wordB = "harbor", createdAtSec = 0))
+        tricky.insertIgnore(TrickyWordEntity(word = "harbor", gloss = "停泊处", createdAtSec = 0))
+        val asked = mutableListOf<Long>()
+        val service = service(
+            words,
+            logs,
+            tricky,
+            RecordingEnricher(asked),
+            QuizMaterialStore(FakeQuizMaterialDao()),
+        )
+        seedDue(words, logs, "harbour")
+
+        val question = service.planDue(now, dailyNewLimit = 10, seed = 1).questions.single()
+
+        assertTrue(
+            "用户亲手标的易混词必须出现在选项里",
+            question.options.any { it.text == "停泊处" || it.gloss == "停泊处" },
+        )
+    }
+
+    /** 记下模型被问过哪些词——落库之后不该再有第二次。 */
+    private class RecordingEnricher(
+        private val asked: MutableList<Long>,
+        private val answerWith: List<EnrichedDistractor> = (1..6).map { EnrichedDistractor("dock$it", "释义$it") },
+    ) : QuizEnricher {
+        override suspend fun enrich(words: List<WordEntity>): QuizEnrichment {
+            asked += words.map { it.id }
+            if (answerWith.isEmpty()) return QuizEnrichment()
+            return QuizEnrichment(
+                words.associate { it.id to EnrichedWord("a place where ships stay", "船进了 harbour。", answerWith) },
+            )
+        }
+    }
+
+    private suspend fun seedDue(
+        words: FakeWordDao,
+        logs: FakeReviewLogDao,
+        name: String,
+        daysOverdue: Long = 1,
+    ): Long {
         val id = words.insert(
             word(name).copy(
                 stability = 5.0,
                 difficulty = 6.0,
-                dueEpochSec = now.minus(1, ChronoUnit.DAYS).epochSecond,
+                dueEpochSec = now.minus(daysOverdue, ChronoUnit.DAYS).epochSecond,
                 lastReviewEpochSec = now.minus(2, ChronoUnit.DAYS).epochSecond,
                 fsrsState = FSRS_STATE_REVIEW,
                 reps = 1,

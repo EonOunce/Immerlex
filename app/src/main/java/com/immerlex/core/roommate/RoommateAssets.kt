@@ -28,10 +28,29 @@ object RoommateAssets {
      */
     fun pick(assets: List<RoommateAssetEntity>, action: RoomAction, seed: Long): RoommateAssetEntity? {
         if (assets.isEmpty()) return null
-        val exact = assets.filter { asset -> action.keywords.any { asset.tag.contains(it) } }
-        val pool = exact.ifEmpty { assets }
-        return pool.minByOrNull { spin(it.assetId, action, seed) }
+        return matching(assets, action).minByOrNull { spin(it.assetId, action, seed) }
     }
+
+    /**
+     * 按稳定顺序轮换素材：一次互动一张新脸，绝不重复台上正在放的那一张。
+     * 池子里只有一张时无处可换，就让它重播——这比停在旧文件上好。
+     */
+    fun next(
+        assets: List<RoommateAssetEntity>,
+        action: RoomAction?,
+        cursor: Int,
+        onStage: String?,
+    ): RoommateAssetEntity? {
+        if (assets.isEmpty()) return null
+        val pool = (if (action == null) assets else matching(assets, action)).sortedBy { it.assetId }
+        if (pool.size == 1) return pool.first()
+        val start = Math.floorMod(cursor, pool.size)
+        val rotated = pool.drop(start) + pool.take(start)
+        return rotated.firstOrNull { it.assetId != onStage } ?: rotated.first()
+    }
+
+    private fun matching(assets: List<RoommateAssetEntity>, action: RoomAction) =
+        assets.filter { asset -> action.keywords.any { asset.tag.contains(it) } }.ifEmpty { assets }
 
     private fun spin(assetId: String, action: RoomAction, seed: Long): Int =
         Math.floorMod((assetId + '|' + action.key + '|' + seed).hashCode(), 10_000)

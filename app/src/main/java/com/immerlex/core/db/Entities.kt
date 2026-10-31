@@ -107,6 +107,9 @@ const val LOG_KIND_LEARN = "learn"
 /** 先回忆再反馈的一次记录；阅读复习、测验、提前复习都记这个。 */
 const val LOG_KIND_RECALL = "recall"
 
+/** 阅读页写下的记录。正文里的颜色只听这一类：测验和提前复习排的是同一个词，但不改颜色。 */
+const val LOG_SOURCE_READER = "reader"
+
 @Entity(tableName = "story_bibles", indices = [Index(value = ["genre"], unique = true)])
 data class StoryBibleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -201,5 +204,19 @@ data class TrickyWordEntity(
 data class TrickyLinkEntity(
     val wordA: String,
     val wordB: String,
+    val createdAtSec: Long,
+)
+
+/**
+ * 一个词的出题素材只留一份：模型给过的英文释义、例句和易混候选池存下来，
+ * 以后考这个词都读这一行，不再发第二次请求。[distractors] 是 `[{"w":"","zh":""}]`
+ * 这样的小 JSON，读它的是 `core.quiz`，这里只负责存字符串。
+ */
+@Entity(tableName = "quiz_material")
+data class QuizMaterialEntity(
+    @PrimaryKey val wordId: Long,
+    val definition: String = "",
+    val example: String = "",
+    val distractors: String = "[]",
     val createdAtSec: Long,
 )

@@ -36,6 +36,9 @@ sealed interface PurchaseOutcome {
     data object Locked : PurchaseOutcome
 }
 
+/** 一次购买带回来的两样东西：钱的变化（给小铺刷新）和它刚说的话（给房间显示）。 */
+data class Purchase(val outcome: PurchaseOutcome, val moment: RoomMoment? = null)
+
 /**
  * 室友的唯一写入口。钱、库存、购买、每日内容、它送的礼物都在这一个类里落库，
  * 多步写入一律走 Room 事务——中途失败不会留下"扣了钱没东西"。

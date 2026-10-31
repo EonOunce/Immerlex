@@ -9,7 +9,8 @@ import androidx.compose.ui.text.withStyle
 import com.immerlex.app.ui.MasteryTones
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.reader.ReaderSegment
-import com.immerlex.core.word.mastery
+import com.immerlex.core.schedule.ReaderMarks
+import com.immerlex.core.schedule.readerTone
 
 /** Annotation tag used to map a tap offset back to the tapped embedded word. */
 const val WORD_ANNOTATION_TAG = "immerlex-word"
@@ -29,6 +30,8 @@ fun buildChapterText(
     mode: ReaderMode,
     bank: Map<String, WordEntity>,
     tones: MasteryTones,
+    marks: ReaderMarks,
+    atSec: Long,
     englishOnly: Boolean = false,
 ): AnnotatedString = buildAnnotatedString {
     blocks.forEachIndexed { index, paragraph ->
@@ -42,10 +45,8 @@ fun buildChapterText(
 
                 is ReaderSegment.Word -> {
                     val word = segment.word
-                    val (soft, deep) = word.wordId
-                        ?.let { id -> bank[word.lookup]?.takeIf { it.id == id } }
-                        ?.let { tones.of(it.mastery()) }
-                        ?: tones.new
+                    val entity = word.wordId?.let { id -> bank[word.lookup]?.takeIf { it.id == id } }
+                    val (soft, deep) = tones.of(readerTone(entity, marks, atSec))
                     val highlight = SpanStyle(color = deep, background = soft, fontWeight = FontWeight.Bold)
                     pushStringAnnotation(WORD_ANNOTATION_TAG, word.lookup)
                     withStyle(highlight) { append(word.lookup) }

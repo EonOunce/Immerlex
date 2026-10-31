@@ -67,9 +67,13 @@ object PersonaCards {
     }
 }
 
+/** 刚刚发生的一件事：它说的话进对话框，旁白落在房间下面。空字段就不显示那一样。 */
+data class RoomMoment(val line: String, val narration: String)
+
 /** 一天里能看到的全部东西，由 ViewModel 一次性取好交给界面。 */
 data class RoomView(
     val profile: Persona?,
+    val setting: String,
     val episode: Episode?,
     val balance: Int,
     val earnedToday: Int,

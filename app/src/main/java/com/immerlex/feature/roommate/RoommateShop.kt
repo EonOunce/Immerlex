@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -24,10 +25,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +47,7 @@ import com.immerlex.core.roommate.ShopView
 @Composable
 fun ShopSheet(
     shop: ShopView?,
+    narration: String?,
     writingWork: Boolean,
     onWrite: () -> Unit,
     onBuyOffer: (String) -> Unit,
@@ -50,15 +55,16 @@ fun ShopSheet(
     onReadWork: (RoommateWorkEntity) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+    // 东西多也不能把房间整个盖住：标题固定，下面的货只占半屏，舍友留在视线里。
+    // 限高之后必须一次摊开——停在半展开会把货藏到屏幕底下，反而更难翻。
+    val listMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.46f).dp
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    LaunchedEffect(sheetState) { sheetState.expand() }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -70,49 +76,61 @@ fun ShopSheet(
                 )
                 FishPill(shop?.balance ?: 0)
             }
+            // 刚买下的东西会有旁白，房间里的位置被小铺盖住了，就在标题下面再说一遍。
+            narration?.takeIf { it.isNotBlank() }?.let {
+                NarrationCard(it)
+                Spacer(Modifier.height(4.dp))
+            }
+            Column(
+                modifier = Modifier
+                    .heightIn(max = listMaxHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 10.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SectionTitle(stringResource(R.string.room_shop_works))
+                Button(onClick = onWrite, enabled = !writingWork) {
+                    Text(stringResource(if (writingWork) R.string.room_writing else R.string.room_write_work))
+                }
+                if (shop != null && shop.works.isEmpty()) {
+                    Text(
+                        stringResource(R.string.room_shop_no_works),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ImmerlexColors.Meta,
+                    )
+                }
+                shop?.works?.forEach { work ->
+                    WorkRow(
+                        work = work,
+                        affordable = shop.balance >= work.price,
+                        onBuy = onBuyWork,
+                        onRead = onReadWork,
+                    )
+                }
 
-            SectionTitle(stringResource(R.string.room_shop_works))
-            Button(onClick = onWrite, enabled = !writingWork) {
-                Text(stringResource(if (writingWork) R.string.room_writing else R.string.room_write_work))
-            }
-            if (shop != null && shop.works.isEmpty()) {
-                Text(
-                    stringResource(R.string.room_shop_no_works),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ImmerlexColors.Meta,
-                )
-            }
-            shop?.works?.forEach { work ->
-                WorkRow(
-                    work = work,
-                    affordable = shop.balance >= work.price,
-                    onBuy = onBuyWork,
-                    onRead = onReadWork,
-                )
-            }
+                shop?.near?.let { near ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    SectionTitle(stringResource(R.string.room_near_label))
+                    NearCard(near = near, onBuy = onBuyOffer)
+                }
 
-            shop?.near?.let { near ->
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                SectionTitle(stringResource(R.string.room_near_label))
-                NearCard(near = near, onBuy = onBuyOffer)
-            }
+                if (shop != null && shop.gifts.isNotEmpty()) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    SectionTitle(stringResource(R.string.room_shop_gifts))
+                    shop.gifts.forEach { offer -> OfferRow(offer, onBuyOffer) }
+                }
 
-            if (shop != null && shop.gifts.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                SectionTitle(stringResource(R.string.room_shop_gifts))
-                shop.gifts.forEach { offer -> OfferRow(offer, onBuyOffer) }
-            }
+                if (shop != null && shop.stall.isNotEmpty()) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    SectionTitle(stringResource(R.string.room_shop_stall))
+                    shop.stall.forEach { offer -> OfferRow(offer, onBuyOffer) }
+                }
 
-            if (shop != null && shop.stall.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                SectionTitle(stringResource(R.string.room_shop_stall))
-                shop.stall.forEach { offer -> OfferRow(offer, onBuyOffer) }
-            }
-
-            shop?.recipe?.let { recipe ->
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                SectionTitle(stringResource(R.string.room_shop_recipe))
-                RecipeCard(recipe = recipe, onBuy = onBuyOffer)
+                shop?.recipe?.let { recipe ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    SectionTitle(stringResource(R.string.room_shop_recipe))
+                    RecipeCard(recipe = recipe, onBuy = onBuyOffer)
+                }
             }
         }
     }

@@ -17,10 +17,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,7 +42,6 @@ import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
-import com.immerlex.core.db.LOG_KIND_LEARN
 
 @Composable
 fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
@@ -63,23 +60,6 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
             snackbar.showSnackbar(context.textFor(msg))
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        vm.undoPrompts.collect { prompt ->
-            val result = snackbar.showSnackbar(
-                message = context.getString(
-                    if (prompt.kind == LOG_KIND_LEARN) {
-                        R.string.reader_grade_saved_learn
-                    } else {
-                        R.string.reader_grade_saved_recall
-                    },
-                ),
-                actionLabel = context.getString(R.string.reader_undo),
-                duration = SnackbarDuration.Long,
-            )
-            if (result == SnackbarResult.ActionPerformed) vm.undo(prompt)
         }
     }
 
@@ -127,7 +107,10 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
             access = state.access,
             previews = state.previews,
             tricky = state.tricky,
+            graded = state.graded,
+            undo = state.pendingUndo,
             onGrade = vm::grade,
+            onUndo = vm::undo,
             onToggleTricky = vm::toggleTricky,
             onLinkTricky = vm::linkTricky,
             onUnlinkTricky = vm::unlinkTricky,

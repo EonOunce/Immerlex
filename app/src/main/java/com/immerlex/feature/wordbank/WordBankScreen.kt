@@ -66,7 +66,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun WordBankScreen(vm: WordBankViewModel) {
+fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
     val words by vm.words.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -193,6 +193,7 @@ fun WordBankScreen(vm: WordBankViewModel) {
                     val stamp = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
                     exportPicker.launch("immerlex-words-$stamp.csv")
                 },
+                onOpenTricky = onOpenTricky,
             )
             pdfNote?.let { note ->
                 Text(
@@ -266,6 +267,7 @@ private fun BankHeader(
     onImportImage: () -> Unit,
     onImportPdf: () -> Unit,
     onExport: () -> Unit,
+    onOpenTricky: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,6 +285,9 @@ private fun BankHeader(
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onExport, enabled = total > 0) {
                 Text(stringResource(R.string.bank_export))
+            }
+            TextButton(onClick = onOpenTricky) {
+                Text(stringResource(R.string.bank_tricky))
             }
         }
         Row(

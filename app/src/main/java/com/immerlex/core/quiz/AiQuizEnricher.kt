@@ -3,7 +3,6 @@ package com.immerlex.core.quiz
 import com.immerlex.core.ai.LlmClient
 import com.immerlex.core.db.WordEntity
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeout
 
 /** 一次会话最多补这么多词，避免把整本词库塞进 prompt。 */
 class AiQuizEnricher(
@@ -14,10 +13,12 @@ class AiQuizEnricher(
     override suspend fun enrich(words: List<WordEntity>): QuizEnrichment {
         if (words.isEmpty() || !aiUsable()) return QuizEnrichment()
         return try {
-            withTimeout(TIMEOUT_MS) {
-                val raw = clientFor().complete(QuizPrompts.system(), QuizPrompts.user(words.take(MAX_WORDS)))
-                QuizEnrichmentParser.parse(raw, words)
-            }
+            val raw = clientFor().complete(
+                QuizPrompts.system(),
+                QuizPrompts.user(words.take(MAX_WORDS)),
+                timeoutMillis = TIMEOUT_MS,
+            )
+            QuizEnrichmentParser.parse(raw, words)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -27,7 +28,8 @@ class AiQuizEnricher(
     }
 
     private companion object {
-        const val TIMEOUT_MS = 12_000L
+        /** 到点就掐断；慢的网关再等也不会在几十秒内变快。 */
+        const val TIMEOUT_MS = 20_000L
         const val MAX_WORDS = 30
     }
 }

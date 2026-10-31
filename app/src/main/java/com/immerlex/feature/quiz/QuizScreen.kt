@@ -41,6 +41,7 @@ import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizOption
 import com.immerlex.core.quiz.QuizQuestion
+import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.quiz.QuizType
 
 @Composable
@@ -66,10 +67,11 @@ fun QuizScreen(vm: QuizViewModel, onExit: () -> Unit) {
                 )
             }
             when (state.phase) {
-                QuizPhase.LOADING -> CenterNote(stringResource(R.string.quiz_loading))
+                QuizPhase.LOADING -> CenterNote(stringResource(stageLabel(state.stage)))
                 QuizPhase.EMPTY -> EmptyBody(state.mode, onExit)
                 QuizPhase.QUESTION -> QuestionBody(state, vm::answer, vm::next)
                 QuizPhase.DONE -> ResultBody(state, onExit, vm::again)
+                QuizPhase.ERROR -> ErrorBody(vm::retry, onExit)
             }
         }
     }
@@ -247,10 +249,31 @@ private fun ResultBody(state: QuizState, onExit: () -> Unit, onAgain: () -> Unit
                 Text(stringResource(R.string.quiz_finish))
             }
         } else {
-            Button(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onAgain, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.quiz_again_due))
+            }
+            OutlinedButton(onClick = onExit, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.quiz_finish))
             }
         }
+    }
+}
+
+@Composable
+private fun ErrorBody(onRetry: () -> Unit, onExit: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            stringResource(R.string.quiz_error),
+            textAlign = TextAlign.Center,
+            color = ImmerlexColors.Body,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onRetry) { Text(stringResource(R.string.quiz_retry)) }
+        OutlinedButton(onClick = onExit) { Text(stringResource(R.string.action_back)) }
     }
 }
 
@@ -310,6 +333,13 @@ private fun typeLabel(type: QuizType): Int = when (type) {
     QuizType.ZH_EN -> R.string.quiz_type_zh_en
     QuizType.CLOZE -> R.string.quiz_type_cloze
     QuizType.DEFINITION -> R.string.quiz_type_definition
+}
+
+private fun stageLabel(stage: QuizStage): Int = when (stage) {
+    QuizStage.COLLECTING -> R.string.quiz_stage_words
+    QuizStage.READING_LOGS -> R.string.quiz_stage_records
+    QuizStage.ASKING_AI -> R.string.quiz_stage_ai
+    QuizStage.BUILDING -> R.string.quiz_stage_build
 }
 
 private fun promptLabel(type: QuizType): Int = when (type) {

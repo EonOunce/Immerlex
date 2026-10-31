@@ -103,6 +103,58 @@ class TrickyRepository(
         )
     }
 
+    /** 管理页的分组视图：关系图折成连通分量，没挂上任何词的易错词也单独成组。 */
+    suspend fun groups(): List<TrickyGroup> = withContext(Dispatchers.IO) {
+        val rows = tricky.all().associateBy { it.word }
+        val bank = words.allWords().associateBy { it.word.lowercase() }
+        TrickyGroups.components(rows.keys.toList(), tricky.allLinks().map { it.wordA to it.wordB })
+            .map { members -> TrickyGroup(members.first(), members.map { wordOf(it, rows, bank) }) }
+    }
+
+    /** 批量新增：一行一组，组内两两挂上。返回真正建起来的组数。 */
+    suspend fun addGroups(text: String): Int = withContext(Dispatchers.IO) {
+        val parsed = TrickyGroups.parse(text)
+        if (parsed.isEmpty()) return@withContext 0
+        db.withTransaction {
+            parsed.forEach { group ->
+                group.forEach { ensureWithGloss(it) }
+                TrickyGroups.pairsOf(group).forEach { (first, second) -> insertLink(first, second) }
+            }
+        }
+        parsed.size
+    }
+
+    /** 往一组里加词：跟组里每个词都挂上，所以点哪一个都能看到新来的这个。 */
+    suspend fun addToGroup(group: TrickyGroup, typed: String): Boolean = withContext(Dispatchers.IO) {
+        val other = normalize(typed)
+        if (other.isEmpty() || other in group.words) return@withContext false
+        db.withTransaction {
+            ensureWithGloss(other)
+            group.words.forEach { member ->
+                ensureWithGloss(member)
+                insertLink(member, other)
+            }
+        }
+        true
+    }
+
+    /** 把词从组里移出去：只断关系，易错标记留着。 */
+    suspend fun removeFromGroup(group: TrickyGroup, word: String) = withContext(Dispatchers.IO) {
+        val key = normalize(word)
+        db.withTransaction {
+            group.words.filterNot { it == key }.forEach { tricky.deleteLink(key, it) }
+        }
+    }
+
+    /** 落单的词整条删掉：只动易错这两张表，不碰复习记录。 */
+    suspend fun deleteWord(word: String) = withContext(Dispatchers.IO) {
+        val key = normalize(word)
+        db.withTransaction {
+            tricky.deleteLinksOf(key)
+            tricky.delete(key)
+        }
+    }
+
     private suspend fun linkWords(
         base: String,
         baseGloss: String,
@@ -114,10 +166,21 @@ class TrickyRepository(
         db.withTransaction {
             ensure(base, baseGloss, baseIpa)
             ensure(other, otherGloss, otherIpa)
-            val (a, b) = pairOf(base, other)
-            tricky.insertLink(TrickyLinkEntity(a, b, Instant.now().epochSecond))
+            insertLink(base, other)
         }
         return card(base)
+    }
+
+    private suspend fun insertLink(first: String, second: String) {
+        val (a, b) = pairOf(first, second)
+        tricky.insertLink(TrickyLinkEntity(a, b, Instant.now().epochSecond))
+    }
+
+    /** 用户手打的词没有现成释义：先取词库，再查离线词典，查不到也照样进组。 */
+    private suspend fun ensureWithGloss(word: String) {
+        val bank = words.findByWord(word)
+        val entry = if (bank == null) dictionary.lookup(word) else null
+        ensure(word, bank?.translation ?: entry?.translation.orEmpty(), bank?.phonetic ?: entry?.phonetic.orEmpty())
     }
 
     private suspend fun ensure(word: String, gloss: String, ipa: String) {
@@ -136,7 +199,8 @@ class TrickyRepository(
         return TrickyWord(word, entry?.translation.orEmpty(), entry?.phonetic.orEmpty())
     }
 
-    private fun normalize(word: String): String = word.trim().lowercase()
+    private fun normalize(word: String): String = TrickyGroups.normalize(word)
 
-    private fun pairOf(a: String, b: String): Pair<String, String> = if (a <= b) a to b else b to a
+    private fun pairOf(first: String, second: String): Pair<String, String> =
+        TrickyGroups.pairOf(first, second)
 }
