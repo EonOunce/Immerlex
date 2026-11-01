@@ -19,6 +19,7 @@ import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.OpenAiCompatClient
 import com.immerlex.core.ai.ProviderPreset
 import com.immerlex.core.backup.BackupService
+import com.immerlex.core.backup.DownloadVerdict
 import com.immerlex.core.backup.Listing
 import com.immerlex.core.backup.RemoteFile
 import com.immerlex.core.backup.RestoreOutcome
@@ -50,6 +51,7 @@ data class SettingsState(
     val dailyNewLimit: Int = AppPreferences.DEFAULT_NEW_LIMIT,
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
+    val autoSpeak: Boolean = false,
     /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
     val models: List<String> = emptyList(),
     val bankTotal: Int = 0,
@@ -64,12 +66,16 @@ data class SettingsState(
     /** 应用密码只进不出：这里存的只是本次页面上的草稿，保存后立刻清空。 */
     val backupPassword: String = "",
     val backupPasswordSaved: Boolean = false,
+    /** 这台机器在备份文件名里叫什么；留空表示用机型名，core 那边还会再洗一遍。 */
+    val backupDevice: String = "",
     val backupAuto: Boolean = false,
     /** "还没备份过 / 上次备份… / 上次备份失败…" 这一整行，措辞都在 strings.xml 里。 */
     val backupLine: UiMessage = UiMessage(R.string.backup_never),
     val remoteBackups: List<RemoteFile> = emptyList(),
+    /** 覆盖本机之前自动留下的那几份，不联网就能列出来。 */
+    val localBackups: List<RemoteFile> = emptyList(),
     val pickerOpen: Boolean = false,
-    val pendingRestore: String? = null,
+    val pendingRestore: PendingRestore? = null,
     val refusedIssues: List<SnapshotProblem> = emptyList(),
     /** 本地库连接已经关掉：页面只剩"重开应用"这一个出口。[restartDetail] 非空说明是没换成的那一种。 */
     val restartRequired: Boolean = false,
@@ -80,6 +86,17 @@ data class SettingsState(
     /** 那行字失败时要标红，但内容已经整条在那条消息里了，这里只认它是哪一种。 */
     val backupFailed: Boolean get() = backupLine.resId == R.string.backup_last_failed
 }
+
+/**
+ * 选中的那一份，和点它那一刻本机的处境。判定跟着目标一起存，对话框才不会在重绘时
+ * 拿另一台机器此刻的状态去问第二个问题。
+ */
+data class PendingRestore(
+    val name: String,
+    /** true = 退回本机留的快照，不联网。 */
+    val local: Boolean,
+    val verdict: DownloadVerdict,
+)
 
 class SettingsViewModel(
     private val prefs: AppPreferences,
@@ -109,6 +126,12 @@ class SettingsViewModel(
 
     fun onDarkMode(value: Boolean) = applyAppearance(_state.value.fontScale, value)
 
+    /** 自动发音也改了即生效：词卡和测验每次出声前现读这个开关。 */
+    fun onAutoSpeak(value: Boolean) {
+        prefs.autoSpeak = value
+        _state.value = _state.value.copy(autoSpeak = prefs.autoSpeak)
+    }
+
     /** 提醒也是改了即生效：它只是一次性 WorkManager 任务的重排，不需要"保存"。 */
     fun onReminderEnabled(value: Boolean) {
         reminder.enabled = value
@@ -130,6 +153,7 @@ class SettingsViewModel(
     fun onBackupUrl(value: String) { _state.value = _state.value.copy(backupUrl = value) }
     fun onBackupAccount(value: String) { _state.value = _state.value.copy(backupAccount = value) }
     fun onBackupPassword(value: String) { _state.value = _state.value.copy(backupPassword = value) }
+    fun onBackupDevice(value: String) { _state.value = _state.value.copy(backupDevice = value) }
 
     /** 开关同时改期望状态和 WorkManager 里那份真实排班，所以不等"保存"。 */
     fun onBackupAuto(value: Boolean) {
@@ -139,6 +163,7 @@ class SettingsViewModel(
 
     fun saveBackupConfig() = mutate {
         backup.saveConfig(_state.value.backupUrl, _state.value.backupAccount, _state.value.backupPassword)
+        backup.saveDeviceName(_state.value.backupDevice)
         refreshBackup()
         _messages.emit(UiMessage(R.string.settings_backup_saved))
     }
@@ -149,28 +174,43 @@ class SettingsViewModel(
     }
 
     fun listBackups() = mutate {
+        val local = backup.localCopies()
         when (val listing = backup.listRemote()) {
-            is Listing.Files ->
-                if (listing.files.isEmpty()) _messages.emit(UiMessage(R.string.backup_pick_empty))
+            is Listing.Files -> {
+                _state.value = _state.value.copy(localBackups = local)
+                if (listing.files.isEmpty() && local.isEmpty()) _messages.emit(UiMessage(R.string.backup_pick_empty))
                 else _state.value = _state.value.copy(remoteBackups = listing.files, pickerOpen = true)
+            }
 
-            is Listing.Failed -> _messages.emit(failureMessage(listing.failure, listing.detail))
+            is Listing.Failed -> {
+                // 网盘没列出来，但本机那几份快照跟网络无关，照样能看能退。
+                if (local.isEmpty()) _messages.emit(failureMessage(listing.failure, listing.detail))
+                else _state.value = _state.value.copy(localBackups = local, remoteBackups = emptyList(), pickerOpen = true)
+            }
         }
     }
 
-    fun onPickBackup(name: String) {
-        _state.value = _state.value.copy(pickerOpen = false, pendingRestore = name)
+    /** 点下去的那一刻才判定：早问一句，用户中间又学了两个词，那句警告就成假话了。 */
+    fun onPickBackup(name: String, local: Boolean) = mutate {
+        _state.value = _state.value.copy(pickerOpen = false, pendingRestore = PendingRestore(name, local, backup.verdict()))
     }
 
     fun closePicker() { _state.value = _state.value.copy(pickerOpen = false) }
 
     fun cancelRestore() { _state.value = _state.value.copy(pendingRestore = null) }
 
+    /** 冲突那句问出来的第一个选择：先把本机这些送上去，取回的事等传完了再说。 */
+    fun uploadFirst() {
+        _state.value = _state.value.copy(pendingRestore = null)
+        backupNow()
+    }
+
     fun dismissRefused() { _state.value = _state.value.copy(refusedIssues = emptyList()) }
 
-    fun restoreBackup(name: String) = mutate {
+    fun restoreBackup(target: PendingRestore) = mutate {
         _state.value = _state.value.copy(pendingRestore = null)
-        when (val outcome = backup.restore(name)) {
+        val outcome = if (target.local) backup.restoreLocal(target.name) else backup.restore(target.name)
+        when (outcome) {
             is RestoreOutcome.Restored -> {
                 _messages.emit(UiMessage(R.string.backup_restored, listOf(outcome.words, outcome.chapters)))
                 _state.value = _state.value.copy(restartRequired = true)
@@ -182,7 +222,7 @@ class SettingsViewModel(
             is RestoreOutcome.Failed ->
                 _messages.emit(failureMessage(outcome.failure, outcome.detail))
 
-            // 库连接已经关了，无论文件换没换成，这台机器都必须重开一次应用才能再用。
+            // 库连接已经关了，无论文件没换成，这台机器都必须重开一次应用才能再用。
             is RestoreOutcome.RestartRequired ->
                 _state.value = _state.value.copy(restartRequired = true, restartDetail = backupDetailOf(outcome.detail))
         }
@@ -194,6 +234,7 @@ class SettingsViewModel(
             backupAccount = prefs.webDavAccount,
             backupPassword = "",
             backupPasswordSaved = backup.hasPassword,
+            backupDevice = prefs.deviceName,
             backupAuto = prefs.backupEnabled,
             backupLine = backupLineOf(backup.lastRun()),
         )
@@ -204,7 +245,7 @@ class SettingsViewModel(
         if (last == null) return UiMessage(R.string.backup_never)
         val stamp = BACKUP_STAMP.format(Instant.ofEpochSecond(last.atSec).atZone(zone))
         return if (last.ok) {
-            UiMessage(R.string.backup_last_ok, listOf(stamp, last.remoteName, kiloBytesOf(last.bytes)))
+            UiMessage(R.string.backup_last_ok, listOf(stamp, kiloBytesOf(last.bytes)))
         } else {
             UiMessage(
                 R.string.backup_last_failed,
@@ -312,11 +353,13 @@ class SettingsViewModel(
         dailyNewLimit = prefs.dailyNewLimit,
         fontScale = prefs.fontScale,
         darkMode = prefs.darkMode,
+        autoSpeak = prefs.autoSpeak,
         reminderEnabled = reminder.enabled,
         reminderMinute = reminder.minuteOfDay,
         notificationsAllowed = reminder.areNotificationsAllowed(),
         backupUrl = prefs.webDavUrl,
         backupAccount = prefs.webDavAccount,
+        backupDevice = prefs.deviceName,
         backupAuto = prefs.backupEnabled,
         backupPasswordSaved = backup.hasPassword,
     )

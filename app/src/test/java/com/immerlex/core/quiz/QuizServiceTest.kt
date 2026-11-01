@@ -3,6 +3,8 @@ package com.immerlex.core.quiz
 import com.immerlex.core.db.FSRS_STATE_REVIEW
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
+import com.immerlex.core.db.QuizMaterialEntity
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.TrickyLinkEntity
 import com.immerlex.core.db.TrickyWordEntity
@@ -126,7 +128,7 @@ class QuizServiceTest {
 
         val written = logs.items.last()
         assertEquals(LOG_KIND_RECALL, written.kind)
-        assertEquals(QuizService.SOURCE_QUIZ, written.source)
+        assertEquals(LOG_SOURCE_QUIZ, written.source)
         assertEquals(question.type.key, written.questionType)
         assertEquals(Rating.GOOD.value, written.rating)
     }
@@ -236,6 +238,57 @@ class QuizServiceTest {
         )
     }
 
+    @Test
+    fun aStoredCollocationBecomesAPhraseQuestionOnceTheWordIsFarEnoughAlong() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val store = FakeQuizMaterialDao()
+        val harbour = words.insert(
+            word("harbour").copy(
+                translation = "",
+                stability = 5.0,
+                difficulty = 6.0,
+                dueEpochSec = now.minus(1, ChronoUnit.DAYS).epochSecond,
+                lastReviewEpochSec = now.minus(2, ChronoUnit.DAYS).epochSecond,
+                fsrsState = FSRS_STATE_REVIEW,
+                reps = 1,
+                intervalDays = 1,
+            ),
+        )
+        logs.insert(
+            log(harbour, LOG_KIND_RECALL, now.minus(3, ChronoUnit.DAYS))
+                .copy(questionType = QuizType.CLOZE.key),
+        )
+        logs.insert(
+            log(harbour, LOG_KIND_RECALL, now.minus(2, ChronoUnit.DAYS))
+                .copy(questionType = QuizType.ZH_EN.key),
+        )
+        words.insert(word("take"))
+        words.insert(word("draw"))
+        words.insert(word("pay"))
+        store.items["harbour"] = material("harbour", """[{"w":"harbour wall","zh":"防波堤"}]""")
+        store.items["take"] = material("take", """[{"w":"take measures","zh":"采取措施"}]""")
+        store.items["draw"] = material("draw", """[{"w":"draw a conclusion","zh":"下结论"}]""")
+        store.items["pay"] = material("pay", """[{"w":"pay attention","zh":"注意"}]""")
+        val service = service(words, logs, FakeTrickyDao(), material = QuizMaterialStore(store))
+
+        // 这个词没有译文、释义和例句，前四种题型都出不了，只剩搭配题。
+        val question = service.planDue(now, dailyNewLimit = 10, seed = 5).questions.single()
+
+        assertEquals(QuizType.COLLOCATION, question.type)
+        assertEquals("题干是这个自己的短语，选项问它的意思", "harbour wall", question.prompt)
+        assertEquals("防波堤", question.options.first { it.correct }.text)
+        assertEquals(4, question.options.size)
+        assertTrue(
+            "选项全是释义，不能靠在里面找这个词选答案",
+            question.options.none { it.text.contains("harbour", ignoreCase = true) },
+        )
+        assertTrue("每个选项都能揭开自己原本的短语", question.options.all { it.gloss.isNotBlank() })
+    }
+
+    private fun material(word: String, collocations: String) =
+        QuizMaterialEntity(word = word, collocations = collocations, updatedAtSec = 1)
+
     /** 记下模型被问过哪些词——落库之后不该再有第二次。 */
     private class RecordingEnricher(
         private val asked: MutableList<Long>,
@@ -245,7 +298,7 @@ class QuizServiceTest {
             asked += words.map { it.id }
             if (answerWith.isEmpty()) return QuizEnrichment()
             return QuizEnrichment(
-                words.associate { it.id to EnrichedWord("a place where ships stay", "船进了 harbour。", answerWith) },
+                words.associate { it.id to EnrichedWord("a place where ships stay", "船进了 harbour。", distractors = answerWith) },
             )
         }
     }

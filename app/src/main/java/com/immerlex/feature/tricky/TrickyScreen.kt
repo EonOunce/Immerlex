@@ -47,6 +47,7 @@ import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.tricky.TrickyGroup
+import com.immerlex.core.tricky.TrickyGroups
 
 private const val MAX_BATCH_TEXT = 4_000
 private const val MAX_NEW_WORD = 40
@@ -60,6 +61,8 @@ fun TrickyScreen(vm: TrickyViewModel, onBack: () -> Unit) {
     var showBatch by rememberSaveable { mutableStateOf(false) }
     var batchText by rememberSaveable { mutableStateOf("") }
     var addTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val shown = remember(state.groups, query) { TrickyGroups.matching(state.groups, query) }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg -> snackbar.showSnackbar(context.textFor(msg)) }
@@ -87,11 +90,18 @@ fun TrickyScreen(vm: TrickyViewModel, onBack: () -> Unit) {
                     Text(stringResource(R.string.tricky_batch))
                 }
             }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                singleLine = true,
+                label = { Text(stringResource(R.string.tricky_search)) },
+            )
             LazyColumn(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(state.groups, key = { it.key }) { group ->
+                items(shown, key = { it.key }) { group ->
                     GroupCard(
                         group = group,
                         onAdd = { addTarget = group.key },
@@ -99,10 +109,10 @@ fun TrickyScreen(vm: TrickyViewModel, onBack: () -> Unit) {
                         onDelete = { vm.deleteWord(it) },
                     )
                 }
-                if (state.groups.isEmpty()) {
+                if (shown.isEmpty()) {
                     item(key = "empty") {
                         Text(
-                            stringResource(R.string.tricky_page_empty),
+                            stringResource(if (query.isBlank()) R.string.tricky_page_empty else R.string.tricky_search_empty),
                             color = ImmerlexColors.Meta,
                             modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                         )

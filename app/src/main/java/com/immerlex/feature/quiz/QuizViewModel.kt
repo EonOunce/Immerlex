@@ -9,6 +9,7 @@ import com.immerlex.core.quiz.QuizResumeStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.settings.AppPreferences
+import com.immerlex.core.tricky.TrickyRepository
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -39,8 +40,12 @@ data class QuizState(
     val group: Int = 1,
     /** 有答错的词排在末尾重练：最后一题的按钮因此仍写"下一题"，点了不该以为会话结束。 */
     val practiceQueued: Boolean = false,
+    /** 按过「不确定」：没选任何一项，答案照样翻开，记账按答错走。 */
+    val doubt: Boolean = false,
+    /** 这一组里已经标过易错的词：只有没标过的才问那一句"要不要标"。 */
+    val trickyIds: Set<Long> = emptySet(),
 ) {
-    val answered: Boolean get() = chosen != null
+    val answered: Boolean get() = chosen != null || doubt
     val isLast: Boolean get() = total > 0 && index >= total - 1
     val showsFinish: Boolean get() = isLast && !practiceQueued
 
@@ -50,6 +55,12 @@ data class QuizState(
         correct = correct,
         correctCount = correctCount + if (correct && !practice) 1 else 0,
     )
+
+    /** 不确定就是没记住：没有"你选的这一项"可标，只把答案翻开。 */
+    fun afterDoubt(): QuizState = copy(doubt = true, correct = false)
+
+    /** 换下一题：上一题的选择与"不确定"都该清掉。 */
+    fun fresh(): QuizState = copy(chosen = null, correct = false, doubt = false)
 }
 
 /**
@@ -61,6 +72,7 @@ class QuizViewModel(
     private val quiz: QuizService,
     private val prefs: AppPreferences,
     private val resume: QuizResumeStore,
+    private val tricky: TrickyRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuizState())
@@ -100,15 +112,39 @@ class QuizViewModel(
         val correct = question.options[index].correct
         _state.value = current.afterAnswer(index, correct)
         if (!current.practice) {
-            if (!correct) {
-                wrong += question
-                if (alternatives.containsKey(question.wordId)) {
-                    _state.value = _state.value.copy(practiceQueued = true)
-                }
-            }
+            if (!correct) markMissed(question)
             viewModelScope.launch { quiz.record(question, correct) }
         }
         persist()
+    }
+
+    /** 「不确定」按答错走：翻开答案、排进末尾重练、记一次忘了。 */
+    fun doubt() {
+        val current = _state.value
+        val question = current.question ?: return
+        if (current.answered) return
+        _state.value = current.afterDoubt()
+        if (!current.practice) {
+            markMissed(question)
+            viewModelScope.launch { quiz.record(question, correct = false) }
+        }
+        persist()
+    }
+
+    /** 答错或不确定时问一句要不要标成易错词：只打标记，不替用户挂易混。 */
+    fun markTricky() {
+        val current = _state.value
+        val question = current.question ?: return
+        if (question.wordId in current.trickyIds) return
+        _state.value = current.copy(trickyIds = current.trickyIds + question.wordId)
+        viewModelScope.launch { tricky.mark(question.word) }
+    }
+
+    private fun markMissed(question: QuizQuestion) {
+        wrong += question
+        if (alternatives.containsKey(question.wordId)) {
+            _state.value = _state.value.copy(practiceQueued = true)
+        }
     }
 
     fun next() {
@@ -119,12 +155,7 @@ class QuizViewModel(
             return
         }
         if (!current.isLast) {
-            _state.value = current.copy(
-                question = questions[current.index + 1],
-                index = current.index + 1,
-                chosen = null,
-                correct = false,
-            )
+            _state.value = current.fresh().copy(question = questions[current.index + 1], index = current.index + 1)
             persist()
             return
         }
@@ -136,15 +167,13 @@ class QuizViewModel(
         val current = _state.value
         if (current.phase != QuizPhase.DONE) return
         excluded = excluded + questions.map { it.wordId }
-        _state.value = current.copy(
+        _state.value = current.fresh().copy(
             phase = QuizPhase.LOADING,
             stage = QuizStage.COLLECTING,
             group = current.group + 1,
             question = null,
             index = 0,
             total = 0,
-            chosen = null,
-            correct = false,
             correctCount = 0,
             roundTotal = 0,
             wrongCount = 0,
@@ -205,6 +234,7 @@ class QuizViewModel(
             total = questions.size,
             roundTotal = questions.size,
             group = _state.value.group,
+            trickyIds = session.trickyIds,
         )
         persist()
     }
@@ -220,14 +250,12 @@ class QuizViewModel(
             return
         }
         practiceQuestions = practice
-        _state.value = _state.value.copy(
+        _state.value = _state.value.fresh().copy(
             phase = QuizPhase.QUESTION,
             practice = true,
             question = practice.first(),
             index = 0,
             total = practice.size,
-            chosen = null,
-            correct = false,
             wrongCount = wrong.size,
             practiceQueued = false,
         )
@@ -235,12 +263,7 @@ class QuizViewModel(
     }
 
     private fun showPractice(index: Int) {
-        _state.value = _state.value.copy(
-            question = practiceQuestions[index],
-            index = index,
-            chosen = null,
-            correct = false,
-        )
+        _state.value = _state.value.fresh().copy(question = practiceQuestions[index], index = index)
         persist()
     }
 
@@ -282,6 +305,8 @@ class QuizViewModel(
             group = saved.group,
             practice = saved.inPractice,
             practiceQueued = !saved.inPractice && wrong.any { alternatives.containsKey(it.wordId) },
+            doubt = saved.doubt,
+            trickyIds = saved.trickyIds,
         )
         return true
     }
@@ -301,6 +326,8 @@ class QuizViewModel(
             correct = current.correct,
             correctCount = current.correctCount,
             group = current.group,
+            doubt = current.doubt,
+            trickyIds = current.trickyIds,
         )
     }
 

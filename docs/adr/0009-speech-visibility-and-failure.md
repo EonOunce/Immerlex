@@ -24,3 +24,8 @@
 
 - `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 通过。
 - 模拟器点"朗读"后日志出现 `Synthesis request for locale eng-USA`、`TTS dispatch: en-us-x-iog-lstm-embedded` 与 AudioTrack 播放帧，说明初始化、语言选择、speak 全链路走通；失败分支尚未在真机复现，用户机型与语音包情况待真机确认。
+
+## 修订（2026-10-31，v2.5）
+
+- `WordSpeaker` 从 `feature/reader/ReaderSpeech.kt` 迁到 `app/ui/WordSpeech.kt`：测验页也要出声，而 feature 之间禁止横向依赖，跨 feature 共用的呈现逻辑本就住在 `app/ui`。三种失败的区分与异步初始化补读一条没变，`speechProblemText()` 随文件一起公开。
+- 新增可选的**自动发音**（默认关）：阅读词卡一打开就读，测验里只在不会把答案念出来的时候读。见 [ADR 0020](0020-v25-quiz-options-doubt-and-auto-speech.md)。

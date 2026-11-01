@@ -99,6 +99,16 @@ class QuizPolicyTest {
         assertEquals(QuizType.entries.filter { it.tier == 0 }.toSet(), first.toSet())
     }
 
+    @Test
+    fun collocationWaitsForTheTopTierJustLikeDefinition() {
+        val tierOne = listOf(log(Rating.GOOD, LOG_KIND_RECALL, QuizType.CLOZE))
+        assertFalse(QuizType.COLLOCATION in QuizPolicy.availableTypes(tierOne, tricky = false))
+
+        val tierTwo = tierOne + log(Rating.GOOD, LOG_KIND_RECALL, QuizType.ZH_EN, at = 200)
+        assertTrue(QuizType.COLLOCATION in QuizPolicy.availableTypes(tierTwo, tricky = false))
+        assertTrue("易错词不分档，连搭配题一起五种全开", QuizType.COLLOCATION in QuizPolicy.availableTypes(tierOne, tricky = true))
+    }
+
     private fun log(
         rating: Rating,
         kind: String,

@@ -3,8 +3,10 @@ package com.immerlex.feature.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -24,11 +26,15 @@ import com.immerlex.app.R
 import com.immerlex.app.restartApp
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.backupIssueLabel
+import com.immerlex.app.ui.downloadWarning
 import com.immerlex.app.ui.kiloBytesOf
 import com.immerlex.app.ui.textFor
+import com.immerlex.core.backup.BackupNaming
+import com.immerlex.core.backup.RemoteFile
+import com.immerlex.core.backup.SafetyCopies
 import com.immerlex.core.backup.SnapshotProblem
 
-/** 备份与恢复整段。四个对话框由 [BackupDialogs] 单独挂在 Scaffold 之外，免得滚动容器裁掉。 */
+/** 备份与同步整段。四个对话框由 [BackupDialogs] 单独挂在 Scaffold 之外，免得滚动容器裁掉。 */
 @Composable
 internal fun BackupSection(state: SettingsState, vm: SettingsViewModel) {
     val context = LocalContext.current
@@ -61,6 +67,13 @@ internal fun BackupSection(state: SettingsState, vm: SettingsViewModel) {
                 ),
             )
         },
+    )
+    OutlinedTextField(
+        value = state.backupDevice,
+        onValueChange = vm::onBackupDevice,
+        singleLine = true,
+        label = { Text(stringResource(R.string.settings_backup_device)) },
+        supportingText = { Text(stringResource(R.string.settings_backup_device_hint)) },
     )
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(onClick = vm::saveBackupConfig, enabled = !state.busy) {
@@ -97,18 +110,27 @@ internal fun BackupDialogs(state: SettingsState, vm: SettingsViewModel) {
     if (state.restartRequired) RestartDialog(state.restartDetail) { context.restartApp() }
 }
 
-/** 云端文件列表：名字里就带日期，所以直接当标签用。 */
+/**
+ * 云端那一串和本机留的那几份分开列：前者要联网取，后者就在这台机器上，
+ * 网盘连不上的时候它是唯一的退路。
+ */
 @Composable
 private fun BackupPicker(state: SettingsState, vm: SettingsViewModel) {
     AlertDialog(
         onDismissRequest = vm::closePicker,
         title = { Text(stringResource(R.string.backup_pick_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                state.remoteBackups.forEach { file ->
-                    TextButton(onClick = { vm.onPickBackup(file.name) }) {
-                        Text(stringResource(R.string.backup_file_row, file.name, kiloBytesOf(file.sizeBytes)))
-                    }
+            Column(
+                Modifier.verticalScroll(rememberScrollState()).heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (state.localBackups.isNotEmpty()) {
+                    Section(stringResource(R.string.backup_pick_local))
+                    state.localBackups.forEach { FileRow(it, true) { vm.onPickBackup(it.name, true) } }
+                }
+                if (state.remoteBackups.isNotEmpty()) {
+                    Section(stringResource(R.string.backup_pick_cloud))
+                    state.remoteBackups.forEach { FileRow(it, false) { vm.onPickBackup(it.name, false) } }
                 }
             }
         },
@@ -120,20 +142,75 @@ private fun BackupPicker(state: SettingsState, vm: SettingsViewModel) {
 }
 
 @Composable
-private fun RestoreConfirm(name: String, vm: SettingsViewModel) {
-    AlertDialog(
-        onDismissRequest = vm::cancelRestore,
-        title = { Text(stringResource(R.string.backup_confirm_title)) },
-        text = { Text(stringResource(R.string.backup_confirm_body, name)) },
-        confirmButton = {
-            Button(onClick = { vm.restoreBackup(name) }) {
-                Text(stringResource(R.string.backup_action_restore))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = vm::cancelRestore) { Text(stringResource(R.string.action_cancel)) }
-        },
-    )
+private fun Section(title: String) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = ImmerlexColors.Meta)
+}
+
+@Composable
+private fun FileRow(file: RemoteFile, local: Boolean, onPick: () -> Unit) {
+    TextButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
+        Text(rowLabel(file.name, file.sizeBytes, local))
+    }
+}
+
+/** 文件名里那几个字段就是这份备份的全部来历，界面把它们摊开成一行；读不懂的原始名字照旧显示。 */
+@Composable
+private fun rowLabel(name: String, bytes: Long, local: Boolean): String {
+    val kb = kiloBytesOf(bytes)
+    if (local) {
+        val stamp = SafetyCopies.label(name)
+        return stringResource(R.string.backup_file_row, stamp.ifBlank { name }, kb)
+    }
+    val key = BackupNaming.keyOf(name)
+    return when {
+        key == null -> stringResource(R.string.backup_file_row, name, kb)
+        key.isLegacy -> stringResource(R.string.backup_row_legacy, key.day.toString(), kb)
+        else -> stringResource(R.string.backup_row_stamped, key.day.toString(), key.hourMinute, key.device, kb)
+    }
+}
+
+/** 本机没东西要丢就直接确认；有，就先给一条按数说的警告，并把「先上传」摆在最顺手的位置。 */
+@Composable
+private fun RestoreConfirm(target: PendingRestore, vm: SettingsViewModel) {
+    val context = LocalContext.current
+    val warning = downloadWarning(target.verdict)
+    if (warning == null) {
+        AlertDialog(
+            onDismissRequest = vm::cancelRestore,
+            title = { Text(stringResource(R.string.backup_confirm_title)) },
+            text = { Text(stringResource(R.string.backup_confirm_body)) },
+            confirmButton = {
+                Button(onClick = { vm.restoreBackup(target) }) {
+                    Text(stringResource(R.string.backup_action_restore))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::cancelRestore) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = vm::cancelRestore,
+            title = { Text(stringResource(R.string.backup_conflict_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(context.textFor(warning))
+                    Text(stringResource(R.string.backup_confirm_body))
+                }
+            },
+            confirmButton = {
+                Button(onClick = vm::uploadFirst) { Text(stringResource(R.string.backup_action_upload_first)) }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { vm.restoreBackup(target) }) {
+                        Text(stringResource(R.string.backup_action_download_anyway))
+                    }
+                    TextButton(onClick = vm::cancelRestore) { Text(stringResource(R.string.action_cancel)) }
+                }
+            },
+        )
+    }
 }
 
 @Composable

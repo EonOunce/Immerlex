@@ -2,6 +2,7 @@ package com.immerlex.core.quiz
 
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.TrickyDao
 import com.immerlex.core.db.WordDao
@@ -91,7 +92,7 @@ class QuizService(
         val result = schedule.recall(
             word = word,
             rating = if (correct) Rating.GOOD else Rating.AGAIN,
-            source = SOURCE_QUIZ,
+            source = LOG_SOURCE_QUIZ,
             questionType = question.type.key,
             now = now,
             // 今天的词（含刚学过的）都允许作答；是否该考由候选集决定，不靠 due 再拦一次。
@@ -108,16 +109,24 @@ class QuizService(
         onStage: (QuizStage) -> Unit,
     ): QuizSession {
         val logsByWord = logDao.forWords(words.map { it.id }).groupBy { it.wordId }
-        val enrichment = enrichmentFor(words, now, onStage)
+        val pool = (wordDao.randomWords(POOL_SIZE) + words).distinctBy { it.id }
+        // 素材整批读一次：本组词的用来出题，池子里的只当搭配题的干扰项，不拿去问 AI。
+        val stored = material?.load(pool).orEmpty()
+        val sessionIds = words.mapTo(HashSet()) { it.id }
+        val enrichment = enrichmentFor(words, stored.filterKeys { it in sessionIds }, now, onStage)
         onStage(QuizStage.BUILDING)
         val names = words.map { it.word.trim().lowercase() }
         val tricky = trickyDao.byWords(names).mapTo(HashSet()) { it.word }
+        val trickyIds = words.filter { it.word.trim().lowercase() in tricky }.mapTo(HashSet()) { it.id }
         val context = QuestionContext(
-            pool = (wordDao.randomWords(POOL_SIZE) + words).distinctBy { it.id },
+            pool = pool,
             sentences = ClozeSentences.fromChapters(chapterDao.recentSegments(CHAPTER_SCAN)),
             enrichment = enrichment,
             confusables = confusablesFor(words),
             attempts = logsByWord.mapValues { (_, logs) -> logs.count { it.kind == LOG_KIND_RECALL } },
+            collocationPool = (stored.values + enrichment.entries.values)
+                .flatMap { it.collocations }
+                .distinctBy { it.word.trim().lowercase() },
             seed = seed,
         )
         val questions = mutableListOf<QuizQuestion>()
@@ -134,7 +143,7 @@ class QuizService(
             questions += primary
             alternativeFor(word, context, primary.type)?.let { alternatives[word.id] = it }
         }
-        return QuizSession(mode, questions, alternatives)
+        return QuizSession(mode, questions, alternatives, trickyIds)
     }
 
     /**
@@ -143,16 +152,16 @@ class QuizService(
      */
     private suspend fun enrichmentFor(
         words: List<WordEntity>,
+        stored: Map<Long, EnrichedWord>,
         now: Instant,
         onStage: (QuizStage) -> Unit,
     ): QuizEnrichment {
-        val stored = material?.load(words).orEmpty()
         val pending = words.filterNot { it.id in stored }
         if (pending.isEmpty()) return QuizEnrichment(stored)
         if (enricher == null) return QuizEnrichment(stored)
         onStage(QuizStage.ASKING_AI)
         val fresh = enricher.enrich(pending)
-        material?.save(fresh, now.epochSecond)
+        material?.save(fresh, pending, now.epochSecond)
         return QuizEnrichment(stored + fresh.entries)
     }
 
@@ -223,7 +232,6 @@ class QuizService(
         /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */
         const val SESSION_LIMIT = 40
         const val EARLY_GROUP_SIZE = 5
-        const val SOURCE_QUIZ = "quiz"
         private const val POOL_SIZE = 200
         private const val CHAPTER_SCAN = 20
         /** 易混词只留前面几个：选项一共三个，全被固定项占住就永远换不了样。 */

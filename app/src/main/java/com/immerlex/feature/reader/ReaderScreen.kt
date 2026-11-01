@@ -2,12 +2,17 @@ package com.immerlex.feature.reader
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -23,14 +28,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
@@ -42,19 +48,27 @@ import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
+import com.immerlex.core.reader.ReaderWord
+
+/** 阅读页上那几层浮层各自开没开。放在一处，免得六个 rememberSaveable 把页面编排挤没了。 */
+private class ReaderOverlays {
+    var chaptersOpen by mutableStateOf(false)
+    var shelfOpen by mutableStateOf(false)
+    var newBookOpen by mutableStateOf(false)
+    var composerOpen by mutableStateOf(false)
+    var rewriteOpen by mutableStateOf(false)
+    var deleteTarget by mutableStateOf<Long?>(null)
+}
 
 @Composable
 fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    val panes = remember(widthDp) { readerPanesOf(widthDp) }
     val layoutState = remember { mutableStateOf<TextLayoutResult?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var chaptersOpen by remember { mutableStateOf(false) }
-    var shelfOpen by remember { mutableStateOf(false) }
-    var newBookOpen by remember { mutableStateOf(false) }
-    var composerOpen by remember { mutableStateOf(false) }
-    var rewriteOpen by remember { mutableStateOf(false) }
-    var deleteTarget by remember { mutableStateOf<Long?>(null) }
+    val overlays = remember { ReaderOverlays() }
     var englishOnly by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -64,138 +78,204 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ReaderHeader(
-                title = state.title,
-                book = state.book,
-                number = state.number,
-                mode = state.mode,
-                wordCount = state.wordCount,
-                learned = state.learned,
-                recalled = state.recalled,
-                loading = state.loading,
-                hasChapter = state.hasChapter,
-                isShort = state.isShort,
+        ReaderPanes(
+            vm = vm,
+            state = state,
+            panes = panes,
+            layoutState = layoutState,
+            englishOnly = englishOnly,
+            overlays = overlays,
+            padding = padding,
+            onOpenSettings = onOpenSettings,
+            onToggleEnglish = { englishOnly = !englishOnly },
+        )
+    }
+
+    if (!panes.card) {
+        state.selected?.let { word -> ReaderWordCard(vm, state, asPane = false, word = word) }
+    }
+    ReaderSheets(overlays, vm, state)
+    ReaderDialogs(overlays, vm, state)
+}
+
+@Composable
+private fun ReaderPanes(
+    vm: ReaderViewModel,
+    state: ReaderState,
+    panes: ReaderPanes,
+    layoutState: MutableState<TextLayoutResult?>,
+    englishOnly: Boolean,
+    overlays: ReaderOverlays,
+    padding: PaddingValues,
+    onOpenSettings: () -> Unit,
+    onToggleEnglish: () -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxSize().padding(padding)) {
+        if (panes.chapters) {
+            ReaderChapterRail(
+                chapters = state.chapters,
+                currentId = state.chapterId,
                 generating = state.generating,
-                englishOnly = englishOnly,
-                onSelectMode = vm::setMode,
-                onToggleEnglish = { englishOnly = !englishOnly },
-                onGenerate = vm::generate,
-                onOpenChapters = { chaptersOpen = true },
-                onOpenShelf = { shelfOpen = true },
+                onPick = vm::openChapter,
+                onDelete = { overlays.deleteTarget = it },
+                onRewrite = { overlays.rewriteOpen = state.chapterId != 0L },
             )
-            when {
-                state.loading -> CenteredNote(stringResource(R.string.reader_loading))
-                !state.hasChapter -> EmptyChapter(
+        }
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            Column(
+                modifier = Modifier.widthIn(max = READER_BODY_MAX_WIDTH_DP.dp)
+                    .fillMaxHeight()
+                    .align(Alignment.TopCenter),
+            ) {
+                ReaderHeader(
+                    title = state.title,
+                    book = state.book,
+                    number = state.number,
+                    mode = state.mode,
+                    wordCount = state.wordCount,
+                    learned = state.learned,
+                    recalled = state.recalled,
+                    loading = state.loading,
+                    hasChapter = state.hasChapter,
+                    isShort = state.isShort,
                     generating = state.generating,
-                    onGenerate = vm::generate,
-                    onOpenSettings = onOpenSettings,
-                )
-                else -> ChapterBody(
-                    state = state,
-                    layoutState = layoutState,
                     englishOnly = englishOnly,
-                    onWordTapped = vm::select,
+                    chaptersAsSheet = !panes.chapters,
+                    onSelectMode = vm::setMode,
+                    onToggleEnglish = onToggleEnglish,
+                    onGenerate = vm::generate,
+                    onOpenChapters = { overlays.chaptersOpen = true },
+                    onOpenShelf = { overlays.shelfOpen = true },
                 )
+                when {
+                    state.loading -> CenteredNote(stringResource(R.string.reader_loading))
+                    !state.hasChapter -> EmptyChapter(
+                        generating = state.generating,
+                        onGenerate = vm::generate,
+                        onOpenSettings = onOpenSettings,
+                    )
+                    else -> ChapterBody(
+                        state = state,
+                        layoutState = layoutState,
+                        englishOnly = englishOnly,
+                        onWordTapped = vm::select,
+                    )
+                }
+            }
+        }
+        if (panes.card) {
+            // 宽度一直占着：词卡开合时正文不重新折行，刚点过的词不会跳走。
+            Box(Modifier.width(READER_CARD_PANE_DP.dp + 24.dp).fillMaxHeight()) {
+                state.selected?.let { word -> ReaderWordCard(vm, state, asPane = true, word = word) }
             }
         }
     }
+}
 
-    state.selected?.let { word ->
-        WordCardSheet(
-            word = word,
-            access = state.access,
-            previews = state.previews,
-            tricky = state.tricky,
-            graded = state.graded,
-            undo = state.pendingUndo,
-            onGrade = vm::grade,
-            onUndo = vm::undo,
-            onToggleTricky = vm::toggleTricky,
-            onLinkTricky = vm::linkTricky,
-            onUnlinkTricky = vm::unlinkTricky,
-            onOpenTricky = vm::openTricky,
-            onAddTricky = vm::addTrickyManual,
-            onDismiss = vm::dismissCard,
-        )
-    }
-    if (chaptersOpen) {
+@Composable
+private fun ReaderSheets(overlays: ReaderOverlays, vm: ReaderViewModel, state: ReaderState) {
+    if (overlays.chaptersOpen) {
         ChapterSheet(
             chapters = state.chapters,
             currentId = state.chapterId,
             generating = state.generating,
             onPick = { id ->
-                chaptersOpen = false
+                overlays.chaptersOpen = false
                 vm.openChapter(id)
             },
-            onDismiss = { chaptersOpen = false },
+            onDismiss = { overlays.chaptersOpen = false },
             onRewrite = {
-                chaptersOpen = false
-                rewriteOpen = state.chapterId != 0L
+                overlays.chaptersOpen = false
+                overlays.rewriteOpen = state.chapterId != 0L
             },
             onDelete = { id ->
-                chaptersOpen = false
-                deleteTarget = id
+                overlays.chaptersOpen = false
+                overlays.deleteTarget = id
             },
         )
     }
-    if (shelfOpen) {
+    if (overlays.shelfOpen) {
         ShelfPage(
             state = state,
             onSelectBook = vm::switchBook,
             onOpenShort = vm::openChapter,
-            onNewBook = { newBookOpen = true },
-            onWriteShort = { composerOpen = true },
+            onNewBook = { overlays.newBookOpen = true },
+            onWriteShort = { overlays.composerOpen = true },
             onRequestDeleteShorts = { ids ->
-                shelfOpen = false
+                overlays.shelfOpen = false
                 vm.deleteShorts(ids)
             },
-            onBack = { shelfOpen = false },
+            onBack = { overlays.shelfOpen = false },
         )
     }
-    if (newBookOpen) {
+    if (overlays.newBookOpen) {
         NewBookDialog(
-            onDismiss = { newBookOpen = false },
+            onDismiss = { overlays.newBookOpen = false },
             onCreate = { name ->
-                newBookOpen = false
+                overlays.newBookOpen = false
                 vm.switchBook(name)
             },
         )
     }
-    if (composerOpen) {
+    if (overlays.composerOpen) {
         ShortComposer(
-            onDismiss = { composerOpen = false },
+            onDismiss = { overlays.composerOpen = false },
             onWrite = { plan ->
-                composerOpen = false
-                shelfOpen = false
+                overlays.composerOpen = false
+                overlays.shelfOpen = false
                 vm.generateShort(plan)
             },
         )
     }
-    if (rewriteOpen) {
+}
+
+@Composable
+private fun ReaderDialogs(overlays: ReaderOverlays, vm: ReaderViewModel, state: ReaderState) {
+    if (overlays.rewriteOpen) {
         ConfirmDialog(
             title = stringResource(R.string.reader_rewrite),
             body = stringResource(R.string.reader_rewrite_body, state.wordCount),
             confirmLabel = stringResource(R.string.reader_rewrite_action),
             onConfirm = {
-                rewriteOpen = false
+                overlays.rewriteOpen = false
                 vm.rewrite()
             },
-            onDismiss = { rewriteOpen = false },
+            onDismiss = { overlays.rewriteOpen = false },
         )
     }
-    deleteTarget?.let { id ->
+    overlays.deleteTarget?.let { id ->
         ConfirmDialog(
             title = stringResource(R.string.reader_chapter_delete),
             body = stringResource(R.string.reader_delete_body, state.chapters.find { it.id == id }?.number ?: 0),
             confirmLabel = stringResource(R.string.action_delete),
             onConfirm = {
-                deleteTarget = null
+                overlays.deleteTarget = null
                 vm.deleteChapter(id)
             },
-            onDismiss = { deleteTarget = null },
+            onDismiss = { overlays.deleteTarget = null },
         )
     }
+}
+
+@Composable
+private fun ReaderWordCard(vm: ReaderViewModel, state: ReaderState, asPane: Boolean, word: ReaderWord) {
+    WordCardHost(
+        asPane = asPane,
+        word = word,
+        access = state.access,
+        previews = state.previews,
+        tricky = state.tricky,
+        graded = state.graded,
+        undo = state.pendingUndo,
+        onGrade = vm::grade,
+        onUndo = vm::undo,
+        onToggleTricky = vm::toggleTricky,
+        onLinkTricky = vm::linkTricky,
+        onUnlinkTricky = vm::unlinkTricky,
+        onOpenTricky = vm::openTricky,
+        onAddTricky = vm::addTrickyManual,
+        onDismiss = vm::dismissCard,
+    )
 }
 
 @Composable
@@ -212,6 +292,7 @@ private fun ReaderHeader(
     isShort: Boolean,
     generating: Boolean,
     englishOnly: Boolean,
+    chaptersAsSheet: Boolean,
     onSelectMode: (ReaderMode) -> Unit,
     onToggleEnglish: () -> Unit,
     onGenerate: () -> Unit,
@@ -232,9 +313,10 @@ private fun ReaderHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
-                    .clickable(enabled = hasChapter && !isShort, onClick = onOpenChapters),
+                    .clickable(enabled = hasChapter && !isShort && chaptersAsSheet, onClick = onOpenChapters),
             )
-            if (hasChapter && !isShort) {
+            // 左边已经有章节目录时，标题不再当入口，省得同一件事有两个开关。
+            if (hasChapter && !isShort && chaptersAsSheet) {
                 IconButton(onClick = onOpenChapters, modifier = Modifier.size(30.dp)) {
                     Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.reader_chapters_title))
                 }

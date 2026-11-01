@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.dict.DictionarySource
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
@@ -27,6 +28,8 @@ class TrickyGroupStoreTest {
 
     private object NoDictionary : DictionarySource {
         override fun lookup(word: String) = null
+
+        override fun search(needle: String, limit: Int) = emptyList<DictEntry>()
     }
 
     @Before

@@ -25,8 +25,10 @@ class QuestionBuildersTest {
         assertEquals("harbour", question.prompt)
         assertEquals(4, question.options.size)
         assertEquals(1, question.options.count { it.correct })
-        assertEquals("港口", question.correctText)
+        assertEquals("港口", question.correctText())
         assertTrue(question.options.all { it.gloss.isNotBlank() })
+        // 蒙错的那个中文选项，答完要能看出它其实是哪个单词。
+        assertEquals("harbour", question.correctGloss())
     }
 
     @Test
@@ -41,8 +43,9 @@ class QuestionBuildersTest {
 
         assertEquals(QuizType.ZH_EN, question.type)
         assertEquals("港口", question.prompt)
-        assertEquals("harbour", question.correctText)
-        assertEquals("港口", question.correctGloss)
+        assertEquals("harbour", question.correctText())
+        assertTrue("英文选项底下要能对出中文释义", question.options.all { it.gloss.isNotBlank() })
+        assertEquals("港口", question.correctGloss())
     }
 
     @Test
@@ -57,7 +60,7 @@ class QuestionBuildersTest {
 
         assertEquals(QuizType.CLOZE, question.type)
         assertEquals("雨停之后，她走到____边。", question.prompt)
-        assertEquals("harbour", question.correctText)
+        assertEquals("harbour", question.correctText())
     }
 
     @Test
@@ -162,6 +165,112 @@ class QuestionBuildersTest {
         assertEquals(question.options.size, question.options.map { it.text }.distinct().size)
         assertFalse(question.options.filterNot { it.correct }.any { it.text == "港口" })
     }
+
+    @Test
+    fun collocationAsksWhatARealPhraseMeans() {
+        val question = CollocationBuilder().build(harbour, collocationContext(seed = 21))!!
+
+        assertEquals(QuizType.COLLOCATION, question.type)
+        assertTrue("题干必须是这个词自己的真搭配", question.prompt in harbourCollocations.map { it.word })
+        assertEquals(4, question.options.size)
+        assertEquals(1, question.options.count { it.correct })
+        assertEquals(
+            "正确答案就是题干那条短语的意思",
+            harbourCollocations.first { it.word == question.prompt }.zh,
+            question.correctText(),
+        )
+        assertTrue("每个选项都要能揭开自己原本的短语", question.options.all { it.gloss.isNotBlank() })
+    }
+
+    @Test
+    fun theWordNeverAppearsInTheOptions() {
+        // 早先四个选项是英文短语、只有正确答案含这个词：照着找词就能选对。
+        // 现在选项全是释义，答案只能靠读懂题干。
+        val question = CollocationBuilder().build(harbour, collocationContext(seed = 22))!!
+
+        assertFalse(
+            "选项里不能再出现这个词，否则又变成找词游戏",
+            question.options.any { it.text.contains("harbour", ignoreCase = true) },
+        )
+        assertEquals(question.options.size, question.options.map { it.text }.distinct().size)
+        assertEquals(question.options.size, question.options.map { it.gloss }.distinct().size)
+        assertEquals("题干那一条不会同时当某个选项的另一面", 1, question.options.count { it.gloss == question.prompt })
+    }
+
+    @Test
+    fun aWordWithoutCollocationsGetsNoCollocationQuestion() {
+        assertNull(
+            CollocationBuilder().build(
+                harbour,
+                QuestionContext(pool = pool, collocationPool = otherCollocations),
+            ),
+        )
+        assertNull(
+            CollocationBuilder().build(
+                harbour,
+                QuestionContext(
+                    enrichment = QuizEnrichment(mapOf(1L to EnrichedWord(definition = "a place where ships stay"))),
+                    collocationPool = otherCollocations,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun theNextAttemptAsksAnotherOfTheWordsOwnPhrasesAndAnotherDistractorSet() {
+        val context = collocationContext(seed = 23)
+
+        val first = CollocationBuilder().build(harbour, context.copy(attempts = mapOf(1L to 0)))!!
+        val second = CollocationBuilder().build(harbour, context.copy(attempts = mapOf(1L to 1)))!!
+
+        assertTrue(first.prompt in harbourCollocations.map { it.word })
+        assertTrue(second.prompt in harbourCollocations.map { it.word })
+        assertNotEquals("同一个词再考一次，别永远同一个短语", first.prompt, second.prompt)
+        assertNotEquals(
+            first.options.map { it.text }.toSet(),
+            second.options.map { it.text }.toSet(),
+        )
+    }
+
+    @Test
+    fun aCollocationWithoutAGlossCannotBeTheAnswer() {
+        val context = QuestionContext(
+            enrichment = QuizEnrichment(
+                mapOf(1L to EnrichedWord(collocations = listOf(EnrichedDistractor("harbour wall", "")))),
+            ),
+            collocationPool = otherCollocations,
+        )
+
+        assertNull("选项不能是一个空白", CollocationBuilder().build(harbour, context))
+    }
+
+    private fun collocationContext(seed: Long) = QuestionContext(
+        enrichment = QuizEnrichment(mapOf(1L to EnrichedWord(collocations = harbourCollocations))),
+        collocationPool = otherCollocations,
+        seed = seed,
+    )
+
+    private val harbourCollocations = listOf(
+        EnrichedDistractor("harbour wall", "防波堤"),
+        EnrichedDistractor("harbour seal", "港海豹"),
+    )
+
+    /**
+     * 干扰项从别的词的搭配里来。`take harbour` 在旧设计里是"含这个词所以不能当干扰项"的例子，
+     * 现在反过来：它的意思与被考的短语无关，所以照样能当干扰项。
+     */
+    private val otherCollocations = listOf(
+        EnrichedDistractor("take measures", "采取措施"),
+        EnrichedDistractor("draw a conclusion", "下结论"),
+        EnrichedDistractor("pay attention", "注意"),
+        EnrichedDistractor("make progress", "取得进步"),
+        EnrichedDistractor("take harbour", "占港"),
+    )
+
+    /** 摆在屏上的那一面是 [QuizOption.text]，答完才揭开的另一面是 [QuizOption.gloss]。 */
+    private fun QuizQuestion.correctText(): String = options.first { it.correct }.text
+
+    private fun QuizQuestion.correctGloss(): String = options.first { it.correct }.gloss
 
     /** 模型一次给一整池候选，出题时只抽其中三个，所以池子要比选项大。 */
     private val aiPool = listOf(

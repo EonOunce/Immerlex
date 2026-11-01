@@ -2,6 +2,7 @@ package com.immerlex.core.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import com.immerlex.core.ai.Density
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,8 @@ const val MAX_FONT_SCALE = 21f
 data class Appearance(
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
+    /** 点开词卡、翻出一道题就自动朗读英文。 */
+    val autoSpeak: Boolean = false,
 )
 
 /** Non-secret app preferences. The API key lives in [com.immerlex.core.ai.ApiKeyStore]. */
@@ -28,7 +31,7 @@ class AppPreferences(context: Context) {
 
     // SharedPreferences keeps listeners weakly, so the listener must be a field or it is collected.
     private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == KEY_FONT_SCALE || key == KEY_DARK) _appearance.value = readAppearance()
+        if (key == KEY_FONT_SCALE || key == KEY_DARK || key == KEY_AUTO_SPEAK) _appearance.value = readAppearance()
     }
 
     init {
@@ -38,6 +41,7 @@ class AppPreferences(context: Context) {
     private fun readAppearance() = Appearance(
         fontScale = prefs.getFloat(KEY_FONT_SCALE, DEFAULT_FONT_SCALE),
         darkMode = prefs.getBoolean(KEY_DARK, false),
+        autoSpeak = prefs.getBoolean(KEY_AUTO_SPEAK, false),
     )
 
     var baseUrl: String
@@ -69,6 +73,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_DARK, false)
         set(value) = prefs.edit().putBoolean(KEY_DARK, value).apply()
 
+    /** 默认关：在公共场合连着出声比听不到更糟，所以由用户自己打开。 */
+    var autoSpeak: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SPEAK, false)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_SPEAK, value).apply()
+
     /** 每日到期提醒的开关。关了就不排任务，打开时排到当天的设定时刻。 */
     var reminderEnabled: Boolean
         get() = prefs.getBoolean(KEY_REMINDER_ON, true)
@@ -99,11 +108,20 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_BACKUP_ON, false)
         set(value) = prefs.edit().putBoolean(KEY_BACKUP_ON, value).apply()
 
+    /**
+     * 这台机器叫什么，进备份文件名。两台设备传上去的文件全靠它区分；
+     * 没填就用机型名，机型名里的空格和中文由 `BackupNaming.deviceTag` 洗掉。
+     */
+    var deviceName: String
+        get() = prefs.getString(KEY_DEVICE, "").orEmpty().ifBlank { Build.MODEL.orEmpty().ifBlank { DEFAULT_DEVICE } }
+        set(value) = prefs.edit().putString(KEY_DEVICE, value.trim()).apply()
+
     companion object {
         const val DEFAULT_NEW_LIMIT = 25
         const val DEFAULT_REMINDER_MINUTE = 20 * 60 + 30
         const val MINUTES_PER_DAY = 24 * 60
         const val PRESET_WEBDAV_URL = "https://dav.jianguoyun.com/dav/"
+        const val DEFAULT_DEVICE = "device"
         private const val KEY_BASE_URL = "ai_base_url"
         private const val KEY_MODEL = "ai_model"
         private const val KEY_GENRE = "genre"
@@ -111,11 +129,13 @@ class AppPreferences(context: Context) {
         private const val KEY_NEW_LIMIT = "daily_new_limit"
         private const val KEY_FONT_SCALE = "font_scale"
         private const val KEY_DARK = "dark_mode"
+        private const val KEY_AUTO_SPEAK = "auto_speak"
         private const val KEY_REMINDER_ON = "reminder_enabled"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
         private const val KEY_REMINDED_DAY = "last_reminded_day"
         private const val KEY_WEBDAV_URL = "webdav_url"
         private const val KEY_WEBDAV_ACCOUNT = "webdav_account"
         private const val KEY_BACKUP_ON = "backup_enabled"
+        private const val KEY_DEVICE = "device_name"
     }
 }

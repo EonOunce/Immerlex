@@ -4,11 +4,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -50,6 +53,9 @@ private const val TAB_GIFTS = 1
 
 /** 房间开着时每十几秒自己换一张脸：不点它，它也会动。 */
 private const val IDLE_ROTATE_MILLIS = 16_000L
+
+/** 平板上一整页横铺会把房间拉成一条走廊，超过这个宽度就居中留白。 */
+private const val ROOMMATE_MAX_WIDTH_DP = 720
 
 @Composable
 fun RoommateScreen(vm: RoommateViewModel, onBack: () -> Unit) {
@@ -97,91 +103,97 @@ fun RoommateScreen(vm: RoommateViewModel, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = RootHandledInsets,
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        // 平板上一整块横铺会把房间拉成一条走廊：内容和阅读页一样限宽居中。
+        Box(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            RoomHeader(
-                state = state,
-                onBack = if (page == PAGE_CARD) {
-                    { page = PAGE_ROOM }
-                } else {
-                    onBack
-                },
-                onOpenCard = { page = PAGE_CARD },
-            )
-
-            when {
-                state.loading -> Text(
-                    stringResource(R.string.room_loading),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ImmerlexColors.Meta,
-                    modifier = Modifier.padding(top = 24.dp, start = 6.dp),
+            Column(
+                modifier = Modifier
+                    .widthIn(max = ROOMMATE_MAX_WIDTH_DP.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                RoomHeader(
+                    state = state,
+                    onBack = if (page == PAGE_CARD) {
+                        { page = PAGE_ROOM }
+                    } else {
+                        onBack
+                    },
+                    onOpenCard = { page = PAGE_CARD },
                 )
 
-                state.creating -> RoommateCreating(state.createStage)
-
-                state.persona == null -> RoommateIntro(onCreate = vm::create)
-
-                page == PAGE_CARD -> state.persona?.let { persona ->
-                    RoommateCardPage(
-                        draft = PersonaDraft(
-                            name = persona.name,
-                            nature = persona.nature,
-                            pace = persona.pace,
-                            face = persona.face,
-                            setting = state.setting,
-                        ),
-                        stageFile = state.stageFile,
-                        onUpdate = { name, nature, pace, face, setting ->
-                            // 先回房间：等待的那几秒它已经在"收拾东西"，改完直接听见它说新的一句。
-                            page = PAGE_ROOM
-                            vm.updatePersona(name, nature, pace, face, setting)
-                        },
+                when {
+                    state.loading -> Text(
+                        stringResource(R.string.room_loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ImmerlexColors.Meta,
+                        modifier = Modifier.padding(top = 24.dp, start = 6.dp),
                     )
-                }
 
-                else -> {
-                    RoomScene(
-                        file = state.stageFile,
-                        bubble = state.reply ?: state.episode?.line.orEmpty(),
-                        assetsImported = state.assetsImported,
-                        onTap = { vm.interact(RoomAction.TOUCH) },
-                    )
-                    state.narration?.let { NarrationCard(it) }
-                    state.episode?.let { episode ->
-                        if (episode.chosen == 0) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                ChoiceChip(episode.choiceA, Modifier.weight(1f)) { vm.choose(1) }
-                                ChoiceChip(episode.choiceB, Modifier.weight(1f)) { vm.choose(2) }
+                    state.creating -> RoommateCreating(state.createStage)
+
+                    state.persona == null -> RoommateIntro(onCreate = vm::create)
+
+                    page == PAGE_CARD -> state.persona?.let { persona ->
+                        RoommateCardPage(
+                            draft = PersonaDraft(
+                                name = persona.name,
+                                nature = persona.nature,
+                                pace = persona.pace,
+                                face = persona.face,
+                                setting = state.setting,
+                            ),
+                            stageFile = state.stageFile,
+                            onUpdate = { name, nature, pace, face, setting ->
+                                // 先回房间：等待的那几秒它已经在"收拾东西"，改完直接听见它说新的一句。
+                                page = PAGE_ROOM
+                                vm.updatePersona(name, nature, pace, face, setting)
+                            },
+                        )
+                    }
+
+                    else -> {
+                        RoomScene(
+                            file = state.stageFile,
+                            bubble = state.reply ?: state.episode?.line.orEmpty(),
+                            assetsImported = state.assetsImported,
+                            onTap = { vm.interact(RoomAction.TOUCH) },
+                        )
+                        state.narration?.let { NarrationCard(it) }
+                        state.episode?.let { episode ->
+                            if (episode.chosen == 0) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ChoiceChip(episode.choiceA, Modifier.weight(1f)) { vm.choose(1) }
+                                    ChoiceChip(episode.choiceB, Modifier.weight(1f)) { vm.choose(2) }
+                                }
                             }
                         }
-                    }
-                    ActionRow(onAction = vm::interact)
-                    state.petGiftToday?.let { gift ->
-                        GiftStrip(gift = gift, onOpen = { openNotebook(TAB_GIFTS) })
-                    }
-                    state.near?.let { near -> NearStrip(near = near, onOpen = ::openShop) }
-                    RoomDock(
-                        giftCount = state.petGiftCount,
-                        onNotebook = { openNotebook(TAB_DAYS) },
-                        onShop = ::openShop,
-                        onAssets = { sheet = SHEET_ASSETS },
-                    )
-                    if (state.missingAssets > 0) {
-                        Text(
-                            stringResource(R.string.room_missing_assets, state.missingAssets),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier
-                                .padding(horizontal = 6.dp)
-                                .clickable { sheet = SHEET_ASSETS },
+                        ActionRow(onAction = vm::interact)
+                        state.petGiftToday?.let { gift ->
+                            GiftStrip(gift = gift, onOpen = { openNotebook(TAB_GIFTS) })
+                        }
+                        state.near?.let { near -> NearStrip(near = near, onOpen = ::openShop) }
+                        RoomDock(
+                            giftCount = state.petGiftCount,
+                            onNotebook = { openNotebook(TAB_DAYS) },
+                            onShop = ::openShop,
+                            onAssets = { sheet = SHEET_ASSETS },
                         )
+                        if (state.missingAssets > 0) {
+                            Text(
+                                stringResource(R.string.room_missing_assets, state.missingAssets),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .padding(horizontal = 6.dp)
+                                    .clickable { sheet = SHEET_ASSETS },
+                            )
+                        }
                     }
                 }
             }

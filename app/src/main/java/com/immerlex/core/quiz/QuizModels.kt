@@ -11,6 +11,8 @@ enum class QuizType(val key: String, val tier: Int) {
     CLOZE("CLOZE", 0),
     ZH_EN("ZH_EN", 1),
     DEFINITION("DEFINITION", 2),
+    /** 搭配题：题干是一个词自己的真实短语，四个选项是中文释义，答完各自揭开对应的英文短语。 */
+    COLLOCATION("COLLOCATION", 2),
     ;
 
     companion object {
@@ -20,7 +22,7 @@ enum class QuizType(val key: String, val tier: Int) {
 
 enum class QuizMode { DUE, EARLY }
 
-/** 选项：[text] 是选项本身，[gloss] 是答完后要展示给用户的释义。 */
+/** 选项：[text] 是摆在屏上的那一面，[gloss] 是答完才揭开的另一面。 */
 data class QuizOption(
     val text: String,
     val gloss: String,
@@ -34,16 +36,19 @@ data class QuizQuestion(
     val prompt: String,
     val promptHint: String = "",
     val options: List<QuizOption>,
-) {
-    val correctText: String get() = options.firstOrNull { it.correct }?.text.orEmpty()
-    val correctGloss: String get() = options.firstOrNull { it.correct }?.gloss.orEmpty()
-}
+    /** 这句题干的中文对照，只有素材包给的英文例句才有；答完才显示。 */
+    val exampleZh: String = "",
+)
 
-/** [alternatives] 是答错后用另一种题型再练一遍的备用题，练习不写复习记录。 */
+/**
+ * [alternatives] 是答错后用另一种题型再练一遍的备用题，练习不写复习记录。
+ * [trickyIds] 是这一组里已经被标过易错的词：界面上只对没标过的词问一句"要不要标"。
+ */
 data class QuizSession(
     val mode: QuizMode,
     val questions: List<QuizQuestion>,
     val alternatives: Map<Long, QuizQuestion> = emptyMap(),
+    val trickyIds: Set<Long> = emptySet(),
 ) {
     val isEmpty: Boolean get() = questions.isEmpty()
     val wordIds: Set<Long> get() = questions.mapTo(LinkedHashSet()) { it.wordId }
@@ -59,5 +64,10 @@ data class QuestionContext(
     val confusables: Map<Long, List<EnrichedDistractor>> = emptyMap(),
     /** 这个词被考过几次——决定这一轮从候选池的哪一格开始抽选项。 */
     val attempts: Map<Long, Int> = emptyMap(),
+    /**
+     * 别的词的搭配短语，只用来做搭配题的干扰项。用户自己的易混关系与它无涉：
+     * 这里没有任何一条会被写回 `tricky_words`。
+     */
+    val collocationPool: List<EnrichedDistractor> = emptyList(),
     val seed: Long = 0,
 )

@@ -4,10 +4,13 @@ import androidx.room.withTransaction
 import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.dict.DictionarySource
 import com.immerlex.core.importer.ImportRepository
 import com.immerlex.core.importer.ImportSummary
 import com.immerlex.core.importer.WordListParser
+import com.immerlex.core.material.MaterialEntry
+import com.immerlex.core.material.MaterialRepository
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +24,7 @@ class WordBankRepository(
     private val db: ImmerlexDatabase,
     private val dictionary: DictionarySource,
     private val imports: ImportRepository,
+    private val material: MaterialRepository,
 ) {
     private val words: WordDao get() = db.wordDao()
 
@@ -28,6 +32,20 @@ class WordBankRepository(
 
     /** 导出用：整本词库，不受搜索框过滤。 */
     suspend fun allWords(): List<WordEntity> = withContext(Dispatchers.IO) { words.allWords() }
+
+    /**
+     * 词典里搜到的、词库还没有的词。已在词库里的不重复列（[exclude] 是词库的全量词面），
+     * 所以多取一些再筛，免得词库很大时这一组被稀释成只剩两三条。
+     */
+    suspend fun dictionarySearch(needle: String, exclude: Set<String>): List<DictEntry> =
+        withContext(Dispatchers.IO) {
+            dictionary.search(needle, DICTIONARY_LIMIT * 3)
+                .filterNot { it.word in exclude }
+                .take(DICTIONARY_LIMIT)
+        }
+
+    /** 词典卡的素材：这个词进没进词库都有可能有。 */
+    suspend fun materialOf(word: String): MaterialEntry? = material.peek(word)
 
     // First call also copies the 11MB ECDICT asset out of the APK.
     suspend fun importText(text: String, source: String): ImportSummary =
@@ -63,5 +81,8 @@ class WordBankRepository(
 
     companion object {
         const val SOURCE_MANUAL = "manual"
+
+        /** 词典组一次最多列这么多条：它回答"有没有这个词"，不是给人翻页的。 */
+        const val DICTIONARY_LIMIT = 20
     }
 }

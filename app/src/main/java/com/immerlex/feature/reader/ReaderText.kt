@@ -15,6 +15,21 @@ import com.immerlex.core.schedule.readerTone
 /** Annotation tag used to map a tap offset back to the tapped embedded word. */
 const val WORD_ANNOTATION_TAG = "immerlex-word"
 
+/** 一个可点的词在正文里占的字符区间：[start] 含，[end] 不含。 */
+internal data class WordRange(val lookup: String, val start: Int, val end: Int)
+
+/**
+ * 点在最后一个字母的右半边时，[position] 会落到词尾之后——那个边界也算这个词，
+ * 否则三四个字母的短词右半边一整片点不动。
+ */
+internal fun wordAt(ranges: List<WordRange>, position: Int): String? =
+    (ranges.firstOrNull { position in it.start until it.end } ?: ranges.firstOrNull { position == it.end })?.lookup
+
+/** 把正文里标出来的词一次性挑成区间，点一下只做查找：整篇标注不必每次重扫。 */
+internal fun wordRanges(annotated: AnnotatedString): List<WordRange> =
+    annotated.getStringAnnotations(WORD_ANNOTATION_TAG, 0, annotated.length)
+        .map { WordRange(it.item, it.start, it.end) }
+
 /**
  * Renders the chapter as one annotated body: learn mode shows `word（释义）`, review mode shows
  * only `word` — the reader's judgement happens before the tap, so an empty slot is noise.

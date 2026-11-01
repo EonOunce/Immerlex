@@ -21,17 +21,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +57,7 @@ fun HomeScreen(
     onOpenRoom: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    var showShare by rememberSaveable { mutableStateOf(false) }
     // 阅读页打完分回到这一栏，数字必须跟着重算，否则"今日完成"会停在进来时的值。
     LaunchedEffect(Unit) { vm.refresh() }
 
@@ -61,7 +68,19 @@ fun HomeScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.weight(1f))
+            IconButton(
+                onClick = { showShare = true },
+                enabled = !state.loading,
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_share),
+                    contentDescription = stringResource(R.string.home_share),
+                )
+            }
+        }
 
         StreakCard(state)
 
@@ -125,6 +144,10 @@ fun HomeScreen(
         ) {
             Text(stringResource(R.string.home_early_count, state.earlyCount))
         }
+    }
+
+    if (showShare) {
+        ShareReportDialog(state = state, onDismiss = { showShare = false })
     }
 }
 

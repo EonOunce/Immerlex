@@ -21,6 +21,10 @@ data class QuizResume(
     val correct: Boolean,
     val correctCount: Int,
     val group: Int,
+    /** 按过「不确定」：没选任何一项，但答案已经翻开了。 */
+    val doubt: Boolean = false,
+    /** 这一组里已经标过易错的词，续做时不该再问一遍。 */
+    val trickyIds: Set<Long> = emptySet(),
 )
 
 /** 只留当前这一组；做完或换组就按入口删掉，读不到（含存坏了）一律当没存过。 */
@@ -60,6 +64,8 @@ private fun QuizResume.toRow() = ResumeRow(
     correct = correct,
     correctCount = correctCount,
     group = group,
+    doubt = doubt,
+    trickyIds = trickyIds.toList(),
 )
 
 private fun QuizQuestion.toRow() = QuestionRow(
@@ -68,6 +74,7 @@ private fun QuizQuestion.toRow() = QuestionRow(
     type = type.key,
     prompt = prompt,
     hint = promptHint,
+    zh = exampleZh,
     options = options.map { OptionRow(it.text, it.gloss, it.correct) },
 )
 
@@ -93,6 +100,8 @@ private fun ResumeRow.toModel(): QuizResume? {
         correct = correct,
         correctCount = correctCount,
         group = group,
+        doubt = doubt,
+        trickyIds = trickyIds.toSet(),
     )
 }
 
@@ -105,6 +114,7 @@ private fun QuestionRow.toModel(): QuizQuestion? {
         type = quizType,
         prompt = prompt,
         promptHint = hint,
+        exampleZh = zh,
         options = options.map { QuizOption(it.text, it.gloss, it.correct) },
     )
 }
@@ -124,6 +134,8 @@ private data class ResumeRow(
     val correct: Boolean = false,
     val correctCount: Int = 0,
     val group: Int = 1,
+    val doubt: Boolean = false,
+    val trickyIds: List<Long> = emptyList(),
 )
 
 @Serializable
@@ -133,6 +145,7 @@ private data class QuestionRow(
     val type: String,
     val prompt: String,
     val hint: String = "",
+    val zh: String = "",
     val options: List<OptionRow>,
 )
 

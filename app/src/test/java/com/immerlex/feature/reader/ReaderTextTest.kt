@@ -112,6 +112,30 @@ class ReaderTextTest {
         )
     }
 
+    @Test
+    fun theRightEdgeOfAWordStillTapsThatWord() {
+        val annotated = buildChapterText(blocks, ReaderMode.REVIEW, emptyMap(), LightTones, ReaderMarks(), now)
+        val ranges = wordRanges(annotated)
+        // "他 reluctant 关上了门。"：词占 2 到 10，11 是它右边那条边界，点在最后一个字母的右半边就落在这里。
+        val word = ranges.single()
+        assertEquals(2, word.start)
+        assertEquals(11, word.end)
+
+        assertEquals("reluctant", wordAt(ranges, word.start))
+        assertEquals("reluctant", wordAt(ranges, word.end - 1))
+        assertEquals("reluctant", wordAt(ranges, word.end))
+        assertEquals(null, wordAt(ranges, word.end + 1))
+        assertEquals(null, wordAt(ranges, word.start - 1))
+    }
+
+    @Test
+    fun learnModeCoversTheGlossWithTheSameTapTarget() {
+        val annotated = buildChapterText(blocks, ReaderMode.LEARN, emptyMap(), LightTones, ReaderMarks(), now)
+        val word = wordRanges(annotated).single()
+
+        assertEquals("reluctant（不情愿的）", annotated.text.substring(word.start, word.end))
+    }
+
     private fun visibleText(annotated: androidx.compose.ui.text.AnnotatedString): String {
         val hidden = annotated.spanStyles.filter { it.item.color == Color.Transparent }
         return annotated.text.filterIndexed { index, _ ->

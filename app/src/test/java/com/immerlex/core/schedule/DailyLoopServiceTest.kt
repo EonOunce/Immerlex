@@ -1,9 +1,15 @@
 package com.immerlex.core.schedule
 
 import com.immerlex.core.db.DailyLoopEntity
+import com.immerlex.core.db.LOG_KIND_LEARN
+import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
+import com.immerlex.core.db.LOG_SOURCE_READER
 import com.immerlex.core.db.ReviewLogEntity
+import com.immerlex.core.db.WordEntity
 import com.immerlex.testsupport.FakeDailyLoopDao
 import com.immerlex.testsupport.FakeReviewLogDao
+import com.immerlex.testsupport.FakeWordDao
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -23,18 +29,28 @@ class DailyLoopServiceTest {
     private val now: Instant = ZonedDateTime.of(2026, 10, 28, 10, 0, 0, 0, shanghai).toInstant()
     private val loop = FakeDailyLoopDao()
     private val logs = FakeReviewLogDao()
+    private val words = FakeWordDao()
 
-    private fun service(zone: ZoneId = shanghai) = DailyLoopService(loop, logs, zone)
+    private fun service(zone: ZoneId = shanghai) = DailyLoopService(loop, logs, words, zone)
 
     /** [daysAgo] 天前的本地中午，记一次"忘了"以外的评分。 */
-    private suspend fun reviewAt(daysAgo: Int, wordId: Long = 1) {
+    private suspend fun reviewAt(
+        daysAgo: Int,
+        wordId: Long = 1,
+        kind: String = LOG_KIND_RECALL,
+        source: String = LOG_SOURCE_READER,
+    ) {
         val at = ZonedDateTime.of(2026, 10, 28, 12, 0, 0, 0, shanghai).minusDays(daysAgo.toLong())
         logs.insert(
             ReviewLogEntity(
-                wordId = wordId, rating = 3, source = "reader", reviewEpochSec = at.toEpochSecond(),
-                elapsedDays = 1, scheduledDays = 3, preDueEpochSec = 0,
+                wordId = wordId, rating = 3, source = source, reviewEpochSec = at.toEpochSecond(),
+                elapsedDays = 1, scheduledDays = 3, preDueEpochSec = 0, kind = kind,
             ),
         )
+    }
+
+    private fun seedWord(id: Long, word: String) {
+        words.items[id] = WordEntity(id = id, word = word, source = "test", createdAtSec = 0)
     }
 
     @Test
@@ -87,6 +103,33 @@ class DailyLoopServiceTest {
         )
         assertEquals(1, service().info(now, dueCount = 5).streakDays)
         assertEquals(0, service(zone = ZoneId.of("UTC")).info(now, dueCount = 5).streakDays)
+    }
+
+    @Test
+    fun todayTallySplitsWordsTheReaderMetFromWordsQuizzed() = runTest {
+        seedWord(7, "lantern")
+        seedWord(8, "harbour")
+        seedWord(9, "pebble")
+        reviewAt(daysAgo = 0, wordId = 7, kind = LOG_KIND_LEARN)
+        reviewAt(daysAgo = 0, wordId = 8)
+        reviewAt(daysAgo = 0, wordId = 9, source = LOG_SOURCE_QUIZ)
+
+        val tally = service().todayTally(now)
+
+        assertEquals(listOf("lantern"), tally.learned)
+        assertEquals(listOf("harbour", "pebble"), tally.recalled)
+        assertEquals(listOf("pebble"), tally.quizzed)
+    }
+
+    @Test
+    fun aReviewYesterdayLeavesTodaysListsEmpty() = runTest {
+        seedWord(7, "lantern")
+        reviewAt(daysAgo = 1, wordId = 7)
+
+        val tally = service().todayTally(now)
+
+        assertTrue(tally.recalled.isEmpty())
+        assertTrue(tally.quizzed.isEmpty())
     }
 
     @Test

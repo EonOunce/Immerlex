@@ -54,6 +54,14 @@ class TrickyRepository(
         card(key)
     }
 
+    /**
+     * 只打标记、不挂关系：测验答错的那个词，题面已经说明是哪个词了，
+     * 释义仍旧先取词库再查离线词典。已经标过的再点一次不会多出一行。
+     */
+    suspend fun mark(word: String) = withContext(Dispatchers.IO) {
+        db.withTransaction { ensureWithGloss(normalize(word)) }
+    }
+
     suspend fun link(base: TrickyWord, other: TrickyWord): TrickyCard = withContext(Dispatchers.IO) {
         linkWords(normalize(base.word), base.gloss, base.ipa, normalize(other.word), other.gloss, other.ipa)
     }

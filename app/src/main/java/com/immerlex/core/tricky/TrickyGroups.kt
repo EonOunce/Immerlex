@@ -47,6 +47,15 @@ object TrickyGroups {
 
     fun normalize(word: String): String = word.trim().lowercase()
 
+    /** 搜词或搜释义：组里任何一个成员对上就留下整组，拆开了就看不出谁和谁混。 */
+    fun matching(groups: List<TrickyGroup>, query: String): List<TrickyGroup> {
+        val needle = normalize(query)
+        if (needle.isEmpty()) return groups
+        return groups.filter { group ->
+            group.members.any { normalize(it.word).contains(needle) || normalize(it.gloss).contains(needle) }
+        }
+    }
+
     fun pairOf(first: String, second: String): Pair<String, String> =
         if (first <= second) first to second else second to first
 

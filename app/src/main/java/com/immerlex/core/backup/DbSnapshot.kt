@@ -20,8 +20,14 @@ data class Unpacked(
     val issues: List<SnapshotProblem>,
     val words: Int = 0,
     val chapters: Int = 0,
+    val reviews: Int = 0,
+    val lastReviewId: Long = 0,
+    val extras: String = SyncFingerprint.EMPTY,
 ) {
     val usable: Boolean get() = issues.isEmpty()
+
+    /** 恢复完成后本机的样子，直接写进血缘，不用再开一次库去数。 */
+    fun asLocalState() = LocalState(words, chapters, reviews, lastReviewId, extras)
 }
 
 /**
@@ -38,15 +44,18 @@ object DbSnapshot {
     private const val SQLITE_HEADER = "SQLite format 3"
 
     /** @return gzip 后的快照，调用方上传完自己删。 */
-    fun take(db: RoomDatabase, context: Context, dir: File): File {
+    fun take(db: RoomDatabase, context: Context, dir: File): File =
+        into(db, context, File(dir, "$DB_NAME.gz"))
+
+    /** 同一个"checkpoint → 复制 → gzip"动作也用来留本机安全快照，所以目标文件由调用方给。 */
+    fun into(db: RoomDatabase, context: Context, target: File): File {
         // WAL 模式下最近的写还在 -wal 里，不压回去复制到的就是一个旧库。
         db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
         val source = context.getDatabasePath(DB_NAME)
         if (!source.exists()) throw WebDavException(BackupFailure.LOCAL, "${source.name} missing")
-        dir.mkdirs()
-        val gzip = File(dir, "$DB_NAME.gz")
-        GZIPOutputStream(gzip.outputStream()).use { out -> source.inputStream().use { it.copyTo(out) } }
-        return gzip
+        target.parentFile?.mkdirs()
+        GZIPOutputStream(target.outputStream()).use { out -> source.inputStream().use { it.copyTo(out) } }
+        return target
     }
 
     fun version(db: RoomDatabase): Int = db.openHelper.writableDatabase.version
@@ -97,6 +106,9 @@ object DbSnapshot {
                 issues = emptyList(),
                 words = readLong(readable, "SELECT COUNT(*) FROM words").toInt(),
                 chapters = readLong(readable, "SELECT COUNT(*) FROM chapters").toInt(),
+                reviews = readLong(readable, "SELECT COUNT(*) FROM review_logs").toInt(),
+                lastReviewId = readLong(readable, "SELECT COALESCE(MAX(id), 0) FROM review_logs"),
+                extras = SyncFingerprint.of(readable),
             )
         } finally {
             readable.close()

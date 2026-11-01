@@ -78,6 +78,10 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE id = :id")
     suspend fun byId(id: Long): ChapterEntity?
 
+    /** 同步判定的指纹之一：本机一共有多少章（含短篇）。 */
+    @Query("SELECT COUNT(*) FROM chapters")
+    suspend fun totalCount(): Int
+
     @Query("SELECT id, number, title FROM chapters WHERE genre = :genre AND kind = 'serial' ORDER BY number DESC, id DESC")
     suspend fun titlesForGenre(genre: String): List<ChapterOption>
 
@@ -180,6 +184,13 @@ interface ReviewLogDao {
     )
     suspend fun recalledWordIdsSince(sinceSec: Long): List<Long>
 
+    /** 分享卡要把"在读里回忆过"和"在测验里考过"分开列，所以按 source 再筛一次。 */
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE kind = 'recall' AND source = :source AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun recalledWordIdsBySourceSince(source: String, sinceSec: Long): List<Long>
+
     /** 今天碰过的词（学过或回忆过），提前复习从这里挑。 */
     @Query("SELECT DISTINCT wordId FROM review_logs WHERE reviewEpochSec >= :sinceSec")
     suspend fun touchedWordIdsSince(sinceSec: Long): List<Long>
@@ -211,6 +222,13 @@ interface ReviewLogDao {
     )
     suspend fun statsSince(sinceSec: Long): ReviewStats
 
+    /**
+     * 同步判定的指纹：一共写过多少条、最后一条的自增 id。
+     * 撤销会让条数往回走、id 却不回收，所以"本机动过"这件事只看这两个数，不看时刻。
+     */
+    @Query("SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS lastId FROM review_logs")
+    suspend fun activity(): ReviewActivity
+
     /** 按本地日切归谁由调用方的时区说了算，所以这里只取原始时刻，不在 SQL 里除 86400。 */
     @Query("SELECT wordId, reviewEpochSec FROM review_logs WHERE reviewEpochSec >= :sinceSec")
     suspend fun reviewsSince(sinceSec: Long): List<ReviewMoment>
@@ -223,6 +241,7 @@ interface ReviewLogDao {
 }
 
 data class ReviewStats(val total: Int, val passed: Int)
+data class ReviewActivity(val n: Int, val lastId: Long)
 data class RatingCount(val rating: Int, val n: Int)
 data class ReviewMoment(val wordId: Long, val reviewEpochSec: Long)
 
@@ -368,28 +387,4 @@ interface TrickyDao {
 
     @Query("DELETE FROM tricky_links WHERE wordA = :word OR wordB = :word")
     suspend fun deleteLinksOf(word: String)
-}
-
-@Dao
-interface QuizMaterialDao {
-    @Query("SELECT * FROM quiz_material WHERE wordId IN (:wordIds)")
-    suspend fun byWordIds(wordIds: List<Long>): List<QuizMaterialEntity>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(entities: List<QuizMaterialEntity>)
-}
-
-@Dao
-interface QuizSessionDao {
-    @Query("SELECT * FROM quiz_session WHERE mode = :mode")
-    suspend fun byMode(mode: String): QuizSessionEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entity: QuizSessionEntity)
-
-    @Query("DELETE FROM quiz_session WHERE mode = :mode")
-    suspend fun delete(mode: String)
-
-    @Query("SELECT EXISTS(SELECT 1 FROM quiz_session WHERE mode = :mode)")
-    suspend fun exists(mode: String): Boolean
 }

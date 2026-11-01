@@ -66,4 +66,17 @@ class TrickyGroupsTest {
             TrickyGroups.pairsOf(listOf("C", "a", "b", "a")),
         )
     }
+
+    @Test
+    fun aSearchKeepsWholeGroupsItMatches() {
+        val groups = listOf(
+            TrickyGroup("adapt,adopt", listOf(TrickyWord("adapt", "使适应", ""), TrickyWord("adopt", "采用", ""))),
+            TrickyGroup("affect,effect", listOf(TrickyWord("affect", "影响", ""), TrickyWord("effect", "效果", ""))),
+        )
+
+        assertEquals(listOf("affect,effect"), TrickyGroups.matching(groups, "效果").map { it.key })
+        assertEquals(listOf("adapt,adopt"), TrickyGroups.matching(groups, "  ADOPT ").map { it.key })
+        assertEquals(groups, TrickyGroups.matching(groups, ""))
+        assertEquals(emptyList<String>(), TrickyGroups.matching(groups, "zzz").map { it.key })
+    }
 }

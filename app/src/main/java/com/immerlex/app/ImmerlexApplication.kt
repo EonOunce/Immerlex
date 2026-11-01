@@ -16,6 +16,7 @@ import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.dict.EcdictDictionary
 import com.immerlex.core.fsrs.Scheduler
 import com.immerlex.core.importer.ImportRepository
+import com.immerlex.core.material.MaterialRepository
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.notify.Notifier
 import com.immerlex.core.notify.ReminderControl
@@ -98,7 +99,7 @@ class AppContainer(context: Context) {
         ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler, db)
     }
     val dailyLoopService: DailyLoopService by lazy {
-        DailyLoopService(db.dailyLoopDao(), db.reviewLogDao())
+        DailyLoopService(db.dailyLoopDao(), db.reviewLogDao(), db.wordDao())
     }
     // 测验不依赖 API key：AI 只在配置可用时补释义/例句/干扰项，失败静默退化到本地题库。
     val quizService: QuizService by lazy {
@@ -116,6 +117,8 @@ class AppContainer(context: Context) {
         )
     }
     val quizResumeStore: QuizResumeStore by lazy { QuizResumeStore(db.quizSessionDao()) }
+    // 出题素材跟着"这个词"走，不跟着词库那一行走，所以一个包可以先装进机器、词以后才进词库。
+    val materialRepository: MaterialRepository by lazy { MaterialRepository(db, dictionary) }
     val storyBible: StoryBibleRepository by lazy {
         StoryBibleRepository(db.storyBibleDao(), db.bibleEntryDao(), db.characterStateDao(), db.chapterDao())
     }
@@ -140,7 +143,17 @@ class AppContainer(context: Context) {
 
     val webDavPassword: SecretStore by lazy { SecretStore(context, "webdav_password") }
     val backupService: BackupService by lazy {
-        BackupService(context, db, prefs, webDavPassword, db.backupRunDao())
+        BackupService(
+            context,
+            db,
+            prefs,
+            webDavPassword,
+            db.backupRunDao(),
+            db.wordDao(),
+            db.chapterDao(),
+            db.reviewLogDao(),
+            db.syncLineageDao(),
+        )
     }
 
     // 室友：模型只写内容，规则、钱包和库存都在 core.roommate 里由事务落库。

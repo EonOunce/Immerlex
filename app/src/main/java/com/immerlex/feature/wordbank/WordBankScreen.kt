@@ -52,22 +52,21 @@ import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.masteryPalette
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.ocr.PdfScan
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
-import com.immerlex.core.word.wordCsvOf
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
     val words by vm.words.collectAsStateWithLifecycle()
+    val dictHits by vm.dictionaryHits.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -77,6 +76,7 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
     val importFailedText = stringResource(R.string.bank_import_failed)
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<WordEntity?>(null) }
+    var dictDetail by remember { mutableStateOf<DictEntry?>(null) }
     var pendingDelete by remember { mutableStateOf<WordEntity?>(null) }
     var pdfLine by remember { mutableStateOf<String?>(null) }
     var pdfNote by remember { mutableStateOf<String?>(null) }
@@ -136,29 +136,7 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
         }
     }
 
-    val exportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv"),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val list = runCatching { vm.allWords() }.getOrNull()
-                val written = list != null && withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.openOutputStream(uri)?.use { out ->
-                            out.write(wordCsvOf(list).toByteArray(Charsets.UTF_8))
-                        } ?: error("no output stream")
-                    }.isSuccess
-                }
-                snackbar.showSnackbar(
-                    if (written) {
-                        context.getString(R.string.bank_export_done, list.orEmpty().size)
-                    } else {
-                        context.getString(R.string.bank_export_failed)
-                    },
-                )
-            }
-        }
-    }
+    val exportPicker = rememberWordCsvExport(vm, snackbar)
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
@@ -220,7 +198,8 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
                 items(words, key = { it.id }) { word ->
                     WordRow(word, onClick = { detail = word })
                 }
-                if (words.isEmpty()) {
+                dictionaryGroup(dictHits, onOpen = { dictDetail = it })
+                if (words.isEmpty() && dictHits.isEmpty()) {
                     item(key = "empty") { EmptyHint(hasQuery = query.isNotBlank()) }
                 }
             }
@@ -254,6 +233,17 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
                 vm.delete(word)
                 pendingDelete = null
             },
+        )
+    }
+    dictDetail?.let { entry ->
+        DictionaryCardDialog(
+            entry = entry,
+            loadMaterial = vm::materialFor,
+            onAdd = {
+                vm.addWord(entry.word, "")
+                dictDetail = null
+            },
+            onDismiss = { dictDetail = null },
         )
     }
 }

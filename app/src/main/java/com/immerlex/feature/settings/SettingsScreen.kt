@@ -51,7 +51,12 @@ import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.ProviderPresets
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit, onOpenAbout: () -> Unit) {
+fun SettingsScreen(
+    vm: SettingsViewModel,
+    material: MaterialViewModel,
+    onOpenBible: () -> Unit,
+    onOpenAbout: () -> Unit,
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -189,6 +194,14 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit, onOpenAbout: 
                 )
                 Switch(checked = state.darkMode, onCheckedChange = vm::onDarkMode)
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.settings_auto_speak),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = state.autoSpeak, onCheckedChange = vm::onAutoSpeak)
+            }
 
             SectionTitle(stringResource(R.string.settings_reminder_section))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -230,6 +243,9 @@ fun SettingsScreen(vm: SettingsViewModel, onOpenBible: () -> Unit, onOpenAbout: 
 
             SectionTitle(stringResource(R.string.settings_backup_section))
             BackupSection(state, vm)
+
+            SectionTitle(stringResource(R.string.settings_material_section))
+            MaterialSection(material, snackbar)
 
             SectionTitle(stringResource(R.string.settings_bank_section))
             Text(

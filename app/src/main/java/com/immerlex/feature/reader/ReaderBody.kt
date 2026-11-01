@@ -48,6 +48,7 @@ internal fun ChapterBody(
     val annotated = remember(state.blocks, state.mode, state.bankWords, state.marks, state.marksAtSec, tones, englishOnly) {
         buildChapterText(state.blocks, state.mode, state.bankWords, tones, state.marks, state.marksAtSec, englishOnly)
     }
+    val ranges = remember(annotated) { wordRanges(annotated) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -65,13 +66,11 @@ internal fun ChapterBody(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 40.dp)
-                .pointerInput(annotated) {
+                .pointerInput(ranges) {
                     detectTapGestures { offset ->
                         val layout = layoutState.value ?: return@detectTapGestures
-                        val position = layout.getOffsetForPosition(offset)
-                        annotated.getStringAnnotations(WORD_ANNOTATION_TAG, position, position)
-                            .firstOrNull()?.item
-                            ?.let { lookup -> wordsByLookup[lookup]?.word?.let { onWordTapped(it) } }
+                        val lookup = wordAt(ranges, layout.getOffsetForPosition(offset)) ?: return@detectTapGestures
+                        wordsByLookup[lookup]?.word?.let(onWordTapped)
                     }
                 },
             onTextLayout = { layoutState.value = it },

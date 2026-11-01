@@ -36,6 +36,19 @@
     <string name="home_early_count">提前复习（%1$d 个可练）</string>
     <string name="home_room_met">去看看 %1$s</string>
     <string name="home_room_unmet">认识一位室友</string>
+    <string name="home_share">分享今日报告</string>
+    <string name="share_action">分享图片</string>
+    <string name="share_failed">图片没生成，再试一次</string>
+    <string name="share_card_continuous">连续</string>
+    <string name="share_card_day">天</string>
+    <string name="share_card_learned">今日新学</string>
+    <string name="share_card_recalled">今日回忆</string>
+    <string name="share_card_learned_words">今天学过的词</string>
+    <string name="share_card_quizzed_words">今天测验的词</string>
+    <string name="share_card_more">还有 %1$d 个</string>
+    <string name="share_card_heat">近 13 周</string>
+    <string name="share_card_days">共 %1$d 天有记录</string>
+    <string name="share_card_handle">immerlex</string>
 
     <string name="bank_title">词库</string>
     <string name="bank_count">共 %1$d 个词</string>
@@ -67,6 +80,10 @@
     <string name="bank_delete_body">删除 %1$s 会同时清除它的复习记录，确定吗？</string>
     <string name="bank_empty_all">词库还是空的，导入或添加一个词开始。</string>
     <string name="bank_empty_search">没有匹配的单词。</string>
+    <string name="bank_dict_more">词典里还有 %1$d 个</string>
+    <string name="bank_dict_add">加入词库</string>
+    <string name="bank_dict_confusables">易混 %1$s</string>
+    <string name="bank_dict_collocations">搭配 %1$s</string>
     <string name="bank_fsrs_summary">状态：%1$s · 复习 %2$d 次 · 遗忘 %3$d 次 · 当前间隔 %4$d 天</string>
 
     <string name="mastery_new">新词</string>
@@ -113,12 +130,30 @@
     <string name="settings_new_limit">每日新词上限</string>
     <string name="settings_generate">用今日词写一章</string>
     <string name="settings_working">处理中…</string>
+    <string name="settings_material_section">出题素材</string>
+    <string name="material_none">本机还没有出题素材。</string>
+    <string name="material_count">本机已有 %1$d 个词的出题素材。</string>
+    <string name="material_import">导入素材包</string>
+    <string name="material_export">导出一份</string>
+    <string name="material_busy">正在读这个包…</string>
+    <string name="material_read_failed">没能读出选中的文件</string>
+    <string name="material_imported">%1$d 个词的素材写好了，另有 %2$d 条没用上</string>
+    <string name="material_imported_clean">%1$d 个词的素材写好了</string>
+    <string name="material_imported_bad_collocations">%1$d 个词的素材写好了，另有 %2$d 条搭配不含这个词，没写进去</string>
+    <string name="material_imported_with_bad_collocations">%1$d 个词的素材写好了，另有 %2$d 条没用上、%3$d 条搭配不含这个词</string>
+    <string name="material_not_json">这个文件读不出 JSON，不是素材包</string>
+    <string name="material_not_list">里面没有一份词的清单</string>
+    <string name="material_empty_file">这个包里一个词都没有</string>
+    <string name="material_export_done">素材包已写出，拿到另一台机器直接导入就行</string>
+    <string name="material_export_failed">素材包没能写出去</string>
+
     <string name="settings_bank_section">词库概况</string>
     <string name="settings_bank_summary">共 %1$d 词 · 新词 %2$d · 今日到期 %3$d</string>
 
     <string name="settings_appearance_section">阅读外观</string>
     <string name="settings_font_size">字号</string>
     <string name="settings_dark_mode">深色模式</string>
+    <string name="settings_auto_speak">自动发音</string>
 
     <string name="settings_reminder_section">每日提醒</string>
     <string name="settings_reminder_on">到期提醒</string>
@@ -126,7 +161,7 @@
     <string name="settings_notify_allow">允许通知</string>
     <string name="settings_notify_denied">系统里本应用的通知是关着的：点这里授权，或到 设置 → 应用 → 词间 里打开。</string>
 
-    <string name="settings_backup_section">备份与恢复</string>
+    <string name="settings_backup_section">备份与同步</string>
     <string name="settings_backup_url">网盘地址</string>
     <string name="settings_backup_url_hint">坚果云 WebDAV 地址，保持默认即可</string>
     <string name="settings_backup_account">账号</string>
@@ -134,15 +169,17 @@
     <string name="settings_backup_password">应用密码</string>
     <string name="settings_backup_password_hint">已保存。留空表示不改，重新填写会覆盖。</string>
     <string name="settings_backup_password_needed">还没存过应用密码：到坚果云「安全设置 → 安全选项」里生成一串，填在这里。</string>
-    <string name="settings_backup_save">保存备份设置</string>
-    <string name="settings_backup_saved">备份设置已保存</string>
-    <string name="settings_backup_auto">每日自动备份</string>
-    <string name="settings_backup_now">立即备份</string>
-    <string name="settings_backup_restore">从云端恢复</string>
-    <string name="backup_never">还没备份过。填好上面三项，点“立即备份”试试。</string>
-    <string name="backup_last_ok">上次备份：%1$s 上传 %2$s（%3$d KB）</string>
-    <string name="backup_last_failed">上次备份失败（%1$s）：%2$s</string>
-    <string name="backup_uploaded">已备份 %1$s（%2$d KB），云端按保留策略清掉 %3$d 份旧文件</string>
+    <string name="settings_backup_device">这台设备叫什么</string>
+    <string name="settings_backup_device_hint">写进备份文件名。几台设备共用一个网盘时，全靠它分清是谁传的。</string>
+    <string name="settings_backup_save">保存到本机</string>
+    <string name="settings_backup_saved">设置已保存到本机</string>
+    <string name="settings_backup_auto">每日自动上传</string>
+    <string name="settings_backup_now">上传到网盘</string>
+    <string name="settings_backup_restore">从网盘取回</string>
+    <string name="backup_never">还没上传过。填好上面几项，点「上传到网盘」试试。</string>
+    <string name="backup_last_ok">上次上传：%1$s（%2$d KB）</string>
+    <string name="backup_last_failed">上次上传失败（%1$s）：%2$s</string>
+    <string name="backup_uploaded">已上传 %1$d KB，网盘按保留策略清掉 %2$d 份旧文件</string>
     <string name="backup_need_config">备份还没配好：地址、账号和应用密码都要填</string>
     <string name="backup_unauthorized">网盘不认这个密码：坚果云要用“应用密码”，不是登录密码（%1$s）</string>
     <string name="backup_missing_folder">网盘里的 Immerlex 文件夹建不出来：%1$s</string>
@@ -151,7 +188,7 @@
     <string name="backup_unreachable">连不上网盘，检查手机网络：%1$s</string>
     <string name="backup_http">网盘返回错误：%1$s</string>
     <string name="backup_failed">备份没成功：%1$s</string>
-    <string name="backup_corrupt">备份没通过校验，没往云端传：%1$s</string>
+    <string name="backup_corrupt">这份库没通过校验，没往网盘传：%1$s</string>
     <string name="backup_local">本机没能做出这份备份：%1$s</string>
     <string name="backup_issue_empty">网盘上的这个文件是空的或残缺的</string>
     <string name="backup_issue_not_gzip">它不是一份备份压缩包（%1$s）</string>
@@ -160,17 +197,26 @@
     <string name="backup_issue_too_new">它来自更新版本的词间（%1$s），现在这个应用读不了</string>
     <string name="backup_issue_check_failed">数据库自检没通过：%1$s</string>
     <string name="backup_issue_missing_tables">缺了这几张表：%1$s，不像本应用的备份</string>
-    <string name="backup_pick_title">选一份要恢复的备份</string>
-    <string name="backup_pick_empty">云端 Immerlex 文件夹里还没有备份文件。</string>
-    <string name="backup_confirm_title">确定用这份覆盖本机？</string>
-    <string name="backup_confirm_body">恢复会把现在的词库、章节和复习进度整体换成 %1$s 里的内容，这一步不能撤销。</string>
-    <string name="backup_action_restore">覆盖并恢复</string>
-    <string name="backup_restored">已恢复：词库 %1$d 个词、章节 %2$d 章。</string>
-    <string name="backup_refused">这份备份读不得，本机数据一点没动：</string>
+    <string name="backup_pick_title">取回哪一份？</string>
+    <string name="backup_pick_empty">网盘和本机都还没有能取回的备份。</string>
+    <string name="backup_pick_local">本机留的快照</string>
+    <string name="backup_pick_cloud">网盘上的备份</string>
     <string name="backup_file_row">%1$s（%2$d KB）</string>
-    <string name="backup_restart_broken">恢复中途出错，本机数据没变，但库连接已经关了，必须重开一次应用：%1$s</string>
+    <string name="backup_row_stamped">%1$s %2$s · %3$s（%4$d KB）</string>
+    <string name="backup_row_legacy">%1$s · 旧命名（%2$d KB）</string>
+    <string name="backup_confirm_title">确定用这份覆盖本机？</string>
+    <string name="backup_confirm_body">会把现在的词库、章节和复习进度整体换成这一份。覆盖前本机自动留一份快照，取错了还能就地退回。</string>
+    <string name="backup_conflict_title">本机有东西还没上传</string>
+    <string name="backup_conflict_counts">还有 %1$d 个词、%2$d 章、%3$d 条记录只在这台机器上。先上传，再取回这一份。</string>
+    <string name="backup_conflict_changed">本机在上次上传之后又动过。先上传，再取回这一份。</string>
+    <string name="backup_action_restore">覆盖并取回</string>
+    <string name="backup_action_upload_first">先上传</string>
+    <string name="backup_action_download_anyway">仍然取回</string>
+    <string name="backup_restored">已取回：词库 %1$d 个词、章节 %2$d 章。</string>
+    <string name="backup_refused">这份备份读不得，本机数据一点没动：</string>
+    <string name="backup_restart_broken">取回中途出错，本机数据没变，但库连接已经关了，必须重开一次应用：%1$s</string>
     <string name="backup_restart_broken_title">需要重开应用</string>
-    <string name="backup_restart_title">备份已经换上，需要重开应用</string>
+    <string name="backup_restart_title">那份备份已经换上，需要重开应用</string>
     <string name="backup_restart_body">现在应用里读的还是旧连接，重开后才能看到恢复出来的内容。AI 接口的地址、密钥和模型名不在备份里，重开后请到本页重新填写。</string>
     <string name="backup_restart_action">立即重开</string>
 
@@ -266,6 +312,8 @@
     <string name="bank_tricky">易混词管理</string>
     <string name="tricky_page_title">易混词管理</string>
     <string name="tricky_page_empty">还没有易混词。用「批量新增」一行加一组，或在阅读页点词标为易错。</string>
+    <string name="tricky_search">搜索单词或释义</string>
+    <string name="tricky_search_empty">没有匹配的词</string>
     <string name="tricky_group_size">%1$d 个词</string>
     <string name="tricky_group_add">加词</string>
     <string name="tricky_member_remove">移出这一组</string>
@@ -351,12 +399,16 @@
     <string name="quiz_type_zh_en">中→英</string>
     <string name="quiz_type_cloze">句子挖空</string>
     <string name="quiz_type_definition">释义选词</string>
+    <string name="quiz_type_collocation">搭配</string>
     <string name="quiz_prompt_en_zh">选出正确的中文意思</string>
     <string name="quiz_prompt_zh_en">选出对应的英文单词</string>
     <string name="quiz_prompt_cloze">补上句子里缺的单词</string>
     <string name="quiz_prompt_definition">根据英文释义选出单词</string>
+    <string name="quiz_prompt_collocation">选出这个短语的意思</string>
     <string name="quiz_correct">答对了</string>
-    <string name="quiz_wrong">答错了，正确答案是 %1$s</string>
+    <string name="quiz_wrong">答错了</string>
+    <string name="quiz_doubt">不确定</string>
+    <string name="quiz_doubt_result">算没记住</string>
     <string name="quiz_next">下一题</string>
     <string name="quiz_finish">完成</string>
     <string name="quiz_result">本轮 %1$d 题，答对 %2$d 题</string>
@@ -368,8 +420,6 @@
     <string name="quiz_early_result">本组 %1$d 个词，答对 %2$d 个</string>
     <string name="quiz_again_group">再来一组</string>
     <string name="quiz_early_empty">今天还没有可提前复习的词：先学几个新词，或复习几个旧词。</string>
-    <string name="quiz_all_options">所有选项的释义</string>
-    <string name="quiz_option_row">%1$s — %2$s</string>
     <string name="quiz_option_correct">正确</string>
     <string name="quiz_option_yours">你的选择</string>
 
@@ -382,19 +432,21 @@
     <string name="about_checkin_body">今天学过或回忆过任意一个词，就算打卡。\n漏一天不会归零：第二天清空当天的到期词，就自动补回昨天，每周最多补一次。\n没有积分，也没有兑换。</string>
 
     <string name="about_home_title">关于今日页</string>
-    <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。</string>
+    <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。\n点标题旁的分享按钮，可以把今天这一页生成一张图（连续天数、今天新学与回忆、今天学过的词与今天测验过的词、近 13 周热力图）；词多时只列一小截，数字仍是全数。图只在本机生成，不上传。</string>
 
     <string name="about_reading_title">关于阅读与评分</string>
-    <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点章节标题可以换回看其它章；重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。</string>
+    <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点章节标题可以换回看其它章；重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。\n开了自动发音，点开词卡就先读一遍这个词。手机里没有语音引擎或没下载英文语音包时读不出来，卡上会写清楚缺哪一样。</string>
 
     <string name="about_quiz_title">关于测验与计分</string>
-    <string name="about_quiz_body">四种题型：英→中、中→英、句子挖空、英文释义选词（配近义/反义线索）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词。易错词一开始四种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并列出所有选项的释义。答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习每次取当天碰过、还没到期的 5 个最不稳定词，照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
+    <string name="about_quiz_body">四种题型：英→中、中→英、句子挖空、英文释义选词（配近义/反义线索）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词。易错词一开始四种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习每次取当天碰过、还没到期的 5 个最不稳定词，照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
 
     <string name="about_reminder_title">关于每日提醒</string>
     <string name="about_reminder_body">到点时如果今天还有到期词才提醒；一个词都不欠就不打扰。\n系统的后台调度可能让提醒晚几分钟，但不会提前。</string>
 
     <string name="about_backup_title">关于备份与恢复</string>
-    <string name="about_backup_body">每天自动备份一次，有网络时才跑。\n备份里有词库、章节、复习进度和故事档案；AI 接口的地址、密钥、模型名不在里面，恢复后要重填。\n应用密码在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码；填过一次后不再回显，留空表示不改。\n云端保留最近 30 份，外加每月最后一份。云端文件夹沿用旧名 Immerlex，旧备份都在那里。</string>
+    <string name="about_backup_body">备份里有词库、章节、复习进度和故事档案；AI 接口的地址、密钥、模型名不在里面，取回后要重填。\n多台设备共用一个网盘时按「学完上传、学前下载」用：这台机器学完点上传，换一台之前先取回最新的那一份。上传永远安全——文件名写着设备和到秒的时刻，同一天再传一次也不会顶掉上一份。取回之前会比对这台机器和上次上传时的样子，有还没传上去的词、章或记录，就先问一句要不要先上传。\n覆盖本机之前会自动留一份当前库，最多留 3 份，都在「本机留的快照」里，取错了可以就地退回去；每一份取回前都要先通过校验，校验不过本机数据一点不动。\n云端保留最近 60 份，外加更早每个月最后一份。每日自动上传只是每天帮你多传一份，有网络时才跑。应用密码在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码；填过一次后不再回显，留空表示不改。云端文件夹沿用旧名 Immerlex，旧备份都在那里。</string>
+    <string name="about_material_title">关于出题素材</string>
+    <string name="about_material_body">测验里的英文释义、例句和易混选项，一个词只向 AI 要一回；要到的那一份存在本机，以后出题都读它。这份库也能整包导入导出：在别处一次性生成一份考研词的素材包（JSON，一个词一行：英文释义 definition、例句 example、例句的中文 exampleZh、易混候选 distractors），在设置页导入就立刻能用。包里的词不必先进词库——它以后什么时候进、进几次，素材都还认得它。重导一份改过的包只覆盖它写了的字段，没写的字段原样留着，所以 AI 补过的例句不会被一个只有释义的包清空。易混候选只在出题时当选项用，不会变成你的易混关系：你自己标的易错词永远优先，两边的词各归各的，互不污染。包的干扰词要挑拼写相近、意思不同的词，别拿近义词凑，否则一道题会有两个说得通的答案。</string>
 
     <string name="about_bible_title">关于故事档案</string>
     <string name="about_bible_body">再点一次“展开成故事档案”会按现在的想法重写：模型生成的条目会被换掉，你亲手改过的原样保留。\n没配 API key 也能逐条手填或删除，AI 只是把一段话展开成初稿。</string>
@@ -406,7 +458,7 @@
     <string name="about_room_body">小鱼干来自学习：当天每碰过一个词（学过或回忆过，同一个词只算一次），前 5 个每个 2 条，第 6–30 个每个 1 条，第 31 个起每两个词 1 条；满 5 个再 +5。评分后几秒内撤销的那次不算。\n小铺里它每天带三件礼物、两个摊子货；礼物买齐会解锁当天的一道菜，第一口它请，之后可以再做一份。它也卖自己写的东西。\n它也会送你东西：第一次收到你的礼物、隔了几天再见、连续 7 或 30 天、或者就是心情好；每天最多一件，七天最多两件，送过的东西会一直留在「它送的」里，不能卖也不值小鱼干。\n钱、价格、冷却和它送不送都由程序算，模型只写文字。台词本和每天的内容各让模型写一次；没有网络或没配密钥就用本地的句子，进房间不受影响。\n点它的名字可以改名片：改完只会让它重想第一句话和台词本，小鱼干、小本子和买过的东西都留着。\n素材来自你选的文件夹里的 GIF，循环播放，按文件名里的动作归类；重复导入不会重复保存。素材只留在本机、不进备份，换手机后重新导入同一个文件夹就能接上；找不到的素材会在房间里提示。</string>
 
     <string name="about_bank_title">关于词库</string>
-    <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n点列表里的单词能查看释义或删除。\n在阅读页点词可以标为易错，并挂上容易混的词；「易混词管理」把这些词按组列出，一组里的词互相都能看到对方。可以往组里加词、把词移出去，也可以批量新增：一行写一组，组内的词用逗号隔开。移出一组只断关系，词还留着易错标记；只有落单的词被删掉时才取消标记。</string>
+    <string name="about_bank_body">可以用 txt、截图、PDF 导入，也可以手动添加；手动添加时留空释义，会从离线词典 ECDICT 补全音标和释义。\n搜索框先查词库；词库里没有的，再从离线词典里找，单独列成「词典里还有」一组。词典里的词不进词库就不排复习、不参与生成——点开看一眼，点「加入词库」才真正进来。\n点列表里的单词能查看释义或删除。\n在阅读页点词可以标为易错，并挂上容易混的词；「易混词管理」把这些词按组列出，一组里的词互相都能看到对方。可以往组里加词、把词移出去，也可以批量新增：一行写一组，组内的词用逗号隔开。移出一组只断关系，词还留着易错标记；只有落单的词被删掉时才取消标记。</string>
 
     <!-- 室友 -->
     <string name="room_title">室友</string>

@@ -60,6 +60,31 @@ class QuizResumeTest {
     }
 
     @Test
+    fun aGroupPausedOnDoubtComesBackWithTheAnswerOpen() {
+        val questions = listOf(question(1, "harbour"), question(2, "lantern"))
+        val resume = QuizResume(
+            mode = QuizMode.DUE,
+            questions = questions,
+            alternatives = emptyMap(),
+            wrongIds = listOf(1),
+            excludedIds = emptySet(),
+            index = 0,
+            inPractice = false,
+            chosen = null,
+            correct = false,
+            correctCount = 0,
+            group = 1,
+            doubt = true,
+            trickyIds = setOf(1L),
+        )
+
+        val back = decodeQuizResume(encodeQuizResume(resume))
+
+        assertNotNull(back)
+        assertEquals(resume, back)
+    }
+
+    @Test
     fun garbageOrOutOfRangePayloadsMeanNoSavedGroup() {
         assertNull(decodeQuizResume("not json"))
         assertNull(decodeQuizResume("{}"))

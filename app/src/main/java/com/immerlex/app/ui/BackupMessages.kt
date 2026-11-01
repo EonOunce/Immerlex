@@ -3,13 +3,29 @@ package com.immerlex.app.ui
 import com.immerlex.app.R
 import com.immerlex.core.backup.BackupFailure
 import com.immerlex.core.backup.BackupOutcome
+import com.immerlex.core.backup.DownloadVerdict
 import com.immerlex.core.backup.SnapshotIssue
 
 fun BackupOutcome.toUiMessage(): UiMessage = when (this) {
-    is BackupOutcome.Uploaded ->
-        UiMessage(R.string.backup_uploaded, listOf(remoteName, kiloBytesOf(bytes), pruned))
+    is BackupOutcome.Uploaded -> UiMessage(R.string.backup_uploaded, listOf(kiloBytesOf(bytes), pruned))
 
     is BackupOutcome.Failed -> failureMessage(failure, detail)
+}
+
+/**
+ * 取回之前要不要警告、警告哪一句。判定本身是 core 的纯函数，这里只把它翻成人话；
+ * null 表示不用问，直接走原来那条简单确认。
+ */
+fun downloadWarning(verdict: DownloadVerdict): UiMessage? = when (verdict) {
+    DownloadVerdict.InSync, DownloadVerdict.NothingToLose -> null
+
+    // 三个数都是 0 说明是"数目没变但确实动过"的那一类（撤销、改写旧记录），报数会报出一串 0。
+    is DownloadVerdict.LocalUnsynced ->
+        if (verdict.words == 0 && verdict.chapters == 0 && verdict.reviews == 0) {
+            UiMessage(R.string.backup_conflict_changed)
+        } else {
+            UiMessage(R.string.backup_conflict_counts, listOf(verdict.words, verdict.chapters, verdict.reviews))
+        }
 }
 
 fun backupFailureLabel(failure: BackupFailure?): Int = when (failure) {

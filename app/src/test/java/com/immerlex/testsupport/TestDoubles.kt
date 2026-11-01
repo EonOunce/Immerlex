@@ -19,6 +19,7 @@ import com.immerlex.core.db.LOG_SOURCE_READER
 import com.immerlex.core.db.QuizMaterialDao
 import com.immerlex.core.db.QuizMaterialEntity
 import com.immerlex.core.db.ReviewLogDao
+import com.immerlex.core.db.ReviewActivity
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.ReviewMoment
 import com.immerlex.core.db.ReviewStats
@@ -87,6 +88,8 @@ internal class FakeReviewLogDao : ReviewLogDao {
 
     override suspend fun deleteById(id: Long) { items.removeAll { it.id == id } }
 
+    override suspend fun activity() = ReviewActivity(items.size, items.maxOfOrNull { it.id } ?: 0L)
+
     override suspend fun forWords(wordIds: List<Long>) = items
         .filter { it.wordId in wordIds }
         .sortedWith(compareBy({ it.reviewEpochSec }, { it.id }))
@@ -98,6 +101,11 @@ internal class FakeReviewLogDao : ReviewLogDao {
 
     override suspend fun recalledWordIdsSince(sinceSec: Long) = items
         .filter { it.kind == LOG_KIND_RECALL && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun recalledWordIdsBySourceSince(source: String, sinceSec: Long) = items
+        .filter { it.kind == LOG_KIND_RECALL && it.source == source && it.reviewEpochSec >= sinceSec }
         .map { it.wordId }
         .distinct()
 
@@ -151,6 +159,11 @@ internal class FakeDailyLoopDao : DailyLoopDao {
 internal class FakeDictionary(private val entries: Map<String, DictEntry> = emptyMap()) : DictionarySource {
     override fun lookup(word: String): DictEntry? = entries[word.lowercase()]
 
+    override fun search(needle: String, limit: Int): List<DictEntry> =
+        entries.values.filter { it.word.contains(needle.lowercase()) && !it.word.contains(' ') }
+            .sortedBy { it.word.length }
+            .take(limit)
+
     companion object {
         fun entry(word: String, translation: String, phonetic: String = "", definition: String = "") =
             word.lowercase() to DictEntry(word, phonetic, translation, definition)
@@ -158,13 +171,17 @@ internal class FakeDictionary(private val entries: Map<String, DictEntry> = empt
 }
 
 internal class FakeQuizMaterialDao : QuizMaterialDao {
-    val items = mutableMapOf<Long, QuizMaterialEntity>()
+    val items = mutableMapOf<String, QuizMaterialEntity>()
 
-    override suspend fun byWordIds(wordIds: List<Long>) = wordIds.mapNotNull { items[it] }
+    override suspend fun byWords(words: List<String>) = words.mapNotNull { items[it] }
 
     override suspend fun upsertAll(entities: List<QuizMaterialEntity>) {
-        entities.forEach { items[it.wordId] = it }
+        entities.forEach { items[it.word] = it }
     }
+
+    override suspend fun count() = items.size
+
+    override suspend fun all() = items.values.sortedBy { it.word }
 }
 
 internal class FakeChapterDao : ChapterDao {
@@ -184,6 +201,8 @@ internal class FakeChapterDao : ChapterDao {
     }
 
     override suspend fun byId(id: Long) = items.find { it.id == id }
+
+    override suspend fun totalCount() = items.size
 
     override suspend fun titlesForGenre(genre: String) = items.filter { it.genre == genre && it.kind == KIND_SERIAL }
         .sortedWith(compareByDescending<ChapterEntity> { it.number }.thenByDescending { it.id })

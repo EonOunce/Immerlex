@@ -31,6 +31,10 @@ data class HomeState(
     val chapterNumber: Int = 0,
     val heat: List<HeatDay> = emptyList(),
     val trend: List<TrendDay> = emptyList(),
+    /** 今日碰过的词面：分享卡上的数字和词墙都出自这三份，不另算一套。 */
+    val learnedToday: List<String> = emptyList(),
+    val recalledToday: List<String> = emptyList(),
+    val quizzedToday: List<String> = emptyList(),
     val quizCount: Int = 0,
     val quizResumable: Boolean = false,
     val earlyCount: Int = 0,
@@ -69,6 +73,7 @@ class HomeViewModel(
         val limit = prefs.dailyNewLimit
         val queue = schedule.todaysQueue(now, limit)
         val info = dailyLoop.info(now, queue.reviewWords.size + queue.newWords.size)
+        val tally = dailyLoop.todayTally(now)
         val latest = chapterDao.latest(prefs.genre)
         val room = roommate.hook(now)
         _state.value = HomeState(
@@ -84,6 +89,9 @@ class HomeViewModel(
             chapterNumber = latest?.number ?: 0,
             heat = dailyLoop.heatGrid(now),
             trend = dailyLoop.trend(now),
+            learnedToday = tally.learned,
+            recalledToday = tally.recalled,
+            quizzedToday = tally.quizzed,
             // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
             // 一组最多 40 题，入口显示的就是这一组能测多少，不是候选池总数。
             quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),

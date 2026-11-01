@@ -110,6 +110,9 @@ const val LOG_KIND_RECALL = "recall"
 /** 阅读页写下的记录。正文里的颜色只听这一类：测验和提前复习排的是同一个词，但不改颜色。 */
 const val LOG_SOURCE_READER = "reader"
 
+/** 测验与提前复习写下的记录；分享卡的"今天测验过的词"只认这一类。 */
+const val LOG_SOURCE_QUIZ = "quiz"
+
 @Entity(tableName = "story_bibles", indices = [Index(value = ["genre"], unique = true)])
 data class StoryBibleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -208,17 +211,23 @@ data class TrickyLinkEntity(
 )
 
 /**
- * 一个词的出题素材只留一份：模型给过的英文释义、例句和易混候选池存下来，
+ * 一个词的出题素材只留一份：英文释义、例句（带一句中文对照）和易混候选池存下来，
  * 以后考这个词都读这一行，不再发第二次请求。[distractors] 是 `[{"w":"","zh":""}]`
  * 这样的小 JSON，读它的是 `core.quiz`，这里只负责存字符串。
+ *
+ * 主键是小写词面而不是词库 id：素材跟着"这个词"走，不跟着"这条词库记录"走。
+ * 删了再加回来的词、只在词典里还没进词库的词、素材包里灌进来的几千个考研词，都靠词面认得出。
  */
 @Entity(tableName = "quiz_material")
 data class QuizMaterialEntity(
-    @PrimaryKey val wordId: Long,
+    @PrimaryKey val word: String,
     val definition: String = "",
     val example: String = "",
+    val exampleZh: String = "",
     val distractors: String = "[]",
-    val createdAtSec: Long,
+    /** 搭配短语池，形状同 [distractors]：`[{"w":"take measures","zh":"采取措施"}]`。 */
+    val collocations: String = "[]",
+    val updatedAtSec: Long,
 )
 
 /**
@@ -229,4 +238,30 @@ data class QuizMaterialEntity(
 data class QuizSessionEntity(
     @PrimaryKey val mode: String,
     val payload: String,
+)
+
+/** `sync_lineage` 只有一行，永远是这个 id。 */
+const val SYNC_LINEAGE_ROW = 1
+
+/**
+ * 本机与云端的血缘。判定"把这份拉下来会不会丢掉本机刚写的记录"靠的就是这一行，
+ * 所以它必须在库里而不是 SharedPreferences 里——清数据或换机时丢了它，
+ * 下次下载就再也问不出"你到底有没有动过"。
+ * [syncedName] 空串表示这台机器从来没和云端对齐过。
+ */
+@Entity(tableName = "sync_lineage")
+data class SyncLineageEntity(
+    @PrimaryKey val id: Int = SYNC_LINEAGE_ROW,
+    val device: String = "",
+    val syncedName: String = "",
+    val syncedWords: Int = 0,
+    val syncedChapters: Int = 0,
+    val syncedReviews: Int = 0,
+    val syncedLastReviewId: Long = 0,
+    /** 素材 / 易错 / 故事档案 / 室友那些表的行数指纹；空串 = 升级前留下的老行，判定时当"对不上"。 */
+    val syncedExtras: String = "",
+    val lastUploadName: String = "",
+    val lastUploadSec: Long = 0,
+    val lastRestoreName: String = "",
+    val lastRestoreSec: Long = 0,
 )

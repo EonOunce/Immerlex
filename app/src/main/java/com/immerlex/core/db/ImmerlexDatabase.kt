@@ -32,8 +32,9 @@ import androidx.room.RoomDatabase
         RoommatePetGiftEntity::class,
         QuizMaterialEntity::class,
         QuizSessionEntity::class,
+        SyncLineageEntity::class,
     ],
-    version = 13,
+    version = 17,
     exportSchema = true,
 )
 abstract class ImmerlexDatabase : RoomDatabase() {
@@ -62,6 +63,7 @@ abstract class ImmerlexDatabase : RoomDatabase() {
     abstract fun roommatePetGiftDao(): RoommatePetGiftDao
     abstract fun quizMaterialDao(): QuizMaterialDao
     abstract fun quizSessionDao(): QuizSessionDao
+    abstract fun syncLineageDao(): SyncLineageDao
 
     companion object {
         const val NAME = "immerlex.db"

@@ -259,6 +259,71 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
     }
 }
 
+/**
+ * v13 -> v14: 多设备手动同步要判断"把云端那份拉下来会不会丢掉本机刚写的记录"，
+ * 这条判断的依据必须跟着库走，所以新增一行 `sync_lineage`。老用户那行是空的，
+ * 第一次下载前会因此问一句——判定不了的时候只能问人，不能猜。
+ */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sync_lineage` (`id` INTEGER NOT NULL DEFAULT 1, " +
+                "`device` TEXT NOT NULL DEFAULT '', `syncedName` TEXT NOT NULL DEFAULT '', " +
+                "`syncedWords` INTEGER NOT NULL DEFAULT 0, `syncedChapters` INTEGER NOT NULL DEFAULT 0, " +
+                "`syncedReviews` INTEGER NOT NULL DEFAULT 0, `syncedLastReviewId` INTEGER NOT NULL DEFAULT 0, " +
+                "`lastUploadName` TEXT NOT NULL DEFAULT '', `lastUploadSec` INTEGER NOT NULL DEFAULT 0, " +
+                "`lastRestoreName` TEXT NOT NULL DEFAULT '', `lastRestoreSec` INTEGER NOT NULL DEFAULT 0, " +
+                "PRIMARY KEY(`id`))",
+        )
+    }
+}
+
+/**
+ * v14 -> v15: 出题素材改按词面存。主键从词库 id 换成小写单词，素材就跟着"这个词"走，
+ * 不再跟着"这条词库记录"走——删了再加回来的词还认得自己的素材，素材包里那些根本没进
+ * 词库的考研词也才有地方放。顺手加一列 `exampleZh`（例句的中文对照）。
+ *
+ * 老行靠 `words` 反查词面，所以**删过词留下的孤儿行会在这里丢掉**：id 已经没了，
+ * 谁也想不出那个单词长什么样。
+ */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `quiz_material_new` (`word` TEXT NOT NULL, " +
+                "`definition` TEXT NOT NULL DEFAULT '', `example` TEXT NOT NULL DEFAULT '', " +
+                "`exampleZh` TEXT NOT NULL DEFAULT '', `distractors` TEXT NOT NULL DEFAULT '[]', " +
+                "`updatedAtSec` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`word`))",
+        )
+        // 词库里同一个词大小写写法不同的两条会撞成一行：留 id 更小的那条，另一条的素材丢掉。
+        db.execSQL(
+            "INSERT OR IGNORE INTO `quiz_material_new` (`word`, `definition`, `example`, `exampleZh`, " +
+                "`distractors`, `updatedAtSec`) " +
+                "SELECT lower(trim(w.`word`)), m.`definition`, m.`example`, '', m.`distractors`, " +
+                "m.`createdAtSec` FROM `quiz_material` m JOIN `words` w ON w.`id` = m.`wordId` " +
+                "ORDER BY m.`wordId`",
+        )
+        db.execSQL("DROP TABLE `quiz_material`")
+        db.execSQL("ALTER TABLE `quiz_material_new` RENAME TO `quiz_material`")
+    }
+}
+
+/** v15 -> v16: 素材多一列搭配短语。老行留空串，搭配题对它们不可用——不编，也不拿别的词的搭配充数。 */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `quiz_material` ADD COLUMN `collocations` TEXT NOT NULL DEFAULT '[]'")
+    }
+}
+
+/**
+ * v16 -> v17: 同步指纹从"词 / 章 / 复习记录"三个数扩到所有会丢的东西（素材、易错、故事档案、室友）。
+ * 老行这一列留空串，与任何真实指纹都不相等——升级后第一次下载会多问一句，宁可问，不能猜。
+ */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `sync_lineage` ADD COLUMN `syncedExtras` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 val MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -272,4 +337,8 @@ val MIGRATIONS = arrayOf(
     MIGRATION_10_11,
     MIGRATION_11_12,
     MIGRATION_12_13,
+    MIGRATION_13_14,
+    MIGRATION_14_15,
+    MIGRATION_15_16,
+    MIGRATION_16_17,
 )

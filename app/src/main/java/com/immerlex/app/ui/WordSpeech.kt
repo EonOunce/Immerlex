@@ -1,4 +1,4 @@
-package com.immerlex.feature.reader
+package com.immerlex.app.ui
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
@@ -9,11 +9,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.immerlex.app.R
 import java.util.Locale
 
 /** 朗读失败要能说清缺的是引擎还是英文语音包，否则用户只看到"点了没反应"。 */
 enum class SpeechProblem { None, NoEngine, NoEnglish, Failed }
 
+/**
+ * 单词朗读。阅读页的词卡和测验的题干都要读，所以它不住在任何一个 feature 里。
+ * 没有引擎或没有英文语音包时不报错、只是不出声，界面自己决定要不要提一句。
+ */
 class WordSpeaker {
     private var engine: TextToSpeech? = null
     private var pending: String? = null
@@ -84,4 +89,10 @@ fun rememberWordSpeaker(): WordSpeaker {
         onDispose { speaker.shutdown() }
     }
     return speaker
+}
+
+fun speechProblemText(problem: SpeechProblem): Int = when (problem) {
+    SpeechProblem.NoEngine -> R.string.reader_speak_no_engine
+    SpeechProblem.NoEnglish -> R.string.reader_speak_no_english
+    else -> R.string.reader_speak_failed
 }

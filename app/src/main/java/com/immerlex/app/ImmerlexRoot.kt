@@ -43,6 +43,7 @@ import com.immerlex.feature.reader.ReaderViewModel
 import com.immerlex.feature.settings.AboutScreen
 import com.immerlex.feature.settings.BibleScreen
 import com.immerlex.feature.settings.BibleViewModel
+import com.immerlex.feature.settings.MaterialViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
 import com.immerlex.feature.tricky.TrickyScreen
@@ -64,7 +65,12 @@ fun ImmerlexRoot() {
     val appViewModelFactory = viewModelFactory {
         initializer {
             WordBankViewModel(
-                WordBankRepository(container.db, container.dictionary, container.importRepository),
+                WordBankRepository(
+                    container.db,
+                    container.dictionary,
+                    container.importRepository,
+                    container.materialRepository,
+                ),
             )
         }
         initializer {
@@ -77,6 +83,9 @@ fun ImmerlexRoot() {
                 reminder = container.reminder,
                 backup = container.backupService,
             )
+        }
+        initializer {
+            MaterialViewModel(container.materialRepository)
         }
         initializer {
             BibleViewModel(
@@ -116,6 +125,7 @@ fun ImmerlexRoot() {
                 quiz = container.quizService,
                 prefs = container.prefs,
                 resume = container.quizResumeStore,
+                tricky = container.trickyRepository,
             )
         }
         initializer {
@@ -191,8 +201,10 @@ fun ImmerlexRoot() {
                 }
                 composable(Destinations.SETTINGS.route) {
                     val vm: SettingsViewModel = viewModel(factory = appViewModelFactory)
+                    val material: MaterialViewModel = viewModel(factory = appViewModelFactory)
                     SettingsScreen(
                         vm,
+                        material,
                         onOpenBible = { navController.navigate(ROUTE_BIBLE) { launchSingleTop = true } },
                         onOpenAbout = { navController.navigate(ROUTE_ABOUT) { launchSingleTop = true } },
                     )

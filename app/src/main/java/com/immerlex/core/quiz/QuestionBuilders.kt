@@ -54,8 +54,10 @@ class ClozeBuilder : QuestionBuilder {
 
     override fun build(word: WordEntity, context: QuestionContext): QuizQuestion? {
         val key = word.word.trim().lowercase()
-        val sentence = context.sentences[key]?.firstOrNull()
-            ?: context.enrichment.of(word)?.example?.let { blankWord(it, word.word) }
+        val chapterSentence = context.sentences[key]?.firstOrNull()
+        val material = context.enrichment.of(word)
+        val sentence = chapterSentence
+            ?: material?.example?.let { blankWord(it, word.word) }
             ?: return null
         val options = wordOptions(word, context) ?: return null
         return QuizQuestion(
@@ -64,6 +66,8 @@ class ClozeBuilder : QuestionBuilder {
             type = type,
             prompt = sentence,
             options = options,
+            // 对照只对得上自己那一句：用章节原句出题时，不能把素材包给另一句的翻译挂上来。
+            exampleZh = if (chapterSentence == null) material?.exampleZh.orEmpty() else "",
         )
     }
 }
@@ -87,11 +91,67 @@ class DefinitionBuilder : QuestionBuilder {
     }
 }
 
+/**
+ * 搭配题：题干是**这个词自己的**一条真实搭配，选项是四个中文释义，只有一个对得上。
+ *
+ * 早先的版本把四个英文短语摆成选项，但只有正确答案含这个词——不懂意思也能靠
+ * "哪个里面有这个词"选对，等于白送一道题。翻面之后：题干里的短语都是素材包里
+ * 校验过的真短语，选项全是释义，没有"长得像答案"的那一个。
+ * 选项的英文面在答完后揭开，所以选错的人能看到另外三个短语原本是什么意思。
+ * 素材里没有搭配的词不出这道题，也不拿别的字段凑。
+ */
+class CollocationBuilder : QuestionBuilder {
+    override val type = QuizType.COLLOCATION
+
+    override fun build(word: WordEntity, context: QuestionContext): QuizQuestion? {
+        val head = word.word.trim().lowercase()
+        val mine = context.enrichment.of(word)?.collocations.orEmpty()
+            .filter { it.zh.isNotBlank() && it.word.lowercase().contains(head) }
+        if (mine.isEmpty()) return null
+        val attempt = context.attempts[word.id] ?: 0
+        val correct = mine[Math.floorMod(attempt, mine.size)]
+        val phrase = correct.word.trim()
+        val answer = correct.zh.trim()
+        // 同一个词的其他搭配先上：一个词的两个意思更容易混，也一定有出处。
+        val siblings = mine.filter { it != correct }
+        val others = context.collocationPool
+            .filterNot { it.word.trim().equals(phrase, ignoreCase = true) }
+        val candidates = (siblings + others)
+            .map { Choice(it.zh.trim(), it.word.trim()) }
+            .filter {
+                it.text.isNotBlank() && it.gloss.isNotBlank() &&
+                    !it.text.equals(answer, ignoreCase = true) &&
+                    !it.gloss.equals(phrase, ignoreCase = true)
+            }
+            .distinctBy { it.text.lowercase() }
+            // 同一个短语换了个中文说法也是同一个答案，答完会露出两遍。
+            .distinctBy { it.gloss.lowercase() }
+        val picked = rotate(candidates, attempt, MAX_DISTRACTORS)
+        if (picked.isEmpty()) return null
+        return QuizQuestion(
+            wordId = word.id,
+            word = word.word,
+            type = type,
+            prompt = phrase,
+            options = (listOf(Choice(answer, phrase)) + picked)
+                .sortedBy { stableHash(it.text.trim().lowercase(), context.seed + 47) }
+                .map {
+                    QuizOption(
+                        text = it.text,
+                        gloss = it.gloss,
+                        correct = it.text.trim().equals(answer, ignoreCase = true),
+                    )
+                },
+        )
+    }
+}
+
 val DEFAULT_QUESTION_BUILDERS: List<QuestionBuilder> = listOf(
     EnToZhBuilder(),
     ClozeBuilder(),
     ZhToEnBuilder(),
     DefinitionBuilder(),
+    CollocationBuilder(),
 )
 
 private fun wordOptions(word: WordEntity, context: QuestionContext): List<QuizOption>? =
@@ -129,12 +189,17 @@ private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): 
         }
 }
 
+/**
+ * 选项只摆一个面，另一个面存进 [Choice.gloss] 等答完再揭开：
+ * 中文选项底下要能对出英文单词，英文选项底下要能对出中文释义——选错的人才知道别的词差在哪。
+ */
 private fun correctChoice(word: WordEntity, face: Face): Choice? {
     val zh = word.translation.trim()
     if (zh.isBlank()) return null
+    val en = word.word.trim()
     return when (face) {
-        Face.WORD -> Choice(word.word.trim(), zh.ifBlank { word.definition.trim() })
-        Face.GLOSS -> Choice(zh, zh)
+        Face.WORD -> Choice(en, zh.ifBlank { word.definition.trim() })
+        Face.GLOSS -> Choice(zh, en)
     }
 }
 
@@ -142,7 +207,7 @@ private fun choice(en: String, zh: String, face: Face): Choice? {
     val word = en.trim()
     val gloss = zh.trim()
     if (word.isEmpty() || gloss.isEmpty()) return null
-    return if (face == Face.WORD) Choice(word, gloss) else Choice(gloss, gloss)
+    return if (face == Face.WORD) Choice(word, gloss) else Choice(gloss, word)
 }
 
 /**
