@@ -16,7 +16,9 @@ import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.dict.EcdictDictionary
 import com.immerlex.core.fsrs.Scheduler
 import com.immerlex.core.importer.ImportRepository
+import com.immerlex.core.material.HttpMaterialFetcher
 import com.immerlex.core.material.MaterialRepository
+import com.immerlex.core.material.MaterialSync
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.notify.Notifier
 import com.immerlex.core.notify.ReminderControl
@@ -123,6 +125,14 @@ class AppContainer(context: Context) {
     val quizResumeStore: QuizResumeStore by lazy { QuizResumeStore(db.quizSessionDao()) }
     // 出题素材跟着"这个词"走，不跟着词库那一行走，所以一个包可以先装进机器、词以后才进词库。
     val materialRepository: MaterialRepository by lazy { MaterialRepository(db, dictionary) }
+    // 素材包在 GitHub 上分片放着，取回来一片一片验过校验值才进库；本机导入一直是退路。
+    val materialSync: MaterialSync by lazy {
+        MaterialSync(
+            manifestUrl = { prefs.materialManifestUrl },
+            fetch = HttpMaterialFetcher(),
+            importPack = materialRepository::import,
+        )
+    }
     val storyBible: StoryBibleRepository by lazy {
         StoryBibleRepository(db.storyBibleDao(), db.bibleEntryDao(), db.characterStateDao(), db.chapterDao())
     }

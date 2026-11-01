@@ -116,11 +116,20 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_DEVICE, "").orEmpty().ifBlank { Build.MODEL.orEmpty().ifBlank { DEFAULT_DEVICE } }
         set(value) = prefs.edit().putString(KEY_DEVICE, value.trim()).apply()
 
+    /**
+     * 素材包清单的地址。默认最新 release 上那一份 `manifest.json`；分片按相对地址解析，
+     * 所以换成自己的镜像或本机服务器只改这一行。
+     */
+    var materialManifestUrl: String
+        get() = prefs.getString(KEY_MATERIAL_URL, PRESET_MATERIAL_URL).orEmpty()
+        set(value) = prefs.edit().putString(KEY_MATERIAL_URL, value.trim()).apply()
+
     companion object {
         const val DEFAULT_NEW_LIMIT = 25
         const val DEFAULT_REMINDER_MINUTE = 20 * 60 + 30
         const val MINUTES_PER_DAY = 24 * 60
         const val PRESET_WEBDAV_URL = "https://dav.jianguoyun.com/dav/"
+        const val PRESET_MATERIAL_URL = "https://github.com/EonOunce/Immerlex/releases/latest/download/manifest.json"
         const val DEFAULT_DEVICE = "device"
         private const val KEY_BASE_URL = "ai_base_url"
         private const val KEY_MODEL = "ai_model"
@@ -137,5 +146,6 @@ class AppPreferences(context: Context) {
         private const val KEY_WEBDAV_ACCOUNT = "webdav_account"
         private const val KEY_BACKUP_ON = "backup_enabled"
         private const val KEY_DEVICE = "device_name"
+        private const val KEY_MATERIAL_URL = "material_manifest_url"
     }
 }

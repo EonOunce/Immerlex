@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # compileSdk 35 (app/build.gradle.kts); AGP 8.7.3 drives build-tools 34.0.0,
+      # 35.0.0 is installed alongside it so either default resolves offline.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platforms;android-35
+            build-tools;34.0.0
+            build-tools;35.0.0
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: FSRS reference-vector tests
+        run: ./gradlew :core:fsrs:test
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      # No lint block in app/build.gradle.kts, so the AGP default applies:
+      # abortOnError fails on errors only. The three known warnings
+      # (2x VectorPath on launcher icons, 1x unused quiz_loading string)
+      # do not break the build.
+      - name: Lint (debug)
+        run: ./gradlew :app:lintDebug
+
+      # Debug builds are signed with the auto-generated debug keystore,
+      # so the gitignored keystore.properties is not needed here.
+      - name: Assemble debug APKs
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload test and lint reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-on-failure
+          if-no-files-found: ignore
+          path: |
+            app/build/reports/tests/
+            core/fsrs/build/reports/tests/
+            app/build/reports/lint-results-debug.*
+
+      - name: Upload debug APKs
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: immerlex-debug-apks
+          path: app/build/outputs/apk/debug/*.apk

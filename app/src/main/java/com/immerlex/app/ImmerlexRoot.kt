@@ -85,7 +85,11 @@ fun ImmerlexRoot() {
             )
         }
         initializer {
-            MaterialViewModel(container.materialRepository)
+            MaterialViewModel(
+                material = container.materialRepository,
+                sync = container.materialSync,
+                prefs = container.prefs,
+            )
         }
         initializer {
             BibleViewModel(
