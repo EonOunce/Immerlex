@@ -2,6 +2,7 @@ package com.immerlex.feature.quiz
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.immerlex.core.quiz.QuizMaterialPrep
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizQuestion
 import com.immerlex.core.quiz.QuizResume
@@ -44,6 +45,10 @@ data class QuizState(
     val doubt: Boolean = false,
     /** 这一组里已经标过易错的词：只有没标过的才问那一句"要不要标"。 */
     val trickyIds: Set<Long> = emptySet(),
+    /** 出题前的素材账：库里已有几个词的素材、几个还得问模型；0/0 表示还没算出来。 */
+    val materialReady: Int = 0,
+    val materialToAsk: Int = 0,
+    val materialCanAsk: Boolean = false,
 ) {
     val answered: Boolean get() = chosen != null || doubt
     val isLast: Boolean get() = total > 0 && index >= total - 1
@@ -178,6 +183,9 @@ class QuizViewModel(
             roundTotal = 0,
             wrongCount = 0,
             practice = false,
+            materialReady = 0,
+            materialToAsk = 0,
+            materialCanAsk = false,
         )
         plan(current.mode)
     }
@@ -204,11 +212,13 @@ class QuizViewModel(
                         now = now,
                         dailyNewLimit = prefs.dailyNewLimit,
                         onStage = ::publishStage,
+                        onMaterial = ::publishMaterial,
                     )
                     QuizMode.EARLY -> quiz.planEarly(
                         now = now,
                         excludeWordIds = excluded,
                         onStage = ::publishStage,
+                        onMaterial = ::publishMaterial,
                     )
                 }
             }
@@ -241,6 +251,14 @@ class QuizViewModel(
 
     private fun publishStage(stage: QuizStage) {
         _state.value = _state.value.copy(stage = stage)
+    }
+
+    private fun publishMaterial(prep: QuizMaterialPrep) {
+        _state.value = _state.value.copy(
+            materialReady = prep.ready,
+            materialToAsk = prep.toAsk,
+            materialCanAsk = prep.canAsk,
+        )
     }
 
     private fun startPracticeOrFinish() {

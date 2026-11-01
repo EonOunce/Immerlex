@@ -21,6 +21,7 @@ import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.reader.ChapterResolver
 import com.immerlex.core.reader.ReaderWord
+import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.schedule.WordAccess
 import com.immerlex.core.settings.AppPreferences
@@ -46,6 +47,7 @@ class ReaderViewModel(
     private val generator: ChapterGenerator,
     private val aiConfig: () -> AiConfig,
     private val notifier: GenerationNotifier,
+    boundary: DayBoundary,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReaderState())
@@ -63,6 +65,7 @@ class ReaderViewModel(
         wordDao = wordDao,
         logDao = logDao,
         schedule = schedule,
+        boundary = boundary,
     )
 
     init {

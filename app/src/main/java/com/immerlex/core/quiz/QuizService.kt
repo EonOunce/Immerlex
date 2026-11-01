@@ -8,9 +8,15 @@ import com.immerlex.core.db.TrickyDao
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
+import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ScheduleService
 import java.time.Instant
-import java.time.ZoneId
+
+/**
+ * 出题前的素材账：这一组里几个词库里已经有素材、几个还得问一次模型。
+ * 界面只拿它说一句话，记账与出题都不受影响。
+ */
+data class QuizMaterialPrep(val ready: Int, val toAsk: Int, val canAsk: Boolean)
 
 /**
  * 独立测验的编排层。只做三件事：挑出今天该测的词、按题型策略出题、
@@ -24,15 +30,16 @@ class QuizService(
     private val chapterDao: ChapterDao,
     private val trickyDao: TrickyDao,
     private val schedule: ScheduleService,
+    /** "今天"的起点：凌晨那段可能还算前一天，与今日页、阅读页同一套判定。 */
+    private val boundary: DayBoundary,
     private val enricher: QuizEnricher? = null,
     private val material: QuizMaterialStore? = null,
-    private val zone: ZoneId = ZoneId.systemDefault(),
     private val builders: List<QuestionBuilder> = DEFAULT_QUESTION_BUILDERS,
 ) {
 
     /** 今日到期 + 今天学过但还没回忆的词；今天已经回忆过的不再重复考。 */
     suspend fun dueCandidateIds(now: Instant, dailyNewLimit: Int): List<Long> {
-        val dayStart = startOfDay(now)
+        val dayStart = boundary.startOf(now)
         val queue = schedule.todaysQueue(now, dailyNewLimit)
         val learned = logDao.learnedWordIdsSince(dayStart)
         val recalled = logDao.recalledWordIdsSince(dayStart).toSet()
@@ -43,7 +50,7 @@ class QuizService(
 
     /** 今天碰过、但还没到期、最不稳定的几个词；提前复习只从这些词里取。 */
     suspend fun earlyCandidates(now: Instant): List<WordEntity> =
-        wordDao.findByIds(logDao.touchedWordIdsSince(startOfDay(now)))
+        wordDao.findByIds(logDao.touchedWordIdsSince(boundary.startOf(now)))
             .filter { it.stability != null && it.dueEpochSec != null && it.dueEpochSec > now.epochSecond }
             .sortedWith(compareBy({ it.stability ?: 0.0 }, { it.lastReviewEpochSec ?: 0L }, { it.id }))
 
@@ -52,6 +59,7 @@ class QuizService(
         dailyNewLimit: Int,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
+        onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
         val ids = dueCandidateIds(now, dailyNewLimit)
@@ -60,7 +68,7 @@ class QuizService(
         val words = wordDao.findByIds(ids)
             .sortedWith(compareBy({ it.dueEpochSec ?: Long.MAX_VALUE }, { it.id }))
             .take(SESSION_LIMIT)
-        return build(QuizMode.DUE, words, now, seed, onStage)
+        return build(QuizMode.DUE, words, now, seed, onStage, onMaterial)
     }
 
     suspend fun planEarly(
@@ -68,6 +76,7 @@ class QuizService(
         excludeWordIds: Set<Long>,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
+        onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
         val candidates = earlyCandidates(now)
@@ -79,7 +88,7 @@ class QuizService(
         }
         if (picked.isEmpty()) return QuizSession(QuizMode.EARLY, emptyList())
         onStage(QuizStage.READING_LOGS)
-        return build(QuizMode.EARLY, picked, now, seed, onStage)
+        return build(QuizMode.EARLY, picked, now, seed, onStage, onMaterial)
     }
 
     /** 一次作答 = 一次独立回忆；答对记记得，答错记忘了。提前复习照常记，不压成困难。 */
@@ -107,13 +116,14 @@ class QuizService(
         now: Instant,
         seed: Long,
         onStage: (QuizStage) -> Unit,
+        onMaterial: (QuizMaterialPrep) -> Unit,
     ): QuizSession {
         val logsByWord = logDao.forWords(words.map { it.id }).groupBy { it.wordId }
         val pool = (wordDao.randomWords(POOL_SIZE) + words).distinctBy { it.id }
         // 素材整批读一次：本组词的用来出题，池子里的只当搭配题的干扰项，不拿去问 AI。
         val stored = material?.load(pool).orEmpty()
         val sessionIds = words.mapTo(HashSet()) { it.id }
-        val enrichment = enrichmentFor(words, stored.filterKeys { it in sessionIds }, now, onStage)
+        val enrichment = enrichmentFor(words, stored.filterKeys { it in sessionIds }, now, onStage, onMaterial)
         onStage(QuizStage.BUILDING)
         val names = words.map { it.word.trim().lowercase() }
         val tricky = trickyDao.byWords(names).mapTo(HashSet()) { it.word }
@@ -155,8 +165,17 @@ class QuizService(
         stored: Map<Long, EnrichedWord>,
         now: Instant,
         onStage: (QuizStage) -> Unit,
+        onMaterial: (QuizMaterialPrep) -> Unit,
     ): QuizEnrichment {
         val pending = words.filterNot { it.id in stored }
+        // 先报账再动手：用户知道这一组的素材有几个已经在库里、几个要花时间等模型。
+        onMaterial(
+            QuizMaterialPrep(
+                ready = words.size - pending.size,
+                toAsk = pending.size,
+                canAsk = enricher?.available() == true,
+            ),
+        )
         if (pending.isEmpty()) return QuizEnrichment(stored)
         if (enricher == null) return QuizEnrichment(stored)
         onStage(QuizStage.ASKING_AI)
@@ -224,9 +243,6 @@ class QuizService(
     }
 
     private fun builderOf(type: QuizType): QuestionBuilder? = builders.firstOrNull { it.type == type }
-
-    private fun startOfDay(now: Instant): Long =
-        now.atZone(zone).toLocalDate().atStartOfDay(zone).toEpochSecond()
 
     companion object {
         /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */

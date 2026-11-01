@@ -390,6 +390,9 @@
     <string name="quiz_stage_records">正在读取学习记录…</string>
     <string name="quiz_stage_ai">正在请求 AI 出题…</string>
     <string name="quiz_stage_build">正在生成题目…</string>
+    <string name="quiz_material_ready">素材已有 %1$d 词</string>
+    <string name="quiz_material_ready_and_ask">素材已有 %1$d 词，%2$d 词要问 AI</string>
+    <string name="quiz_material_ready_missing">素材已有 %1$d 词，%2$d 词没有素材</string>
     <string name="quiz_error">题目没准备好。可以重试，或先回阅读。</string>
     <string name="quiz_retry">重试</string>
     <string name="quiz_again_due">再测一组</string>
@@ -429,7 +432,7 @@
     <string name="about_lead">把英文词嵌进中文故事里读：先读情节，顺手把词记住。</string>
 
     <string name="about_checkin_title">关于打卡</string>
-    <string name="about_checkin_body">今天学过或回忆过任意一个词，就算打卡。\n漏一天不会归零：第二天清空当天的到期词，就自动补回昨天，每周最多补一次。\n没有积分，也没有兑换。</string>
+    <string name="about_checkin_body">今天学过或回忆过任意一个词，就算打卡。\n漏一天不会归零：第二天清空当天的到期词，就自动补回昨天，每周最多补一次。\n当天还有没背完的到期词，这一天到凌晨 1 点才结束；到期词清完或当天没学，零点就翻页。\n没有积分，也没有兑换。</string>
 
     <string name="about_home_title">关于今日页</string>
     <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。\n点标题旁的分享按钮，可以把今天这一页生成一张图（连续天数、今天新学与回忆、今天学过的词与今天测验过的词、近 13 周热力图）；词多时只列一小截，数字仍是全数。图只在本机生成，不上传。</string>

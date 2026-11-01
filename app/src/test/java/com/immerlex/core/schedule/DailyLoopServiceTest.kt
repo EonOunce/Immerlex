@@ -16,6 +16,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -103,6 +104,38 @@ class DailyLoopServiceTest {
         )
         assertEquals(1, service().info(now, dueCount = 5).streakDays)
         assertEquals(0, service(zone = ZoneId.of("UTC")).info(now, dueCount = 5).streakDays)
+    }
+
+    @Test
+    fun aReviewAfterMidnightStillCountsForTheUnfinishedDay() = runTest {
+        seedWord(7, "lantern")
+        seedWord(8, "pebble")
+        reviewAt(daysAgo = 1, wordId = 7)
+        val late = ZonedDateTime.of(2026, 10, 28, 0, 30, 0, 0, shanghai)
+        logs.insert(
+            ReviewLogEntity(
+                wordId = 8, rating = 3, source = LOG_SOURCE_READER, reviewEpochSec = late.toEpochSecond(),
+                elapsedDays = 1, scheduledDays = 3, preDueEpochSec = 0,
+            ),
+        )
+
+        val info = service().info(late.toInstant(), dueCount = 5)
+
+        assertEquals("凌晨背的那一个还算昨天", 2, info.reviewedToday)
+        assertEquals(1, info.streakDays)
+    }
+
+    @Test
+    fun finishingTheDueListDuringTheGraceHourRollsTheDayForward() = runTest {
+        reviewAt(daysAgo = 1)
+        val grace = ZonedDateTime.of(2026, 10, 28, 0, 30, 0, 0, shanghai)
+
+        val before = service().info(grace.toInstant(), dueCount = 0)
+        assertEquals("没清完之前，今天仍是昨天", 1, before.reviewedToday)
+        assertEquals(LocalDate.of(2026, 10, 27).toEpochDay(), loop.items.keys.single())
+
+        val after = service().info(grace.plusMinutes(1).toInstant(), dueCount = 0)
+        assertEquals("清完到期词，零点就翻页", 0, after.reviewedToday)
     }
 
     @Test

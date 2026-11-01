@@ -10,6 +10,8 @@ class AiQuizEnricher(
     private val aiUsable: () -> Boolean = { true },
 ) : QuizEnricher {
 
+    override fun available(): Boolean = aiUsable()
+
     override suspend fun enrich(words: List<WordEntity>): QuizEnrichment {
         if (words.isEmpty() || !aiUsable()) return QuizEnrichment()
         return try {

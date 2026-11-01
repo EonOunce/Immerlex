@@ -1,7 +1,6 @@
 package com.immerlex.feature.quiz
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +32,7 @@ import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.core.quiz.QuizMode
+import com.immerlex.core.quiz.QuizStage
 
 @Composable
 fun QuizScreen(vm: QuizViewModel, onExit: () -> Unit) {
@@ -57,7 +57,12 @@ fun QuizScreen(vm: QuizViewModel, onExit: () -> Unit) {
                 )
             }
             when (state.phase) {
-                QuizPhase.LOADING -> CenterNote(stringResource(stageLabel(state.stage)))
+                QuizPhase.LOADING -> LoadingBody(
+                    stage = state.stage,
+                    ready = state.materialReady,
+                    toAsk = state.materialToAsk,
+                    canAsk = state.materialCanAsk,
+                )
                 QuizPhase.EMPTY -> EmptyBody(state.mode, onExit)
                 QuizPhase.QUESTION -> QuestionBody(
                     state = state,
@@ -155,9 +160,30 @@ private fun EmptyBody(mode: QuizMode, onExit: () -> Unit) {
     }
 }
 
+/**
+ * 出题时先说一句素材账：几个词库里已经有了、几个还得等模型。
+ * 素材账要等词选出来才算得出来，之前只显示阶段文案。
+ */
 @Composable
-private fun CenterNote(text: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, color = ImmerlexColors.Meta)
+private fun LoadingBody(stage: QuizStage, ready: Int, toAsk: Int, canAsk: Boolean) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(stringResource(stageLabel(stage)), color = ImmerlexColors.Meta)
+        if (ready + toAsk > 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                when {
+                    toAsk == 0 -> stringResource(R.string.quiz_material_ready, ready)
+                    canAsk -> stringResource(R.string.quiz_material_ready_and_ask, ready, toAsk)
+                    else -> stringResource(R.string.quiz_material_ready_missing, ready, toAsk)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = ImmerlexColors.Meta,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

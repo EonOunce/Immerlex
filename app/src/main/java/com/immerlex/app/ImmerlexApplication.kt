@@ -36,6 +36,7 @@ import com.immerlex.core.roommate.RoommateService
 import com.immerlex.core.roommate.RoommateSettlement
 import com.immerlex.core.secret.SecretStore
 import com.immerlex.core.schedule.DailyLoopService
+import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.tricky.TrickyRepository
@@ -98,8 +99,10 @@ class AppContainer(context: Context) {
     val scheduleService: ScheduleService by lazy {
         ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler, db)
     }
+    // 今日页、测验、阅读页共用这一份"今天是哪天"：凌晨那段算不算前一天只能有一处判。
+    val dayBoundary: DayBoundary by lazy { DayBoundary(db.dailyLoopDao(), db.reviewLogDao()) }
     val dailyLoopService: DailyLoopService by lazy {
-        DailyLoopService(db.dailyLoopDao(), db.reviewLogDao(), db.wordDao())
+        DailyLoopService(db.dailyLoopDao(), db.reviewLogDao(), db.wordDao(), boundary = dayBoundary)
     }
     // 测验不依赖 API key：AI 只在配置可用时补释义/例句/干扰项，失败静默退化到本地题库。
     val quizService: QuizService by lazy {
@@ -109,6 +112,7 @@ class AppContainer(context: Context) {
             chapterDao = db.chapterDao(),
             trickyDao = db.trickyDao(),
             schedule = scheduleService,
+            boundary = dayBoundary,
             enricher = AiQuizEnricher(
                 clientFor = { OpenAiCompatClient(aiConfig()) },
                 aiUsable = { aiConfig().isUsable },

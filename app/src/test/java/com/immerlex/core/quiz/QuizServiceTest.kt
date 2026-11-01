@@ -11,8 +11,10 @@ import com.immerlex.core.db.TrickyWordEntity
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.fsrs.Scheduler
+import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.testsupport.FakeChapterDao
+import com.immerlex.testsupport.FakeDailyLoopDao
 import com.immerlex.testsupport.FakeQuizMaterialDao
 import com.immerlex.testsupport.FakeReviewLogDao
 import com.immerlex.testsupport.FakeTrickyDao
@@ -60,7 +62,7 @@ class QuizServiceTest {
         ),
         enricher = enricher,
         material = material,
-        zone = ZoneId.of("Asia/Shanghai"),
+        boundary = DayBoundary(FakeDailyLoopDao(), logs, ZoneId.of("Asia/Shanghai")),
     )
 
     @Test
@@ -189,6 +191,48 @@ class QuizServiceTest {
             assertTrue(question.options.size >= 2)
         }
         assertEquals(first.questions.single().wordId, second.questions.single().wordId)
+    }
+
+    @Test
+    fun thePrepReportCountsWordsTheTableAlreadyCovers() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val store = FakeQuizMaterialDao()
+        val asked = mutableListOf<Long>()
+        val service = service(
+            words,
+            logs,
+            FakeTrickyDao(),
+            RecordingEnricher(asked),
+            QuizMaterialStore(store),
+        )
+        seedDue(words, logs, "harbour")
+        val missing = seedDue(words, logs, "pebble")
+        store.items["harbour"] = material("harbour", "[]")
+        var report: QuizMaterialPrep? = null
+
+        service.planDue(now, dailyNewLimit = 10, seed = 1, onMaterial = { report = it })
+
+        assertEquals(QuizMaterialPrep(ready = 1, toAsk = 1, canAsk = true), report)
+        assertEquals("只有没素材的那个去问模型", listOf(missing), asked)
+    }
+
+    @Test
+    fun withoutAKeyThePrepReportDoesNotPromiseAnAiRequest() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val service = service(
+            words,
+            logs,
+            FakeTrickyDao(),
+            enricher = AiQuizEnricher(clientFor = { error("没配 key 不该发请求") }, aiUsable = { false }),
+        )
+        seedDue(words, logs, "harbour")
+        var report: QuizMaterialPrep? = null
+
+        service.planDue(now, dailyNewLimit = 10, seed = 1, onMaterial = { report = it })
+
+        assertEquals(QuizMaterialPrep(ready = 0, toAsk = 1, canAsk = false), report)
     }
 
     @Test

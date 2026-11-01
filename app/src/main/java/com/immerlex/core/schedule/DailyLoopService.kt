@@ -31,11 +31,14 @@ class DailyLoopService(
     private val logDao: ReviewLogDao,
     private val wordDao: WordDao,
     private val zone: ZoneId = ZoneId.systemDefault(),
+    /** 凌晨那段算不算前一天由它定；默认与今日页、测验、阅读页用同一套规则。 */
+    private val boundary: DayBoundary = DayBoundary(loopDao, logDao, zone),
 ) {
 
     suspend fun info(now: Instant, dueCount: Int): DailyInfo {
-        val today = now.atZone(zone).toLocalDate()
+        val today = boundary.dayOf(now)
         val todayDay = today.toEpochDay()
+        val dayStart = today.atStartOfDay(zone).toEpochSecond()
         val moments = logDao.reviewsSince(today.minusDays(STREAK_LOOKBACK_DAYS.toLong()).atStartOfDay(zone).toEpochSecond())
         val rows = loopDao.since(todayDay - STREAK_LOOKBACK_DAYS)
         val info = dailyInfoOf(
@@ -46,7 +49,8 @@ class DailyLoopService(
                     .apply { if (dueCount == 0) add(todayDay) },
                 makeupDays = rows.filter { it.makeupConsumed }.mapTo(HashSet()) { it.epochDay },
                 dueCount = dueCount,
-                reviewedToday = moments.filter { epochDay(it.reviewEpochSec) == todayDay }
+                // 宽限里"今天"还是昨天，凌晨刚背的那几个词也一样要算进来。
+                reviewedToday = moments.filter { it.reviewEpochSec >= dayStart }
                     .map { it.wordId }.distinct().size,
             ),
         )
@@ -76,7 +80,7 @@ class DailyLoopService(
      * 一个词今天既学过又回忆过，会同时出现在两边——这三行回答的是三种动作，不是加法。
      */
     suspend fun todayTally(now: Instant): TodayTally {
-        val since = now.atZone(zone).toLocalDate().atStartOfDay(zone).toEpochSecond()
+        val since = boundary.startOf(now)
         return TodayTally(
             learned = wordsOf(logDao.learnedWordIdsSince(since)),
             recalled = wordsOf(logDao.recalledWordIdsSince(since)),

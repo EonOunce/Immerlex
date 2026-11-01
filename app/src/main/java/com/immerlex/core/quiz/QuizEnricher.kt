@@ -24,5 +24,8 @@ data class QuizEnrichment(val entries: Map<Long, EnrichedWord> = emptyMap()) {
  * 失败、超时、没配置都必须安静地退化成纯本地题库——测验不依赖 API key。
  */
 interface QuizEnricher {
+    /** 现在真的能问模型吗：没配 key 时是 false，界面别替它承诺"要请求 AI"。 */
+    fun available(): Boolean = true
+
     suspend fun enrich(words: List<WordEntity>): QuizEnrichment
 }

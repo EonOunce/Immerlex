@@ -107,6 +107,7 @@ fun ImmerlexRoot() {
                 generator = container.chapterGenerator,
                 aiConfig = container::aiConfig,
                 notifier = container.generationNotifier,
+                boundary = container.dayBoundary,
             )
         }
         initializer {

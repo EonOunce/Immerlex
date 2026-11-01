@@ -9,11 +9,11 @@ import com.immerlex.core.db.WordDao
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.reader.ReaderSegment
 import com.immerlex.core.reader.ReaderWord
+import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ReaderMarks
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.schedule.WordAccess
 import java.time.Instant
-import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,8 +32,8 @@ internal class ReaderGrading(
     private val wordDao: WordDao,
     private val logDao: ReviewLogDao,
     private val schedule: ScheduleService,
+    private val boundary: DayBoundary,
 ) {
-    private val zone: ZoneId = ZoneId.systemDefault()
     private val undoJobs = mutableListOf<Job>()
 
     fun grade(selected: ReaderWord, access: WordAccess, rating: Rating) {
@@ -109,7 +109,7 @@ internal class ReaderGrading(
         state.value = state.value.copy(
             marks = ReaderMarks(
                 learned = logDao.readerLearnedIdsAmong(ids).toSet(),
-                reviewedToday = logDao.readerRecalledIdsSinceAmong(ids, startOfToday(now)).toSet(),
+                reviewedToday = logDao.readerRecalledIdsSinceAmong(ids, boundary.startOf(now)).toSet(),
             ),
             marksAtSec = now.epochSecond,
         )
@@ -134,9 +134,6 @@ internal class ReaderGrading(
         val last = state.value.blocks.flatten().filterIsInstance<ReaderSegment.Word>().lastOrNull()
         return last?.word?.lookup?.trim()?.lowercase() == lookup.trim().lowercase()
     }
-
-    private fun startOfToday(now: Instant): Long =
-        now.atZone(zone).toLocalDate().atStartOfDay(zone).toEpochSecond()
 
     private companion object {
         const val MILLIS_PER_SECOND = 1_000L
