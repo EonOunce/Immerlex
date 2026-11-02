@@ -48,7 +48,8 @@
      `EARLY_SCAN = 60` 先捞一屏。
    - 排除**今天已经回忆过**的词（`recalledWordIdsSince(boundary.startOf(now))`，
      与"今天"同一个 `DayBoundary`）——今天考过的不该立刻再考；昨天之前学过的都算。
-   - 一组仍是 5 个（`EARLY_GROUP_SIZE`）。今日页入口的数字是这一组能练几个
+   - 当时一组固定 5 个（`EARLY_GROUP_SIZE`；2026-11-03 起改为 5 / 10 / 20 可选，
+     见文末补充）。今日页入口的数字是这一组能练几个
      （`coerceAtMost(EARLY_GROUP_SIZE)`），不是学过的词总数。
    - 「再来一组」的排除名单照旧：新词不够时允许拿刚练过的补上，所以练到最后不会空转。
    - 记账不变：每一次都是 `recall`；复习模式里"还没到期"的规则不受影响。
@@ -111,3 +112,17 @@
   坏设置退回默认）、`ReaderKeyboardTest`（光标边界）、`ReaderTextTest`（下划线与
   点词落在第几次出现）、`QuizServiceTest`（提前复习取未到期词、排除今天回忆过的）。
   没有 Room 迁移。
+
+## 补充（2026-11-03）：提前复习的组数改成可选 5 / 10 / 20
+
+- 用户看到一组只有 5 个后问能不能设梯度。决定三档可选，而不是固定值或"池子里全部"：
+  默认仍是最小的 5，用户不选就不会一次被考 20 个。
+- 档位常量和校验只在 `core.quiz.EarlyReview`（`GROUP_SIZES = 5/10/20`、
+  `DEFAULT_GROUP_SIZE = 5`、`saneOr`）：存进 SharedPreferences 的
+  `AppPreferences.earlyGroupSize`，坏值一律退回 5。
+- `QuizService.planEarly(..., groupSize)` 按档位取词；新词不够时照旧从「再来一组」
+  的排除名单里补齐，练到最后不会空转。`EARLY_SCAN` 从 60 提到 200，给最大一档留余量。
+  今日页入口是 `coerceAtMost(prefs.earlyGroupSize)`。
+- 设置页新开「测验」一节，一行三选一；改完立即生效（与字号、深色同一类设备偏好，
+  不进备份）。关于页同步改成"默认 5 个，可在设置页选 5 / 10 / 20"。
+- 没有 Room 迁移：偏好只存在 SharedPreferences。

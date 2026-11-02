@@ -28,6 +28,7 @@ import com.immerlex.core.db.BackupRunEntity
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.notify.ReminderControl
+import com.immerlex.core.quiz.EarlyReview
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.settings.DEFAULT_FONT_SCALE
 import java.time.Instant
@@ -52,6 +53,8 @@ data class SettingsState(
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
     val autoSpeak: Boolean = false,
+    /** 提前复习一组几个词：5 / 10 / 20。 */
+    val earlyGroupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
     /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
     val models: List<String> = emptyList(),
     val bankTotal: Int = 0,
@@ -130,6 +133,12 @@ class SettingsViewModel(
     fun onAutoSpeak(value: Boolean) {
         prefs.autoSpeak = value
         _state.value = _state.value.copy(autoSpeak = prefs.autoSpeak)
+    }
+
+    /** 档位也改了即生效：下一次点「提前复习」就按新的一组词数出题。 */
+    fun onEarlyGroupSize(value: Int) {
+        prefs.earlyGroupSize = value
+        _state.value = _state.value.copy(earlyGroupSize = prefs.earlyGroupSize)
     }
 
     /** 提醒也是改了即生效：它只是一次性 WorkManager 任务的重排，不需要"保存"。 */
@@ -354,6 +363,7 @@ class SettingsViewModel(
         fontScale = prefs.fontScale,
         darkMode = prefs.darkMode,
         autoSpeak = prefs.autoSpeak,
+        earlyGroupSize = prefs.earlyGroupSize,
         reminderEnabled = reminder.enabled,
         reminderMinute = reminder.minuteOfDay,
         notificationsAllowed = reminder.areNotificationsAllowed(),

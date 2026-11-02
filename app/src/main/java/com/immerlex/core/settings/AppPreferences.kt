@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import com.immerlex.core.ai.Density
+import com.immerlex.core.quiz.EarlyReview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,6 +83,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getInt(KEY_NEW_LIMIT, DEFAULT_NEW_LIMIT)
         set(value) = prefs.edit().putInt(KEY_NEW_LIMIT, value.coerceIn(1, 200)).apply()
 
+    /** 提前复习一组几个词，5 / 10 / 20 三档；坏值退回默认的 5。 */
+    var earlyGroupSize: Int
+        get() = EarlyReview.saneOr(prefs.getInt(KEY_EARLY_GROUP_SIZE, EarlyReview.DEFAULT_GROUP_SIZE))
+        set(value) = prefs.edit().putInt(KEY_EARLY_GROUP_SIZE, EarlyReview.saneOr(value)).apply()
+
     var fontScale: Float
         get() = prefs.getFloat(KEY_FONT_SCALE, DEFAULT_FONT_SCALE)
         set(value) = prefs.edit().putFloat(KEY_FONT_SCALE, value.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)).apply()
@@ -153,6 +159,7 @@ class AppPreferences(context: Context) {
         private const val KEY_GENRE = "genre"
         private const val KEY_DENSITY = "density"
         private const val KEY_NEW_LIMIT = "daily_new_limit"
+        private const val KEY_EARLY_GROUP_SIZE = "early_group_size"
         private const val KEY_FONT_SCALE = "font_scale"
         private const val KEY_DARK = "dark_mode"
         private const val KEY_AUTO_SPEAK = "auto_speak"

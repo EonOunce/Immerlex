@@ -155,6 +155,40 @@ class QuizServiceTest {
     }
 
     @Test
+    fun earlyGroupSizeFollowsTheChosenTier() = runBlocking {
+        val (service, words, logs) = parts()
+        val byDue = (1..22).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
+
+        val ten = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 10, seed = 3)
+        assertEquals(10, ten.questions.size)
+        assertEquals("最近到期的 10 个", byDue.take(10).toSet(), ten.wordIds)
+
+        val twenty = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 20, seed = 4)
+        assertEquals(20, twenty.questions.size)
+        assertEquals("最近到期的 20 个", byDue.take(20).toSet(), twenty.wordIds)
+    }
+
+    @Test
+    fun aLargerGroupTopsUpFromAlreadyPractisedWordsWhenFewRemain() = runBlocking {
+        val (service, words, logs) = parts()
+        val byDue = (1..7).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
+
+        val session = service.planEarly(now, excludeWordIds = byDue.toSet(), groupSize = 10, seed = 5)
+
+        assertEquals("凑不满十个别空转，循环拿练过的补", 7, session.questions.size)
+    }
+
+    @Test
+    fun anUnknownEarlyGroupSizeFallsBackToFive() = runBlocking {
+        val (service, words, logs) = parts()
+        (1..8).forEach { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
+
+        val session = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 12, seed = 3)
+
+        assertEquals(EarlyReview.DEFAULT_GROUP_SIZE, session.questions.size)
+    }
+
+    @Test
     fun earlyCandidatesTakeAnyLearnedWordNotYetDueEvenIfUntouchedToday() = runBlocking {
         val (service, words, logs) = parts()
         // 三天前学的、今天没碰过、也还没到期——提前复习照样认得它。

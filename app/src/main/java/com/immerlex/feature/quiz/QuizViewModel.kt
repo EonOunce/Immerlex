@@ -217,6 +217,7 @@ class QuizViewModel(
                     QuizMode.EARLY -> quiz.planEarly(
                         now = now,
                         excludeWordIds = excluded,
+                        groupSize = prefs.earlyGroupSize,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )

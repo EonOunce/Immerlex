@@ -49,6 +49,7 @@ import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.ProviderPresets
+import com.immerlex.core.quiz.EarlyReview
 
 @Composable
 fun SettingsScreen(
@@ -175,6 +176,23 @@ fun SettingsScreen(
             }
             OutlinedButton(onClick = onOpenBible) {
                 Text(stringResource(R.string.settings_open_bible))
+            }
+
+            SectionTitle(stringResource(R.string.settings_quiz_section))
+            Text(stringResource(R.string.settings_early_group), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EarlyReview.GROUP_SIZES.forEach { size ->
+                    val label = stringResource(R.string.settings_early_group_count, size)
+                    if (size == state.earlyGroupSize) {
+                        Button(onClick = { vm.onEarlyGroupSize(size) }, shape = RoundedCornerShape(10.dp)) {
+                            Text(label)
+                        }
+                    } else {
+                        OutlinedButton(onClick = { vm.onEarlyGroupSize(size) }, shape = RoundedCornerShape(10.dp)) {
+                            Text(label)
+                        }
+                    }
+                }
             }
 
             SectionTitle(stringResource(R.string.settings_appearance_section))

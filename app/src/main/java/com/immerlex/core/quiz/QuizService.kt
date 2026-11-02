@@ -78,17 +78,19 @@ class QuizService(
     suspend fun planEarly(
         now: Instant,
         excludeWordIds: Set<Long>,
+        groupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
+        val size = EarlyReview.saneOr(groupSize)
         val candidates = earlyCandidates(now)
         val fresh = candidates.filterNot { it.id in excludeWordIds }
-        val picked = if (fresh.size >= EARLY_GROUP_SIZE) {
-            fresh.take(EARLY_GROUP_SIZE)
+        val picked = if (fresh.size >= size) {
+            fresh.take(size)
         } else {
-            fresh + candidates.filter { it.id in excludeWordIds }.take(EARLY_GROUP_SIZE - fresh.size)
+            fresh + candidates.filter { it.id in excludeWordIds }.take(size - fresh.size)
         }
         if (picked.isEmpty()) return QuizSession(QuizMode.EARLY, emptyList())
         onStage(QuizStage.READING_LOGS)
@@ -251,9 +253,8 @@ class QuizService(
     companion object {
         /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */
         const val SESSION_LIMIT = 40
-        const val EARLY_GROUP_SIZE = 5
-        /** 提前复习先取最近到期的这么多个，再剔掉今天已经回忆过的，五个总还凑得出来。 */
-        private const val EARLY_SCAN = 60
+        /** 提前复习先扫这么多个，再剔掉今天已经回忆过的；三档最大 20，留出十倍的余量。 */
+        private const val EARLY_SCAN = 200
         private const val POOL_SIZE = 200
         private const val CHAPTER_SCAN = 20
         /** 易混词只留前面几个：选项一共三个，全被固定项占住就永远换不了样。 */
