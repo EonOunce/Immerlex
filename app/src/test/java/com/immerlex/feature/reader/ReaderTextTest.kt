@@ -6,6 +6,7 @@ import com.immerlex.core.reader.ReaderSegment
 import com.immerlex.core.reader.ReaderWord
 import com.immerlex.core.schedule.ReaderMarks
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -134,6 +135,57 @@ class ReaderTextTest {
         val word = wordRanges(annotated).single()
 
         assertEquals("reluctant（不情愿的）", annotated.text.substring(word.start, word.end))
+    }
+
+    @Test
+    fun theKeyboardUnderlineSitsOnOneOccurrenceOnly() {
+        val twice = listOf(
+            listOf(
+                ReaderSegment.Text("他 "),
+                embedded,
+                ReaderSegment.Text(" 和 "),
+                ReaderSegment.Word(embedded.word.copy(zh = "")),
+                ReaderSegment.Text(" 都关了门。"),
+            ),
+        )
+        val annotated = buildChapterText(
+            twice, ReaderMode.REVIEW, emptyMap(), LightTones, ReaderMarks(), now, selectedIndex = 1,
+        )
+        val underlined = annotated.spanStyles.filter { it.item.textDecoration == TextDecoration.Underline }
+        val ranges = wordRanges(annotated)
+
+        assertEquals(1, underlined.size)
+        assertEquals(ranges[1].start, underlined.single().start)
+        assertEquals(ranges[1].end, underlined.single().end)
+    }
+
+    @Test
+    fun noUnderlineWhenTheKeyboardHasNotPickedAWord() {
+        val annotated = buildChapterText(blocks, ReaderMode.REVIEW, emptyMap(), LightTones, ReaderMarks(), now)
+        assertEquals(0, annotated.spanStyles.count { it.item.textDecoration == TextDecoration.Underline })
+    }
+
+    @Test
+    fun tappingCountsWhichOccurrenceItWas() {
+        val twice = listOf(
+            listOf(
+                ReaderSegment.Text("他 "),
+                embedded,
+                ReaderSegment.Text(" 和 "),
+                ReaderSegment.Word(embedded.word.copy(zh = "")),
+                ReaderSegment.Text(" 都关了门。"),
+            ),
+        )
+        val ranges = wordRanges(
+            buildChapterText(twice, ReaderMode.REVIEW, emptyMap(), LightTones, ReaderMarks(), now),
+        )
+
+        assertEquals(0, wordIndexAt(ranges, ranges[0].start))
+        assertEquals(1, wordIndexAt(ranges, ranges[1].start))
+        // 短词右半边落在词尾后面那条边界上，仍然算这个词（与 wordAt 同一套规则）。
+        assertEquals(1, wordIndexAt(ranges, ranges[1].end))
+        assertEquals(null, wordIndexAt(ranges, ranges[1].end + 1))
+        assertEquals(null, wordIndexAt(ranges, 0))
     }
 
     private fun visibleText(annotated: androidx.compose.ui.text.AnnotatedString): String {

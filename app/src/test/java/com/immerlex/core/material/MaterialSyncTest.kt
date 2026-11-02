@@ -19,7 +19,7 @@ class MaterialSyncTest {
 
         val outcome = runBlocking { syncFetchingInto(fetch, imported).fetchAll { steps += it } }
 
-        assertEquals(MaterialSyncOutcome.Fetched(2, 3), outcome)
+        assertEquals(MaterialSyncOutcome.Fetched(2, 3, added = 2), outcome)
         assertEquals(listOf(pack1, pack2), imported)
         assertEquals(listOf(MaterialSyncStep(1, 2, PACK_01), MaterialSyncStep(2, 2, PACK_02)), steps)
         // 分片相对清单地址解析，所以换镜像只改那一个地址。
@@ -74,12 +74,30 @@ class MaterialSyncTest {
     fun droppedRowsAndBadCollocationsAddUpAcrossPacks() {
         val fetch = FakeFetch(site(packBody("harbour") to PACK_01, packBody("reluctant") to PACK_02))
         val sync = MaterialSync({ MANIFEST_URL }, fetch::get) {
-            ImportOutcome.Imported(1, mapOf(DropReason.NO_WORD to 2, DropReason.NO_CONTENT to 1), badCollocations = 3)
+            ImportOutcome.Imported(
+                written = 1,
+                added = 1,
+                dropped = mapOf(DropReason.NO_WORD to 2, DropReason.NO_CONTENT to 1),
+                badCollocations = 3,
+            )
         }
 
         val outcome = runBlocking { sync.fetchAll() } as MaterialSyncOutcome.Fetched
         assertEquals(6, outcome.droppedTotal())
         assertEquals(6, outcome.badCollocations)
+    }
+
+    @Test
+    fun newAndChangedWordsEachAddUpAcrossPacks() {
+        val fetch = FakeFetch(site(packBody("harbour") to PACK_01, packBody("reluctant") to PACK_02))
+        val sync = MaterialSync({ MANIFEST_URL }, fetch::get) {
+            ImportOutcome.Imported(written = 3, added = 2, dropped = emptyMap())
+        }
+
+        val outcome = runBlocking { sync.fetchAll() } as MaterialSyncOutcome.Fetched
+        // 用户要知道的是"这次真正添了几个词"，所以四片里各有一批新词就一路加下去。
+        assertEquals(4, outcome.added)
+        assertEquals(2, outcome.updated)
     }
 
     @Test
@@ -148,7 +166,7 @@ class MaterialSyncTest {
         const val PACK_02 = "material-pack-02.json"
         const val PACK_03 = "material-pack-03.json"
         const val WORD_KEY = "\"word\":"
-        val ONE_ROW = ImportOutcome.Imported(1, emptyMap())
+        val ONE_ROW = ImportOutcome.Imported(written = 1, added = 1, dropped = emptyMap())
 
         fun failed(outcome: MaterialSyncOutcome): MaterialSyncFailure = (outcome as MaterialSyncOutcome.Failed).failure
     }

@@ -16,15 +16,20 @@ sealed interface ImportOutcome {
     data class Rejected(val failure: PackFailure) : ImportOutcome
 
     /**
-     * [written] 只数内容真的变了的行；[dropped] 按理由分行数；
-     * [badCollocations] 是那些不含该词、被丢掉的短语条数（搭配的错法和整行的错法不是一回事）。
+     * [written] 只数内容真的变了的行，其中 [added] 是库里原先没有的词；
+     * [dropped] 按理由分行数；[badCollocations] 是那些不含该词、被丢掉的短语条数
+     * （搭配的错法和整行的错法不是一回事）。
      */
     data class Imported(
         val written: Int,
+        val added: Int,
         val dropped: Map<DropReason, Int>,
         val badCollocations: Int = 0,
     ) : ImportOutcome {
         fun droppedTotal(): Int = dropped.values.sum()
+
+        /** 同一份包再导一次时这里为 0：包里的词都已经在了。 */
+        fun updated(): Int = written - added
     }
 }
 
@@ -45,20 +50,34 @@ class MaterialRepository(
     /** 整表倒出来，拿到另一台机器就能原样导入。 */
     suspend fun export(): String = MaterialPack.render(material.all())
 
+    /** 只有词面的那一份：拿去当排除表，让别处只给没备过的词出包。 */
+    suspend fun exportWords(): String = wordListOf(material.allWords())
+
     suspend fun import(text: String): ImportOutcome = withContext(Dispatchers.IO) {
         val parsed = MaterialPack.parse(text)
         val failure = parsed.failure
         if (failure != null) return@withContext ImportOutcome.Rejected(failure)
         val entries = parsed.read.entries
         if (entries.isEmpty()) {
-            return@withContext ImportOutcome.Imported(0, parsed.read.dropped, parsed.read.badCollocations)
+            return@withContext ImportOutcome.Imported(
+                written = 0,
+                added = 0,
+                dropped = parsed.read.dropped,
+                badCollocations = parsed.read.badCollocations,
+            )
         }
         val atSec = Instant.now().epochSecond
-        val changed = MaterialMerge.plan(entries, current(entries), atSec) {
+        val existing = current(entries)
+        val changed = MaterialMerge.plan(entries, existing, atSec) {
             dictionary.lookup(it)?.translation.orEmpty()
         }
         db.withTransaction { changed.chunked(WRITE_CHUNK).forEach { material.upsertAll(it) } }
-        ImportOutcome.Imported(changed.size, parsed.read.dropped, parsed.read.badCollocations)
+        ImportOutcome.Imported(
+            written = changed.size,
+            added = changed.count { it.word !in existing },
+            dropped = parsed.read.dropped,
+            badCollocations = parsed.read.badCollocations,
+        )
     }
 
     /** 词典卡问的是"这个词已经有什么素材"。没有那一行就回 null，界面不编。 */

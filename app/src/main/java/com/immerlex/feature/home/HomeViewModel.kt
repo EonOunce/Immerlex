@@ -97,7 +97,8 @@ class HomeViewModel(
             quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),
             // 答完最后一题却没点完成时候选已经清零，入口只有靠存下的会话才还能进去。
             quizResumable = resume.has(QuizMode.DUE),
-            earlyCount = quiz.earlyCandidates(now).size,
+            // 提前复习一组 5 个：入口数字是这一组能练多少，不是学过的词总数。
+            earlyCount = quiz.earlyCandidates(now).size.coerceAtMost(QuizService.EARLY_GROUP_SIZE),
             roomMet = room.met,
             roomName = room.name,
             roomLine = room.line,

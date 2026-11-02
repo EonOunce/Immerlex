@@ -70,6 +70,11 @@ internal class FakeWordDao : WordDao {
 
     override suspend fun upcomingReviews(limit: Int) =
         items.values.filter { it.stability != null }.take(limit)
+
+    override suspend fun learnedNotDue(nowSec: Long, limit: Int) = items.values
+        .filter { it.stability != null && (it.dueEpochSec ?: 0) > nowSec }
+        .sortedWith(compareBy({ it.dueEpochSec }, { it.id }))
+        .take(limit)
 }
 
 internal class FakeReviewLogDao : ReviewLogDao {
@@ -106,11 +111,6 @@ internal class FakeReviewLogDao : ReviewLogDao {
 
     override suspend fun recalledWordIdsBySourceSince(source: String, sinceSec: Long) = items
         .filter { it.kind == LOG_KIND_RECALL && it.source == source && it.reviewEpochSec >= sinceSec }
-        .map { it.wordId }
-        .distinct()
-
-    override suspend fun touchedWordIdsSince(sinceSec: Long) = items
-        .filter { it.reviewEpochSec >= sinceSec }
         .map { it.wordId }
         .distinct()
 
@@ -182,6 +182,8 @@ internal class FakeQuizMaterialDao : QuizMaterialDao {
     override suspend fun count() = items.size
 
     override suspend fun all() = items.values.sortedBy { it.word }
+
+    override suspend fun allWords() = items.keys.sorted()
 }
 
 internal class FakeChapterDao : ChapterDao {

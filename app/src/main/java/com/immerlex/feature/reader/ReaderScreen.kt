@@ -46,9 +46,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
+import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.reader.ReaderWord
+import com.immerlex.core.settings.KeyAction
+import com.immerlex.core.settings.KeyContext
+import com.immerlex.core.settings.KeyMap
 
 /** 阅读页上那几层浮层各自开没开。放在一处，免得六个 rememberSaveable 把页面编排挤没了。 */
 private class ReaderOverlays {
@@ -61,7 +66,7 @@ private class ReaderOverlays {
 }
 
 @Composable
-fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
+fun ReaderScreen(vm: ReaderViewModel, keyMap: KeyMap, onOpenSettings: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val widthDp = LocalConfiguration.current.screenWidthDp
     val panes = remember(widthDp) { readerPanesOf(widthDp) }
@@ -77,22 +82,47 @@ fun ReaderScreen(vm: ReaderViewModel, onOpenSettings: () -> Unit) {
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
-        ReaderPanes(
-            vm = vm,
-            state = state,
-            panes = panes,
-            layoutState = layoutState,
-            englishOnly = englishOnly,
-            overlays = overlays,
-            padding = padding,
-            onOpenSettings = onOpenSettings,
-            onToggleEnglish = { englishOnly = !englishOnly },
-        )
+    // 书架是同一扇窗里的整页覆盖，键不能再穿透到下面的正文；词卡抽屉与对话框各自成窗，天然收不到。
+    val keyHandler: (Int) -> Boolean = { code ->
+        if (overlays.shelfOpen) {
+            false
+        } else {
+            when (keyMap.actionFor(KeyContext.READER, code)) {
+                KeyAction.READER_PREV_WORD -> { vm.stepWord(-1); true }
+                KeyAction.READER_NEXT_WORD -> { vm.stepWord(1); true }
+                KeyAction.READER_OPEN_WORD -> { vm.toggleCard(); true }
+                KeyAction.READER_EASY -> { vm.gradeFromKey(Rating.EASY); true }
+                KeyAction.READER_GOOD -> { vm.gradeFromKey(Rating.GOOD); true }
+                KeyAction.READER_HARD -> { vm.gradeFromKey(Rating.HARD); true }
+                KeyAction.READER_AGAIN -> { vm.gradeFromKey(Rating.AGAIN); true }
+                else -> false
+            }
+        }
+    }
+
+    KeyCapture(
+        onKey = keyHandler,
+        requestOn = listOf(state.chapterId, state.selected, state.cursor, overlays.shelfOpen),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Scaffold(snackbarHost = { SnackbarHost(snackbar) }, contentWindowInsets = RootHandledInsets) { padding ->
+            ReaderPanes(
+                vm = vm,
+                state = state,
+                panes = panes,
+                layoutState = layoutState,
+                englishOnly = englishOnly,
+                overlays = overlays,
+                padding = padding,
+                onOpenSettings = onOpenSettings,
+                onToggleEnglish = { englishOnly = !englishOnly },
+                onKey = keyHandler,
+            )
+        }
     }
 
     if (!panes.card) {
-        state.selected?.let { word -> ReaderWordCard(vm, state, asPane = false, word = word) }
+        state.selected?.let { word -> ReaderWordCard(vm, state, asPane = false, word = word, onKey = keyHandler) }
     }
     ReaderSheets(overlays, vm, state)
     ReaderDialogs(overlays, vm, state)
@@ -109,6 +139,7 @@ private fun ReaderPanes(
     padding: PaddingValues,
     onOpenSettings: () -> Unit,
     onToggleEnglish: () -> Unit,
+    onKey: (Int) -> Boolean,
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(padding)) {
         if (panes.chapters) {
@@ -158,7 +189,7 @@ private fun ReaderPanes(
                         state = state,
                         layoutState = layoutState,
                         englishOnly = englishOnly,
-                        onWordTapped = vm::select,
+                        onWordTapped = { word, index -> vm.select(word, index) },
                     )
                 }
             }
@@ -166,7 +197,9 @@ private fun ReaderPanes(
         if (panes.card) {
             // 宽度一直占着：词卡开合时正文不重新折行，刚点过的词不会跳走。
             Box(Modifier.width(READER_CARD_PANE_DP.dp + 24.dp).fillMaxHeight()) {
-                state.selected?.let { word -> ReaderWordCard(vm, state, asPane = true, word = word) }
+                state.selected?.let { word ->
+                    ReaderWordCard(vm, state, asPane = true, word = word, onKey = onKey)
+                }
             }
         }
     }
@@ -258,9 +291,16 @@ private fun ReaderDialogs(overlays: ReaderOverlays, vm: ReaderViewModel, state: 
 }
 
 @Composable
-private fun ReaderWordCard(vm: ReaderViewModel, state: ReaderState, asPane: Boolean, word: ReaderWord) {
+private fun ReaderWordCard(
+    vm: ReaderViewModel,
+    state: ReaderState,
+    asPane: Boolean,
+    word: ReaderWord,
+    onKey: (Int) -> Boolean,
+) {
     WordCardHost(
         asPane = asPane,
+        onKey = onKey,
         word = word,
         access = state.access,
         previews = state.previews,

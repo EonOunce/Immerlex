@@ -55,6 +55,7 @@ fun SettingsScreen(
     vm: SettingsViewModel,
     material: MaterialViewModel,
     onOpenBible: () -> Unit,
+    onOpenKeyboard: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -201,6 +202,9 @@ fun SettingsScreen(
                     modifier = Modifier.weight(1f),
                 )
                 Switch(checked = state.autoSpeak, onCheckedChange = vm::onAutoSpeak)
+            }
+            OutlinedButton(onClick = onOpenKeyboard) {
+                Text(stringResource(R.string.settings_keyboard))
             }
 
             SectionTitle(stringResource(R.string.settings_reminder_section))

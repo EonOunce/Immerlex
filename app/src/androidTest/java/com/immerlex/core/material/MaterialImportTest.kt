@@ -47,6 +47,7 @@ class MaterialImportTest {
 
         assertTrue(outcome is ImportOutcome.Imported)
         assertEquals(words.size, (outcome as ImportOutcome.Imported).written)
+        assertEquals("第一次导入全是新词", words.size, outcome.added)
         assertEquals(words.size, repository.count())
         assertEquals(0, db.wordDao().allWords().size)
     }
@@ -56,10 +57,25 @@ class MaterialImportTest {
         val words = (0..600).map { surfaceOf(it) }
         repository.import(packOf(words))
 
-        val again = repository.import(packOf(words))
+        val again = repository.import(packOf(words)) as ImportOutcome.Imported
 
-        assertEquals("内容一个字没变，就不该报第二次写入", 0, (again as ImportOutcome.Imported).written)
+        assertEquals("内容一个字没变，就不该报第二次写入", 0, again.written)
+        assertEquals("同一份包再导一次，没有新词", 0, again.added)
         assertEquals(words.size, repository.count())
+    }
+
+    @Test
+    fun aWordAlreadyInTheTableCountsAsUpdatedNotNew() = runBlocking {
+        repository.import("""[{"word":"harbour","definition":"a place of shelter"}]""")
+
+        val outcome = repository.import(
+            "[{\"word\":\"harbour\",\"definition\":\"a place where boats stay\"}," +
+                "{\"word\":\"habitat\",\"definition\":\"where a plant lives\"}]",
+        ) as ImportOutcome.Imported
+
+        assertEquals(2, outcome.written)
+        assertEquals("只有 habitat 是本机原先没有的词", 1, outcome.added)
+        assertEquals(1, outcome.updated())
     }
 
     @Test

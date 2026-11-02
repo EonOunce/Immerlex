@@ -65,6 +65,13 @@ interface WordDao {
 
     @Query("SELECT * FROM words WHERE stability IS NOT NULL ORDER BY dueEpochSec ASC LIMIT :limit")
     suspend fun upcomingReviews(limit: Int): List<WordEntity>
+
+    /** 学过、还没到期的词，最近到期日在前；提前复习从这一串里取。 */
+    @Query(
+        "SELECT * FROM words WHERE stability IS NOT NULL AND dueEpochSec > :nowSec " +
+            "ORDER BY dueEpochSec ASC, id ASC LIMIT :limit",
+    )
+    suspend fun learnedNotDue(nowSec: Long, limit: Int): List<WordEntity>
 }
 
 @Dao
@@ -190,10 +197,6 @@ interface ReviewLogDao {
             "WHERE kind = 'recall' AND source = :source AND reviewEpochSec >= :sinceSec",
     )
     suspend fun recalledWordIdsBySourceSince(source: String, sinceSec: Long): List<Long>
-
-    /** 今天碰过的词（学过或回忆过），提前复习从这里挑。 */
-    @Query("SELECT DISTINCT wordId FROM review_logs WHERE reviewEpochSec >= :sinceSec")
-    suspend fun touchedWordIdsSince(sinceSec: Long): List<Long>
 
     /**
      * 阅读页的颜色只听阅读页自己的记录：测验和提前复习排的是同一个词，

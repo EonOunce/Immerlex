@@ -30,49 +30,78 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizStage
+import com.immerlex.core.settings.KeyAction
+import com.immerlex.core.settings.KeyContext
+import com.immerlex.core.settings.KeyMap
 
 @Composable
-fun QuizScreen(vm: QuizViewModel, onExit: () -> Unit) {
+fun QuizScreen(vm: QuizViewModel, keyMap: KeyMap, onExit: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    Scaffold(contentWindowInsets = RootHandledInsets) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onExit) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.action_back),
+    // 数字 1–4 只在还没答的那一刻换成 ABCD；答完只认右键，免得连按把下一题也点掉。
+    val keyHandler: (Int) -> Boolean = { code ->
+        val action = if (state.phase == QuizPhase.QUESTION) keyMap.actionFor(KeyContext.QUIZ, code) else null
+        if (action == null) {
+            false
+        } else {
+            when (action) {
+                KeyAction.QUIZ_OPTION_A -> vm.answer(0)
+                KeyAction.QUIZ_OPTION_B -> vm.answer(1)
+                KeyAction.QUIZ_OPTION_C -> vm.answer(2)
+                KeyAction.QUIZ_OPTION_D -> vm.answer(3)
+                KeyAction.QUIZ_DOUBT -> if (!state.answered) vm.doubt()
+                KeyAction.QUIZ_NEXT -> if (state.answered) vm.next()
+                else -> Unit
+            }
+            true
+        }
+    }
+
+    KeyCapture(
+        onKey = keyHandler,
+        requestOn = state.phase,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Scaffold(contentWindowInsets = RootHandledInsets) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onExit) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.quiz_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
-                Text(
-                    stringResource(R.string.quiz_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            when (state.phase) {
-                QuizPhase.LOADING -> LoadingBody(
-                    stage = state.stage,
-                    ready = state.materialReady,
-                    toAsk = state.materialToAsk,
-                    canAsk = state.materialCanAsk,
-                )
-                QuizPhase.EMPTY -> EmptyBody(state.mode, onExit)
-                QuizPhase.QUESTION -> QuestionBody(
-                    state = state,
-                    onAnswer = vm::answer,
-                    onDoubt = vm::doubt,
-                    onMarkTricky = vm::markTricky,
-                    onNext = vm::next,
-                )
-                QuizPhase.DONE -> ResultBody(state, onExit, vm::again)
-                QuizPhase.ERROR -> ErrorBody(vm::retry, onExit)
+                when (state.phase) {
+                    QuizPhase.LOADING -> LoadingBody(
+                        stage = state.stage,
+                        ready = state.materialReady,
+                        toAsk = state.materialToAsk,
+                        canAsk = state.materialCanAsk,
+                    )
+                    QuizPhase.EMPTY -> EmptyBody(state.mode, onExit)
+                    QuizPhase.QUESTION -> QuestionBody(
+                        state = state,
+                        onAnswer = vm::answer,
+                        onDoubt = vm::doubt,
+                        onMarkTricky = vm::markTricky,
+                        onNext = vm::next,
+                    )
+                    QuizPhase.DONE -> ResultBody(state, onExit, vm::again)
+                    QuizPhase.ERROR -> ErrorBody(vm::retry, onExit)
+                }
             }
         }
     }

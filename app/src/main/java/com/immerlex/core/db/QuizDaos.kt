@@ -20,6 +20,10 @@ interface QuizMaterialDao {
     /** 导出素材包用：整表读出来，一个词一行。 */
     @Query("SELECT * FROM quiz_material ORDER BY word")
     suspend fun all(): List<QuizMaterialEntity>
+
+    /** 只取词面：给别处出包的人当排除表，不需要释义那一堆列。 */
+    @Query("SELECT word FROM quiz_material ORDER BY word")
+    suspend fun allWords(): List<String>
 }
 
 @Dao

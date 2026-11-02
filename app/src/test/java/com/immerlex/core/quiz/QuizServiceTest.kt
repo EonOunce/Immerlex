@@ -136,34 +136,48 @@ class QuizServiceTest {
     }
 
     @Test
-    fun earlyGroupsTakeTheFiveLeastStableWordsAndCycleWhenFewRemain() = runBlocking {
+    fun earlyGroupsTakeTheWordsClosestToDueAndCycleWhenFewRemain() = runBlocking {
         val (service, words, logs) = parts()
-        val ids = (1..7).map { index -> seedFuture(words, logs, "w$index", stability = index.toDouble()) }
+        // 七个都学过、都还没到期：只有到期日远近能分先后。
+        val byDue = (1..7).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
 
         val first = service.planEarly(now, excludeWordIds = emptySet(), seed = 3)
         assertEquals(5, first.questions.size)
-        assertEquals("最不稳定的 5 个", ids.take(5).toSet(), first.wordIds)
+        assertEquals("最近到期的 5 个", byDue.take(5).toSet(), first.wordIds)
 
         val second = service.planEarly(now, excludeWordIds = first.wordIds, seed = 4)
         assertEquals(5, second.questions.size)
-        assertTrue("剩下没练过的两个必须进下一组", second.wordIds.containsAll(ids.drop(5)))
+        assertTrue("剩下没练过的两个必须进下一组", second.wordIds.containsAll(byDue.drop(5)))
         assertTrue(second.wordIds.any { it in first.wordIds })
 
-        val third = service.planEarly(now, excludeWordIds = ids.toSet(), seed = 5)
+        val third = service.planEarly(now, excludeWordIds = byDue.toSet(), seed = 5)
         assertEquals("全练过一遍后循环出题，不再有每日上限", 5, third.questions.size)
     }
 
     @Test
-    fun earlyCandidatesIgnoreUntouchedAndDueWords() = runBlocking {
+    fun earlyCandidatesTakeAnyLearnedWordNotYetDueEvenIfUntouchedToday() = runBlocking {
         val (service, words, logs) = parts()
-        val future = seedFuture(words, logs, "harbour", stability = 2.0)
+        // 三天前学的、今天没碰过、也还没到期——提前复习照样认得它。
+        val older = seedFuture(words, logs, "harbour", daysAhead = 9, learnedAt = now.minus(3, ChronoUnit.DAYS))
         words.insert(word("balcony"))
         val due = seedDue(words, logs, "pebble")
 
         val candidates = service.earlyCandidates(now).map { it.id }
 
-        assertEquals(listOf(future), candidates)
+        assertEquals(listOf(older), candidates)
         assertFalse(due in candidates)
+    }
+
+    @Test
+    fun earlyCandidatesSkipWordsRecalledTodayButKeepOnesLearnedToday() = runBlocking {
+        val (service, words, logs) = parts()
+        val recalled = seedFuture(words, logs, "harbour", daysAhead = 2)
+        logs.insert(log(recalled, LOG_KIND_RECALL, now.minusSeconds(600)).copy(source = LOG_SOURCE_QUIZ))
+        val learnedToday = seedFuture(words, logs, "lantern", daysAhead = 5)
+
+        val candidates = service.earlyCandidates(now).map { it.id }
+
+        assertEquals(listOf(learnedToday), candidates)
     }
 
     @Test
@@ -382,20 +396,22 @@ class QuizServiceTest {
         words: FakeWordDao,
         logs: FakeReviewLogDao,
         name: String,
-        stability: Double,
+        stability: Double = 2.0,
+        daysAhead: Long = 3,
+        learnedAt: Instant = now.minusSeconds(3600),
     ): Long {
         val id = words.insert(
             word(name).copy(
                 stability = stability,
                 difficulty = 6.0,
-                dueEpochSec = now.plus(3, ChronoUnit.DAYS).epochSecond,
+                dueEpochSec = now.plus(daysAhead, ChronoUnit.DAYS).epochSecond,
                 lastReviewEpochSec = now.minusSeconds(3600).epochSecond,
                 fsrsState = FSRS_STATE_REVIEW,
                 reps = 1,
-                intervalDays = 3,
+                intervalDays = daysAhead.toInt(),
             ),
         )
-        logs.insert(log(id, LOG_KIND_LEARN, now.minusSeconds(3600)))
+        logs.insert(log(id, LOG_KIND_LEARN, learnedAt))
         return id
     }
 

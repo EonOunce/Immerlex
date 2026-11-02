@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.LocalAppearance
 import com.immerlex.app.ui.SpeechProblem
 import com.immerlex.app.ui.rememberWordSpeaker
@@ -46,6 +47,7 @@ import com.immerlex.core.tricky.TrickyWord
 @Composable
 fun WordCardHost(
     asPane: Boolean,
+    onKey: (Int) -> Boolean,
     word: ReaderWord,
     access: WordAccess,
     previews: List<Pair<Rating, Int>>,
@@ -89,6 +91,7 @@ fun WordCardHost(
         }
     } else {
         WordCardSheet(
+            onKey = onKey,
             word = word,
             access = access,
             previews = previews,
@@ -110,6 +113,7 @@ fun WordCardHost(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WordCardSheet(
+    onKey: (Int) -> Boolean,
     word: ReaderWord,
     access: WordAccess,
     previews: List<Pair<Rating, Int>>,
@@ -126,24 +130,27 @@ private fun WordCardSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        WordCardContent(
-            word = word,
-            access = access,
-            previews = previews,
-            tricky = tricky,
-            graded = graded,
-            undo = undo,
-            onGrade = onGrade,
-            onUndo = onUndo,
-            onToggleTricky = onToggleTricky,
-            onLinkTricky = onLinkTricky,
-            onUnlinkTricky = onUnlinkTricky,
-            onOpenTricky = onOpenTricky,
-            onAddTricky = onAddTricky,
-            onDismiss = onDismiss,
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 6.dp),
-        )
+        // 抽屉是另一扇窗，页面级的按键接不到：这里再收一次，方向键与数字键在卡里照样能用。
+        KeyCapture(onKey = onKey, requestOn = word, modifier = Modifier.fillMaxWidth()) {
+            WordCardContent(
+                word = word,
+                access = access,
+                previews = previews,
+                tricky = tricky,
+                graded = graded,
+                undo = undo,
+                onGrade = onGrade,
+                onUndo = onUndo,
+                onToggleTricky = onToggleTricky,
+                onLinkTricky = onLinkTricky,
+                onUnlinkTricky = onUnlinkTricky,
+                onOpenTricky = onOpenTricky,
+                onAddTricky = onAddTricky,
+                onDismiss = onDismiss,
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 

@@ -135,25 +135,30 @@
     <string name="material_count">本机已有 %1$d 个词的出题素材。</string>
     <string name="material_import">导入素材包</string>
     <string name="material_export">导出一份</string>
+    <string name="material_export_words">导出词面清单</string>
     <string name="material_busy">正在读这个包…</string>
     <string name="material_read_failed">没能读出选中的文件</string>
-    <string name="material_imported">%1$d 个词的素材写好了，另有 %2$d 条没用上</string>
-    <string name="material_imported_clean">%1$d 个词的素材写好了</string>
-    <string name="material_imported_bad_collocations">%1$d 个词的素材写好了，另有 %2$d 条搭配不含这个词，没写进去</string>
-    <string name="material_imported_with_bad_collocations">%1$d 个词的素材写好了，另有 %2$d 条没用上、%3$d 条搭配不含这个词</string>
+    <string name="material_added_and_updated">新增 %1$d 词，更新 %2$d 词</string>
+    <string name="material_added">新增 %1$d 词</string>
+    <string name="material_updated">没有新词，更新 %1$d 词</string>
+    <string name="material_unchanged">没有新词，素材已是最新</string>
+    <string name="material_with_dropped">%1$s，另有 %2$d 条没用上</string>
+    <string name="material_with_bad_collocations">%1$s，另有 %2$d 条搭配不含这个词</string>
+    <string name="material_with_dropped_and_bad_collocations">%1$s，另有 %2$d 条没用上、%3$d 条搭配不含这个词</string>
     <string name="material_not_json">这个文件读不出 JSON，不是素材包</string>
     <string name="material_not_list">里面没有一份词的清单</string>
     <string name="material_empty_file">这个包里一个词都没有</string>
     <string name="material_export_done">素材包已写出，拿到另一台机器直接导入就行</string>
+    <string name="material_words_export_done">词面清单已写出，一行一个词</string>
     <string name="material_export_failed">素材包没能写出去</string>
     <string name="material_manifest_url">素材包清单地址</string>
     <string name="material_fetch">从 GitHub 取素材包</string>
     <string name="material_fetching">正在取素材包…</string>
     <string name="material_fetch_step">正在取第 %1$d/%2$d 片</string>
-    <string name="material_fetched">取回 %1$d 片，共 %2$d 个词</string>
-    <string name="material_fetched_dropped">取回 %1$d 片，共 %2$d 个词，另有 %3$d 条没用上</string>
-    <string name="material_fetched_bad_collocations">取回 %1$d 片，共 %2$d 个词，另有 %3$d 条搭配不含这个词</string>
-    <string name="material_fetched_with_bad_collocations">取回 %1$d 片，共 %2$d 个词，另有 %3$d 条没用上、%4$d 条搭配不含这个词</string>
+    <string name="material_fetched_added_and_updated">取回 %1$d 片，新增 %2$d 词，更新 %3$d 词</string>
+    <string name="material_fetched_added">取回 %1$d 片，新增 %2$d 词</string>
+    <string name="material_fetched_updated">取回 %1$d 片，没有新词，更新 %2$d 词</string>
+    <string name="material_fetched_unchanged">取回 %1$d 片，没有新词</string>
     <string name="material_fetch_not_configured">先填上素材包清单的地址</string>
     <string name="material_fetch_bad_url">那个地址不是一个网址</string>
     <string name="material_fetch_unreachable">连不上那个地址，可以改用本机导入</string>
@@ -172,6 +177,24 @@
     <string name="settings_font_size">字号</string>
     <string name="settings_dark_mode">深色模式</string>
     <string name="settings_auto_speak">自动发音</string>
+    <string name="settings_keyboard">键盘快捷键</string>
+
+    <string name="key_reader_section">阅读页</string>
+    <string name="key_quiz_section">测验页</string>
+    <string name="key_reader_prev">上一个词</string>
+    <string name="key_reader_next">下一个词</string>
+    <string name="key_reader_open">打开 / 收起词卡</string>
+    <string name="key_quiz_a">选项 A</string>
+    <string name="key_quiz_b">选项 B</string>
+    <string name="key_quiz_c">选项 C</string>
+    <string name="key_quiz_d">选项 D</string>
+    <string name="key_quiz_doubt">不确定</string>
+    <string name="key_quiz_next">下一题</string>
+    <string name="key_press">按一个键…</string>
+    <string name="key_reset">恢复默认</string>
+    <string name="key_space">空格</string>
+    <string name="key_enter">回车</string>
+    <string name="key_backspace">退格</string>
 
     <string name="settings_reminder_section">每日提醒</string>
     <string name="settings_reminder_on">到期提醒</string>
@@ -440,7 +463,7 @@
     <string name="quiz_early_badge">提前复习</string>
     <string name="quiz_early_result">本组 %1$d 个词，答对 %2$d 个</string>
     <string name="quiz_again_group">再来一组</string>
-    <string name="quiz_early_empty">今天还没有可提前复习的词：先学几个新词，或复习几个旧词。</string>
+    <string name="quiz_early_empty">还没有可提前复习的词：先读几章学些新词吧。</string>
     <string name="quiz_option_correct">正确</string>
     <string name="quiz_option_yours">你的选择</string>
 
@@ -459,7 +482,13 @@
     <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点章节标题可以换回看其它章；重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。\n开了自动发音，点开词卡就先读一遍这个词。手机里没有语音引擎或没下载英文语音包时读不出来，卡上会写清楚缺哪一样。</string>
 
     <string name="about_quiz_title">关于测验与计分</string>
-    <string name="about_quiz_body">四种题型：英→中、中→英、句子挖空、英文释义选词（配近义/反义线索）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词。易错词一开始四种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习每次取当天碰过、还没到期的 5 个最不稳定词，照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
+    <string name="about_quiz_body">五种题型：英→中、中→英、句子挖空、英文释义选词、搭配（选出短语的意思）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词和搭配。易错词一开始五种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习从所有学过、还没到期的词里取最近到期的 5 个（今天已经回忆过的不算），照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
+
+    <string name="about_keyboard_title">关于键盘</string>
+    <string name="about_keyboard_body">外接键盘或平板的键盘可以直接用，键位在设置页「键盘快捷键」里改，改完立即生效；同一个键被另一个动作用着时会互换，音量键和返回键不占用。
+阅读页：↑/↓ 在正文的词之间移动，到两端就停；空格打开或收起当前词的词卡；数字 1–4 依次是简单、记得、困难、忘了。还没到期的词只有 4 才算一次没记住，1–3 等同「想起来了」、不记账。第一次看到的词在学习模式里也能用 1–4 记一次学习；已经学过的词在学习模式里不理会数字键。
+测验页：1–4 选 A–D，0 是「不确定」，→ 是下一题。选择题点下去就不能改，所以 1–4 只在作答前有效，→ 也只在你答完之后才走。
+键位只存在这台机器上，不进备份，换手机后要重新绑。</string>
 
     <string name="about_reminder_title">关于每日提醒</string>
     <string name="about_reminder_body">到点时如果今天还有到期词才提醒；一个词都不欠就不打扰。\n系统的后台调度可能让提醒晚几分钟，但不会提前。</string>
@@ -467,7 +496,7 @@
     <string name="about_backup_title">关于备份与恢复</string>
     <string name="about_backup_body">备份里有词库、章节、复习进度和故事档案；AI 接口的地址、密钥、模型名不在里面，取回后要重填。\n多台设备共用一个网盘时按「学完上传、学前下载」用：这台机器学完点上传，换一台之前先取回最新的那一份。上传永远安全——文件名写着设备和到秒的时刻，同一天再传一次也不会顶掉上一份。取回之前会比对这台机器和上次上传时的样子，有还没传上去的词、章或记录，就先问一句要不要先上传。\n覆盖本机之前会自动留一份当前库，最多留 3 份，都在「本机留的快照」里，取错了可以就地退回去；每一份取回前都要先通过校验，校验不过本机数据一点不动。\n云端保留最近 60 份，外加更早每个月最后一份。每日自动上传只是每天帮你多传一份，有网络时才跑。应用密码在坚果云「安全设置 → 添加应用密码」里生成，不是登录密码；填过一次后不再回显，留空表示不改。云端文件夹沿用旧名 Immerlex，旧备份都在那里。</string>
     <string name="about_material_title">关于出题素材</string>
-    <string name="about_material_body">测验里的英文释义、例句和易混选项，一个词只向 AI 要一回；要到的那一份存在本机，以后出题都读它。这份库也能整包导入导出：在别处一次性生成一份考研词的素材包（JSON，一个词一行：英文释义 definition、例句 example、例句的中文 exampleZh、易混候选 distractors、搭配 collocations），在设置页导入就立刻能用。包里的词不必先进词库——它以后什么时候进、进几次，素材都还认得它。重导一份改过的包只覆盖它写了的字段，没写的字段原样留着，所以 AI 补过的例句不会被一个只有释义的包清空。易混候选只在出题时当选项用，不会变成你的易混关系：你自己标的易错词永远优先，两边的词各归各的，互不污染。包的干扰词要挑拼写相近、意思不同的词，别拿近义词凑，否则一道题会有两个说得通的答案。\n装素材有两条路：按清单从网上一片一片取回，或在手机上直接选一个本地的 JSON 包导入——取不动的时候走后面这条。每片都要过 SHA-256 校验，对不上就不导入那一片；中途断了，前面已经取回的照旧算数，再点一次会接着补齐。清单地址换成自己的镜像就行，分片按相对地址找。这只是往下读文件，本机数据一点都不上传。</string>
+    <string name="about_material_body">测验里的英文释义、例句和易混选项，一个词只向 AI 要一回；要到的那一份存在本机，以后出题都读它。这份库也能整包导入导出：在别处一次性生成一份考研词的素材包（JSON，一个词一行：英文释义 definition、例句 example、例句的中文 exampleZh、易混候选 distractors、搭配 collocations），在设置页导入就立刻能用。包里的词不必先进词库——它以后什么时候进、进几次，素材都还认得它。重导一份改过的包只覆盖它写了的字段，没写的字段原样留着，所以 AI 补过的例句不会被一个只有释义的包清空。易混候选只在出题时当选项用，不会变成你的易混关系：你自己标的易错词永远优先，两边的词各归各的，互不污染。包的干扰词要挑拼写相近、意思不同的词，别拿近义词凑，否则一道题会有两个说得通的答案。\n装素材有两条路：按清单从网上一片一片取回，或在手机上直接选一个本地的 JSON 包导入——取不动的时候走后面这条。每片都要过 SHA-256 校验，对不上就不导入那一片；中途断了，前面已经取回的照旧算数，再点一次会接着补齐。清单地址换成自己的镜像就行，分片按相对地址找。这只是往下读文件，本机数据一点都不上传。\n要请别处的模型再出一批包，先点「导出词面清单」：得到一个 txt，一行一个，就是本机已经备过素材的全部词。把它和「只给清单以外的词出包」一起发过去，就不会重复生成、也就不会把现有素材盖掉。导入后报「新增 N 词，更新 M 词」——更新是 0，就说明这批词一个都没碰旧的。</string>
 
     <string name="about_bible_title">关于故事档案</string>
     <string name="about_bible_body">再点一次“展开成故事档案”会按现在的想法重写：模型生成的条目会被换掉，你亲手改过的原样保留。\n没配 API key 也能逐条手填或删除，AI 只是把一段话展开成初稿。</string>

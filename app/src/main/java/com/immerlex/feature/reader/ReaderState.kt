@@ -40,6 +40,8 @@ data class ReaderState(
     val mode: ReaderMode = ReaderMode.LEARN,
     val chapters: List<ChapterOption> = emptyList(),
     val selected: ReaderWord? = null,
+    /** 键盘上下键停在正文第几个词（第 0 个是最前面那个）；空表示还没用键盘选过。 */
+    val cursor: Int? = null,
     val access: WordAccess = WordAccess.ViewOnly,
     val previews: List<Pair<Rating, Int>> = emptyList(),
     val bankWords: Map<String, WordEntity> = emptyMap(),
@@ -58,6 +60,10 @@ data class ReaderState(
 ) {
     val wordCount: Int get() = blocks.flatten().count { it is ReaderSegment.Word }
     val isShort: Boolean get() = kind == KIND_SHORT
+
+    /** 正文里的词按出现顺序排成一串，键盘上下键与正文下划线都按这个序号走。 */
+    val words: List<ReaderWord>
+        get() = blocks.flatten().filterIsInstance<ReaderSegment.Word>().map { it.word }
 }
 
 /**
@@ -86,6 +92,7 @@ internal fun ReaderState.showing(
     blocks = blocks,
     bankWords = bank,
     selected = null,
+    cursor = null,
     access = WordAccess.ViewOnly,
     previews = emptyList(),
     marks = ReaderMarks(),
@@ -96,6 +103,10 @@ internal fun ReaderState.showing(
     learned = 0,
     recalled = 0,
 )
+
+/** 键盘上下键的落点：还没选过时上下都落在第一个词，到头就停在头尾，不会绕回另一端。 */
+internal fun nextCursor(current: Int?, delta: Int, size: Int): Int? =
+    if (size <= 0) null else if (current == null) 0 else (current + delta).coerceIn(0, size - 1)
 
 /** 词卡收起：释义预览与易混卡一起清掉，评分按钮不再亮着。 */
 internal fun ReaderState.cardClosed() = copy(

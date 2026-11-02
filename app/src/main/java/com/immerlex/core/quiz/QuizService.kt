@@ -48,11 +48,15 @@ class QuizService(
             .filterNot { it in recalled }
     }
 
-    /** 今天碰过、但还没到期、最不稳定的几个词；提前复习只从这些词里取。 */
-    suspend fun earlyCandidates(now: Instant): List<WordEntity> =
-        wordDao.findByIds(logDao.touchedWordIdsSince(boundary.startOf(now)))
-            .filter { it.stability != null && it.dueEpochSec != null && it.dueEpochSec > now.epochSecond }
-            .sortedWith(compareBy({ it.stability ?: 0.0 }, { it.lastReviewEpochSec ?: 0L }, { it.id }))
+    /**
+     * 学过、还没到期的词，最近的到期日排在前面；今天已经回忆过的不再重复考。
+     * 不要求"今天碰过"：提前复习本来就是想早一点练练学过的词。
+     */
+    suspend fun earlyCandidates(now: Instant): List<WordEntity> {
+        val recalledToday = logDao.recalledWordIdsSince(boundary.startOf(now)).toSet()
+        return wordDao.learnedNotDue(now.epochSecond, EARLY_SCAN)
+            .filterNot { it.id in recalledToday }
+    }
 
     suspend fun planDue(
         now: Instant,
@@ -248,6 +252,8 @@ class QuizService(
         /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */
         const val SESSION_LIMIT = 40
         const val EARLY_GROUP_SIZE = 5
+        /** 提前复习先取最近到期的这么多个，再剔掉今天已经回忆过的，五个总还凑得出来。 */
+        private const val EARLY_SCAN = 60
         private const val POOL_SIZE = 200
         private const val CHAPTER_SCAN = 20
         /** 易混词只留前面几个：选项一共三个，全被固定项占住就永远换不了样。 */

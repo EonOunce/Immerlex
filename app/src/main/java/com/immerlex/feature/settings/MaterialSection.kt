@@ -1,8 +1,12 @@
 package com.immerlex.feature.settings
 
+import android.content.Context
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -35,6 +39,7 @@ import kotlinx.coroutines.withContext
  * 两条路都在——按清单从网上取回，或在手机上选一个本地文件导入，取不动的时候后者是退路。
  * 读写文件留在界面（SAF 只有界面拿得到），core 只管这份文本。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun MaterialSection(vm: MaterialViewModel, snackbar: SnackbarHostState) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -61,14 +66,14 @@ internal fun MaterialSection(vm: MaterialViewModel, snackbar: SnackbarHostState)
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri != null) {
-            vm.export { text ->
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(text.toByteArray(Charsets.UTF_8))
-                    } ?: throw IOException("no output stream")
-                }
-                snackbar.showSnackbar(context.getString(R.string.material_export_done))
-            }
+            vm.export { text -> write(context, uri, text, snackbar, R.string.material_export_done) }
+        }
+    }
+    val wordsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        if (uri != null) {
+            vm.exportWords { text -> write(context, uri, text, snackbar, R.string.material_words_export_done) }
         }
     }
 
@@ -99,9 +104,10 @@ internal fun MaterialSection(vm: MaterialViewModel, snackbar: SnackbarHostState)
             modifier = Modifier.padding(top = 4.dp),
         )
     }
-    Row(
+    FlowRow(
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(onClick = { importLauncher.launch(arrayOf("*/*")) }, enabled = !locked) {
             Text(stringResource(if (state.busy) R.string.material_busy else R.string.material_import))
@@ -112,7 +118,29 @@ internal fun MaterialSection(vm: MaterialViewModel, snackbar: SnackbarHostState)
         ) {
             Text(stringResource(R.string.material_export))
         }
+        OutlinedButton(
+            onClick = { wordsLauncher.launch(WORDS_NAME) },
+            enabled = state.words > 0 && !locked,
+        ) {
+            Text(stringResource(R.string.material_export_words))
+        }
     }
 }
 
+private suspend fun write(
+    context: Context,
+    uri: Uri,
+    text: String,
+    snackbar: SnackbarHostState,
+    done: Int,
+) {
+    withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            out.write(text.toByteArray(Charsets.UTF_8))
+        } ?: throw IOException("no output stream")
+    }
+    snackbar.showSnackbar(context.getString(done))
+}
+
 private const val EXPORT_NAME = "immerlex-material.json"
+private const val WORDS_NAME = "immerlex-material-words.txt"

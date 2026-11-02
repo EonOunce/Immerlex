@@ -8,29 +8,42 @@ import com.immerlex.core.material.PackFailure
 
 fun ImportOutcome.toUiMessage(): UiMessage = when (this) {
     is ImportOutcome.Rejected -> UiMessage(packFailureLabel(failure))
-    is ImportOutcome.Imported -> when {
-        droppedTotal() > 0 && badCollocations > 0 ->
-            UiMessage(R.string.material_imported_with_bad_collocations, listOf(written, droppedTotal(), badCollocations))
-
-        droppedTotal() > 0 -> UiMessage(R.string.material_imported, listOf(written, droppedTotal()))
-        badCollocations > 0 ->
-            UiMessage(R.string.material_imported_bad_collocations, listOf(written, badCollocations))
-
-        else -> UiMessage(R.string.material_imported_clean, listOf(written))
-    }
+    is ImportOutcome.Imported -> withDropped(
+        base = when {
+            added > 0 && updated() > 0 -> UiMessage(R.string.material_added_and_updated, listOf(added, updated()))
+            added > 0 -> UiMessage(R.string.material_added, listOf(added))
+            updated() > 0 -> UiMessage(R.string.material_updated, listOf(updated()))
+            else -> UiMessage(R.string.material_unchanged)
+        },
+        dropped = droppedTotal(),
+        badCollocations = badCollocations,
+    )
 }
 
 fun MaterialSyncOutcome.toUiMessage(): UiMessage = when (this) {
     is MaterialSyncOutcome.Failed -> UiMessage(materialSyncFailureLabel(failure))
-    is MaterialSyncOutcome.Fetched -> when {
-        droppedTotal() > 0 && badCollocations > 0 -> UiMessage(
-            R.string.material_fetched_with_bad_collocations, listOf(packs, words, droppedTotal(), badCollocations),
-        )
+    is MaterialSyncOutcome.Fetched -> withDropped(
+        base = when {
+            added > 0 && updated > 0 ->
+                UiMessage(R.string.material_fetched_added_and_updated, listOf(packs, added, updated))
 
-        droppedTotal() > 0 -> UiMessage(R.string.material_fetched_dropped, listOf(packs, words, droppedTotal()))
-        badCollocations > 0 -> UiMessage(R.string.material_fetched_bad_collocations, listOf(packs, words, badCollocations))
-        else -> UiMessage(R.string.material_fetched, listOf(packs, words))
-    }
+            added > 0 -> UiMessage(R.string.material_fetched_added, listOf(packs, added))
+            updated > 0 -> UiMessage(R.string.material_fetched_updated, listOf(packs, updated))
+            else -> UiMessage(R.string.material_fetched_unchanged, listOf(packs))
+        },
+        dropped = droppedTotal(),
+        badCollocations = badCollocations,
+    )
+}
+
+/** 基数那句照旧，坏行与错搭配只是后缀：新增/更新数永远在最前面。 */
+private fun withDropped(base: UiMessage, dropped: Int, badCollocations: Int): UiMessage = when {
+    dropped > 0 && badCollocations > 0 ->
+        UiMessage(R.string.material_with_dropped_and_bad_collocations, listOf(base, dropped, badCollocations))
+
+    dropped > 0 -> UiMessage(R.string.material_with_dropped, listOf(base, dropped))
+    badCollocations > 0 -> UiMessage(R.string.material_with_bad_collocations, listOf(base, badCollocations))
+    else -> base
 }
 
 fun materialSyncFailureLabel(failure: MaterialSyncFailure): Int = when (failure) {

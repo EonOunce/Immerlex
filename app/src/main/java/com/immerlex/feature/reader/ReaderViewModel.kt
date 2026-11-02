@@ -155,9 +155,10 @@ class ReaderViewModel(
         _state.value = _state.value.copy(mode = mode)
     }
 
-    fun select(word: ReaderWord) = viewModelScope.launch { selectNow(word) }
+    /** [index] 是点中的词在正文里第几个出现；键盘上下键从这里接着走，别的入口传 null 不动光标。 */
+    fun select(word: ReaderWord, index: Int? = null) = viewModelScope.launch { selectNow(word, index) }
 
-    private suspend fun selectNow(word: ReaderWord) {
+    private suspend fun selectNow(word: ReaderWord, index: Int? = null) {
         val entity = word.wordId?.let { wordDao.findById(it) }
         val access = entity?.let {
             schedule.accessFor(it, answersHidden = _state.value.mode == ReaderMode.REVIEW)
@@ -167,6 +168,7 @@ class ReaderViewModel(
             .orEmpty()
         _state.value = _state.value.copy(
             selected = word,
+            cursor = index ?: _state.value.cursor,
             access = access,
             previews = previews,
             tricky = null,
@@ -236,6 +238,38 @@ class ReaderViewModel(
     fun grade(rating: Rating) {
         val selected = _state.value.selected ?: return
         grading.grade(selected, _state.value.access, rating)
+    }
+
+    /** 方向键上下：先收起词卡，再挪到相邻的词；还没选过时上下都落在第一个词。 */
+    fun stepWord(delta: Int) {
+        val words = _state.value.words
+        val next = nextCursor(_state.value.cursor, delta, words.size) ?: return
+        _state.value = _state.value.cardClosed().copy(cursor = next)
+    }
+
+    /** 空格：卡片开着就收起，否则打开光标处那个词的卡片；还没选过就从第一个词开始。 */
+    fun toggleCard() {
+        val state = _state.value
+        if (state.selected != null) {
+            closeCard()
+            return
+        }
+        val index = state.cursor ?: 0
+        state.words.getOrNull(index)?.let { select(it, index) }
+    }
+
+    /**
+     * 键盘 1–4 只对开着的词卡生效，按 [WordAccess] 分档：学习/复习四档照常记；
+     * 提前复习只有 4（忘了）记一条，1–3 与卡片上的「想起来了」一样只是走开。
+     */
+    fun gradeFromKey(rating: Rating) {
+        val state = _state.value
+        if (state.selected == null || state.graded) return
+        when (state.access) {
+            WordAccess.Learn, WordAccess.Recall -> grade(rating)
+            WordAccess.Early -> if (rating == Rating.AGAIN) grade(Rating.AGAIN) else dismissCard()
+            WordAccess.ViewOnly -> Unit
+        }
     }
 
     fun undo() = grading.undo()

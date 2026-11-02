@@ -29,13 +29,19 @@ class AppPreferences(context: Context) {
     private val _appearance = MutableStateFlow(readAppearance())
     val appearance: StateFlow<Appearance> = _appearance.asStateFlow()
 
+    private val _keyBindings = MutableStateFlow(readKeyBindings())
+    val keyBindings: StateFlow<KeyMap> = _keyBindings.asStateFlow()
+
     // SharedPreferences keeps listeners weakly, so the listener must be a field or it is collected.
-    private val appearanceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == KEY_FONT_SCALE || key == KEY_DARK || key == KEY_AUTO_SPEAK) _appearance.value = readAppearance()
+    private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            KEY_FONT_SCALE, KEY_DARK, KEY_AUTO_SPEAK -> _appearance.value = readAppearance()
+            KEY_KEY_BINDINGS -> _keyBindings.value = readKeyBindings()
+        }
     }
 
     init {
-        prefs.registerOnSharedPreferenceChangeListener(appearanceListener)
+        prefs.registerOnSharedPreferenceChangeListener(changeListener)
     }
 
     private fun readAppearance() = Appearance(
@@ -43,6 +49,17 @@ class AppPreferences(context: Context) {
         darkMode = prefs.getBoolean(KEY_DARK, false),
         autoSpeak = prefs.getBoolean(KEY_AUTO_SPEAK, false),
     )
+
+    private fun readKeyBindings() = KeyMap.decode(prefs.getString(KEY_KEY_BINDINGS, "").orEmpty())
+
+    /** 改一个动作的键位：新键原先的主人跟它换过来，一个场景里不会有两个动作抢同一个键。 */
+    fun bindKey(action: KeyAction, keyCode: Int) {
+        prefs.edit().putString(KEY_KEY_BINDINGS, readKeyBindings().bind(action, keyCode).encode()).apply()
+    }
+
+    fun resetKeyBindings() {
+        prefs.edit().remove(KEY_KEY_BINDINGS).apply()
+    }
 
     var baseUrl: String
         get() = prefs.getString(KEY_BASE_URL, "").orEmpty()
@@ -147,5 +164,6 @@ class AppPreferences(context: Context) {
         private const val KEY_BACKUP_ON = "backup_enabled"
         private const val KEY_DEVICE = "device_name"
         private const val KEY_MATERIAL_URL = "material_manifest_url"
+        private const val KEY_KEY_BINDINGS = "key_bindings"
     }
 }

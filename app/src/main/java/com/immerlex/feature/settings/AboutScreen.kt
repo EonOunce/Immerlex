@@ -32,6 +32,7 @@ private val SECTIONS = listOf(
     AboutSection(R.string.about_home_title, R.string.about_home_body),
     AboutSection(R.string.about_reading_title, R.string.about_reading_body),
     AboutSection(R.string.about_quiz_title, R.string.about_quiz_body),
+    AboutSection(R.string.about_keyboard_title, R.string.about_keyboard_body),
     AboutSection(R.string.about_reminder_title, R.string.about_reminder_body),
     AboutSection(R.string.about_backup_title, R.string.about_backup_body),
     AboutSection(R.string.about_material_title, R.string.about_material_body),

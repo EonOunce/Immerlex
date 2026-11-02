@@ -75,10 +75,15 @@ class MaterialViewModel(
     }
 
     /** 整包文本交给调用方写盘：SAF 那一头是界面的事，core 只管这份内容。 */
-    fun export(block: suspend (String) -> Unit) {
+    fun export(block: suspend (String) -> Unit) = exportText({ material.export() }, block)
+
+    /** 词面清单同一扇门：只有词、一行一个，拿去当排除表。 */
+    fun exportWords(block: suspend (String) -> Unit) = exportText({ material.exportWords() }, block)
+
+    private fun exportText(read: suspend () -> String, block: suspend (String) -> Unit) {
         viewModelScope.launch {
             _state.value = _state.value.copy(busy = true)
-            val text = runCatching { material.export() }.getOrNull()
+            val text = runCatching { read() }.getOrNull()
             _state.value = _state.value.copy(busy = false)
             if (text == null) {
                 _messages.emit(UiMessage(R.string.material_export_failed))

@@ -16,12 +16,17 @@ class MaterialSyncException(
 data class MaterialSyncStep(val index: Int, val total: Int, val file: String)
 
 sealed interface MaterialSyncOutcome {
-    /** [words] 是清单自己报的词数，不是本机库里的行数——两边说的是两件事。 */
+    /**
+     * [words] 是清单自己报的词数，不是本机库里的行数——两边说的是两件事。
+     * [added] 是本机原先没有的词，[updated] 是本来就有、这次内容变了的词；再取一遍同一套包时两者都是 0。
+     */
     data class Fetched(
         val packs: Int,
         val words: Int,
         val dropped: Map<DropReason, Int> = emptyMap(),
         val badCollocations: Int = 0,
+        val added: Int = 0,
+        val updated: Int = 0,
     ) : MaterialSyncOutcome {
         fun droppedTotal(): Int = dropped.values.sum()
     }
@@ -63,6 +68,8 @@ class MaterialSync(
             ?: throw MaterialSyncException(MaterialSyncFailure.MANIFEST, "unreadable manifest")
         val dropped = mutableMapOf<DropReason, Int>()
         var badCollocations = 0
+        var added = 0
+        var updated = 0
         manifest.packs.forEachIndexed { index, ref ->
             onStep(MaterialSyncStep(index + 1, manifest.packs.size, ref.file))
             val url = base.resolve(ref.file)
@@ -80,10 +87,14 @@ class MaterialSync(
                 is ImportOutcome.Imported -> {
                     outcome.dropped.forEach { (reason, count) -> dropped[reason] = (dropped[reason] ?: 0) + count }
                     badCollocations += outcome.badCollocations
+                    added += outcome.added
+                    updated += outcome.updated()
                 }
             }
         }
-        MaterialSyncOutcome.Fetched(manifest.packs.size, manifest.wordTotal(), dropped, badCollocations)
+        MaterialSyncOutcome.Fetched(
+            manifest.packs.size, manifest.wordTotal(), dropped, badCollocations, added, updated,
+        )
     } catch (e: MaterialSyncException) {
         MaterialSyncOutcome.Failed(e.failure, e.message)
     } catch (e: CancellationException) {

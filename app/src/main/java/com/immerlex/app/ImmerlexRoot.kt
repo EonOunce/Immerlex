@@ -43,6 +43,8 @@ import com.immerlex.feature.reader.ReaderViewModel
 import com.immerlex.feature.settings.AboutScreen
 import com.immerlex.feature.settings.BibleScreen
 import com.immerlex.feature.settings.BibleViewModel
+import com.immerlex.feature.settings.KeyboardScreen
+import com.immerlex.feature.settings.KeyboardViewModel
 import com.immerlex.feature.settings.MaterialViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
@@ -54,6 +56,7 @@ private const val ROUTE_ABOUT = "about"
 private const val ROUTE_BIBLE = "bible"
 private const val ROUTE_ROOM = "room"
 private const val ROUTE_TRICKY = "tricky"
+private const val ROUTE_KEYBOARD = "keyboard"
 private const val ROUTE_QUIZ = "quiz/{mode}"
 
 private fun quizRoute(mode: QuizMode): String = "quiz/${mode.name}"
@@ -139,9 +142,13 @@ fun ImmerlexRoot() {
         initializer {
             TrickyViewModel(container.trickyRepository)
         }
+        initializer {
+            KeyboardViewModel(container.prefs)
+        }
     }
 
     val appearance by container.prefs.appearance.collectAsStateWithLifecycle()
+    val keyMap by container.prefs.keyBindings.collectAsStateWithLifecycle()
 
     ImmerlexTheme(appearance) {
         val navController = rememberNavController()
@@ -200,7 +207,7 @@ fun ImmerlexRoot() {
                 }
                 composable(Destinations.READER.route) {
                     val vm: ReaderViewModel = viewModel(factory = appViewModelFactory)
-                    ReaderScreen(vm, onOpenSettings = {
+                    ReaderScreen(vm, keyMap, onOpenSettings = {
                         navController.navigate(Destinations.SETTINGS.route) { launchSingleTop = true }
                     })
                 }
@@ -211,6 +218,7 @@ fun ImmerlexRoot() {
                         vm,
                         material,
                         onOpenBible = { navController.navigate(ROUTE_BIBLE) { launchSingleTop = true } },
+                        onOpenKeyboard = { navController.navigate(ROUTE_KEYBOARD) { launchSingleTop = true } },
                         onOpenAbout = { navController.navigate(ROUTE_ABOUT) { launchSingleTop = true } },
                     )
                 }
@@ -220,7 +228,7 @@ fun ImmerlexRoot() {
                     } ?: QuizMode.DUE
                     val vm: QuizViewModel = viewModel(factory = appViewModelFactory)
                     LaunchedEffect(mode) { vm.start(mode) }
-                    QuizScreen(vm, onExit = { navController.popBackStack() })
+                    QuizScreen(vm, keyMap, onExit = { navController.popBackStack() })
                 }
                 composable(ROUTE_BIBLE) {
                     val vm: BibleViewModel = viewModel(factory = appViewModelFactory)
@@ -233,6 +241,10 @@ fun ImmerlexRoot() {
                 composable(ROUTE_TRICKY) {
                     val vm: TrickyViewModel = viewModel(factory = appViewModelFactory)
                     TrickyScreen(vm, onBack = { navController.popBackStack() })
+                }
+                composable(ROUTE_KEYBOARD) {
+                    val vm: KeyboardViewModel = viewModel(factory = appViewModelFactory)
+                    KeyboardScreen(vm, onBack = { navController.popBackStack() })
                 }
                 composable(ROUTE_ABOUT) {
                     AboutScreen(onBack = { navController.popBackStack() })

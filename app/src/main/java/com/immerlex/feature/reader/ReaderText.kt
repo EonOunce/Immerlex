@@ -5,6 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import com.immerlex.app.ui.MasteryTones
 import com.immerlex.core.db.WordEntity
@@ -25,6 +26,12 @@ internal data class WordRange(val lookup: String, val start: Int, val end: Int)
 internal fun wordAt(ranges: List<WordRange>, position: Int): String? =
     (ranges.firstOrNull { position in it.start until it.end } ?: ranges.firstOrNull { position == it.end })?.lookup
 
+/** 与 [wordAt] 同一套命中规则，但要的是第几次出现：点词之后键盘上下键从这里接着走。 */
+internal fun wordIndexAt(ranges: List<WordRange>, position: Int): Int? =
+    ranges.indexOfFirst { position in it.start until it.end }
+        .takeIf { it >= 0 }
+        ?: ranges.indexOfFirst { position == it.end }.takeIf { it >= 0 }
+
 /** 把正文里标出来的词一次性挑成区间，点一下只做查找：整篇标注不必每次重扫。 */
 internal fun wordRanges(annotated: AnnotatedString): List<WordRange> =
     annotated.getStringAnnotations(WORD_ANNOTATION_TAG, 0, annotated.length)
@@ -39,6 +46,9 @@ internal fun wordRanges(annotated: AnnotatedString): List<WordRange> =
  *
  * With [englishOnly] every Chinese character (gloss included) stays in the layout but is
  * painted transparent, so line breaks and the English words' positions do not move.
+ *
+ * [selectedIndex] 是键盘停在第几个词（按出现顺序），只加一条下划线：不换底色、不改字宽，
+ * 所以选中时正文一行都不会重排。
  */
 fun buildChapterText(
     blocks: List<List<ReaderSegment>>,
@@ -48,7 +58,9 @@ fun buildChapterText(
     marks: ReaderMarks,
     atSec: Long,
     englishOnly: Boolean = false,
+    selectedIndex: Int? = null,
 ): AnnotatedString = buildAnnotatedString {
+    var wordIndex = -1
     blocks.forEachIndexed { index, paragraph ->
         paragraph.forEach { segment ->
             when (segment) {
@@ -59,10 +71,16 @@ fun buildChapterText(
                 }
 
                 is ReaderSegment.Word -> {
+                    wordIndex += 1
                     val word = segment.word
                     val entity = word.wordId?.let { id -> bank[word.lookup]?.takeIf { it.id == id } }
                     val (soft, deep) = tones.of(readerTone(entity, marks, atSec))
-                    val highlight = SpanStyle(color = deep, background = soft, fontWeight = FontWeight.Bold)
+                    val highlight = SpanStyle(
+                        color = deep,
+                        background = soft,
+                        fontWeight = FontWeight.Bold,
+                        textDecoration = if (wordIndex == selectedIndex) TextDecoration.Underline else null,
+                    )
                     pushStringAnnotation(WORD_ANNOTATION_TAG, word.lookup)
                     withStyle(highlight) { append(word.lookup) }
                     if (mode == ReaderMode.LEARN && word.zh.isNotBlank()) {
