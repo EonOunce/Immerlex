@@ -15,6 +15,8 @@ v3.4.0 — 2026-11-02
 - 补齐仓库门面：README（定位、功能、下载、素材包、同步规则、隐私、构建）、LICENSE、CHANGELOG。
 - 新增 GitHub Actions 第一阶段：编译 + FSRS 参考向量测试 + JVM 单元测试 + lint + debug APK 构建；
   不跑模拟器迁移测试。发布资产加上 SHA256SUMS.txt 与更新日志。
+- 素材包 v1 随本 release 发布：`manifest.json` + 50 片分片、共 4,699 词
+  （覆盖 ECDICT 考研标签词的 4,699/4,799），应用默认地址直接取；日后补词只追加新分片与清单一行。
 
 v3.3.0 — 2026-11-02
 - 凌晨宽限：当天还有没清完的到期词，这一天到凌晨 1 点才结束（`core.schedule.DayBoundary`）。

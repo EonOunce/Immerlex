@@ -67,12 +67,19 @@
 
 ## 后果
 
+- **已发布（2026-11-02）**：素材包 v1 进了 `v3.4.0` release——`manifest.json` + 50 片分片、
+  4,699 个词（`materialVersion 1`、`license: all-rights-reserved`），清单地址与应用默认值一致，
+  逐片校验值已与服务端算出的摘要核对过。覆盖 ECDICT 考研标签词的 4,699/4,799，缺的 100 个
+  是最日常的高频词。
 - 发布素材包时要做的事：每片算一次 `sha256sum`，把文件名、词数、校验值各写一行进
   `manifest.json`，**和分片一起**传到同一个 release。往后新增词**只加一片新的分片 +
   清单里追加一行**，已有分片一个字节都不用重发——这正是"等齐了再发"之后仍然能小步
-  加词的办法。
-- 素材包仍然**不打进 APK、不进版本库**（ADR 0022）。清单默认地址指向的 release 在
-  真正上传 `manifest.json` 之前，app 会老实报「清单读不懂」或 404，本地导入照常用。
+  加词的办法。清单由 `scratch/make_manifest.py` 生成（只算校验值与词数，不改分片内容）。
+- **默认地址指向 `releases/latest`，所以此后每一个新 release 都必须把 `manifest.json` 与
+  50 片分片一起带上**（直接 `gh release create --assets` 复制过去即可），否则新 release 一
+  变成 latest，app 的默认地址就 404——上线前在设置页点一次取包，看到「正在取第 50/50 片」
+  才算出完。
+- 素材包仍然**不打进 APK、不进版本库**（ADR 0022）。
 - 清单格式改动要升 `materialVersion`，同时把 app 的 `MAX_SUPPORTED_VERSION` 抬上去；
   老 app 遇到新清单是拒绝而不是猜，所以加字段（不改语义）可以先发，改语义必须升版本。
 - 相关测试：`MaterialManifestTest`（格式、路径注入、版本、可选字段、SHA-256 已知向量）、
