@@ -167,6 +167,31 @@ class QuestionBuildersTest {
     }
 
     @Test
+    fun aSpellingVariantWithTheSameGlossNeverBecomesAnOption() {
+        // harbor / harbour 是词库里的两行、ECDICT 释义逐字相同：摆成选项就是两个正确答案。
+        val harbour = word(1, "harbour", "n. 港, 避难所")
+        val harbor = word(9, "harbor", "n. 港, 避难所")
+        val context = QuestionContext(pool = listOf(harbour, harbor, balcony), seed = 14)
+
+        val zhToEn = ZhToEnBuilder().build(harbour, context)!!
+        assertFalse("同义的拼写变体不能当选项", zhToEn.options.any { it.text == "harbor" })
+
+        val enToZh = EnToZhBuilder().build(harbour, context)!!
+        assertFalse(enToZh.options.filterNot { it.correct }.any { it.gloss == "n. 港, 避难所" })
+    }
+
+    @Test
+    fun twoDistractorsWithTheSameChineseFaceAreCollapsedToOne() {
+        val dock = word(5, "dock", "n. 码头")
+        val quay = word(6, "quay", "n. 码头")
+        val context = QuestionContext(pool = listOf(harbour, dock, quay), seed = 15)
+
+        val question = ZhToEnBuilder().build(harbour, context)!!
+
+        assertEquals(question.options.size, question.options.map { it.gloss }.distinct().size)
+    }
+
+    @Test
     fun collocationAsksWhatARealPhraseMeans() {
         val question = CollocationBuilder().build(harbour, collocationContext(seed = 21))!!
 

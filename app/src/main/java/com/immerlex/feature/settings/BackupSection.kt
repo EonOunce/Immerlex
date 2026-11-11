@@ -16,6 +16,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,8 +41,45 @@ import com.immerlex.core.backup.SnapshotProblem
 /** 备份与同步整段。四个对话框由 [BackupDialogs] 单独挂在 Scaffold 之外，免得滚动容器裁掉。 */
 @Composable
 internal fun BackupSection(state: SettingsState, vm: SettingsViewModel) {
-    val context = LocalContext.current
+    var editing by rememberSaveable { mutableStateOf(false) }
+    if (state.backupConfigured && !editing) {
+        BackupStatus(state, vm)
+        ConnectionLink(open = false) { editing = true }
+    } else {
+        BackupForm(state, vm)
+        if (state.backupConfigured) ConnectionLink(open = true) { editing = false }
+    }
+}
 
+/** 配过之后每天要用的就这三样：上次传成没有、传一份、取一份。账号密码网址在「连接设置」里。 */
+@Composable
+private fun BackupStatus(state: SettingsState, vm: SettingsViewModel) {
+    val context = LocalContext.current
+    Text(
+        context.textFor(state.backupLine),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (state.backupFailed) ImmerlexColors.Rust else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(onClick = vm::backupNow, enabled = !state.busy) {
+            Text(stringResource(R.string.settings_backup_now))
+        }
+        OutlinedButton(onClick = vm::listBackups, enabled = !state.busy) {
+            Text(stringResource(R.string.settings_backup_restore))
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            stringResource(R.string.settings_backup_auto),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = state.backupAuto, onCheckedChange = vm::onBackupAuto)
+    }
+}
+
+@Composable
+private fun BackupForm(state: SettingsState, vm: SettingsViewModel) {
     OutlinedTextField(
         value = state.backupUrl,
         onValueChange = vm::onBackupUrl,
@@ -75,29 +116,8 @@ internal fun BackupSection(state: SettingsState, vm: SettingsViewModel) {
         label = { Text(stringResource(R.string.settings_backup_device)) },
         supportingText = { Text(stringResource(R.string.settings_backup_device_hint)) },
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = vm::saveBackupConfig, enabled = !state.busy) {
-            Text(stringResource(R.string.settings_backup_save))
-        }
-        OutlinedButton(onClick = vm::backupNow, enabled = !state.busy) {
-            Text(stringResource(R.string.settings_backup_now))
-        }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            stringResource(R.string.settings_backup_auto),
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = state.backupAuto, onCheckedChange = vm::onBackupAuto)
-    }
-    Text(
-        context.textFor(state.backupLine),
-        style = MaterialTheme.typography.bodySmall,
-        color = if (state.backupFailed) ImmerlexColors.Rust else ImmerlexColors.Meta,
-    )
-    OutlinedButton(onClick = vm::listBackups, enabled = !state.busy) {
-        Text(stringResource(R.string.settings_backup_restore))
+    Button(onClick = vm::saveBackupConfig, enabled = !state.busy) {
+        Text(stringResource(R.string.settings_backup_save))
     }
 }
 

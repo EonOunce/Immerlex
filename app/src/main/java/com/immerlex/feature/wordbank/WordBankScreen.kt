@@ -3,9 +3,6 @@ package com.immerlex.feature.wordbank
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,18 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,31 +36,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.ImmerlexApplication
 import com.immerlex.app.R
 import com.immerlex.app.readPlainText
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.PillChip
 import com.immerlex.app.ui.RootHandledInsets
-import com.immerlex.app.ui.masteryInk
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.ocr.PdfScan
-import com.immerlex.core.word.Mastery
-import com.immerlex.core.word.mastery
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 
 @Composable
@@ -84,6 +69,7 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<WordEntity?>(null) }
     var dictDetail by remember { mutableStateOf<DictEntry?>(null) }
+    val pendingImport by vm.pendingImport.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<WordEntity?>(null) }
     var pdfLine by remember { mutableStateOf<String?>(null) }
     var pdfNote by remember { mutableStateOf<String?>(null) }
@@ -155,11 +141,14 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = RootHandledInsets,
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            FloatingActionButton(
                 onClick = { showAdd = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.bank_add)) },
-            )
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.bank_add))
+            }
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
@@ -199,8 +188,8 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
                 }
             }
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(words, key = { it.id }) { word ->
                     WordRow(word, onClick = { detail = word })
@@ -241,6 +230,22 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
                 pendingDelete = null
             },
         )
+    }
+    pendingImport?.let { pending ->
+        if (pending.confirming) {
+            SameGlossConfirmDialog(
+                count = pending.plan.variants.size,
+                onConfirm = vm::keepSameGloss,
+                onBack = vm::backToSameGlossNotice,
+            )
+        } else {
+            SameGlossNoticeDialog(
+                plan = pending.plan,
+                onSkip = vm::skipSameGloss,
+                onKeep = vm::askToKeepSameGloss,
+                onDismiss = vm::cancelImport,
+            )
+        }
     }
     dictDetail?.let { entry ->
         DictionaryCardDialog(
@@ -284,75 +289,12 @@ private fun BankHeader(
                 color = ImmerlexColors.Meta,
             )
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = vm::onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.bank_search)) },
-            trailingIcon = {
-                IconButton(onClick = onImportImage) {
-                    Icon(
-                        painterResource(R.drawable.ic_camera),
-                        contentDescription = stringResource(R.string.bank_import_image),
-                    )
-                }
-            },
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            BankChip(R.string.bank_import_txt, onClick = onImport)
-            BankChip(R.string.bank_import_pdf, onClick = onImportPdf)
-            BankChip(R.string.bank_export, onClick = onExport, enabled = total > 0)
-            BankChip(R.string.bank_tricky, onClick = onOpenTricky)
-        }
-    }
-}
-
-@Composable
-private fun BankChip(@StringRes label: Int, onClick: () -> Unit, enabled: Boolean = true) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-        Text(
-            stringResource(label),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else ImmerlexColors.Meta,
-            modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
-                .padding(horizontal = 11.dp, vertical = 6.dp),
-        )
-    }
-}
-
-@Composable
-private fun WordRow(word: WordEntity, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(word.word, style = MaterialTheme.typography.titleSmall)
-            if (word.translation.isNotEmpty()) {
-                Text(
-                    word.translation,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                stringResource(masteryLabel(word)),
-                style = MaterialTheme.typography.labelMedium,
-                color = masteryInk(word),
-            )
-            word.dueEpochSec?.let {
-                Text(formatDue(it), style = MaterialTheme.typography.labelSmall, color = ImmerlexColors.Meta)
-            }
+        SearchPill(query = query, onQuery = vm::onQueryChange, onCamera = onImportImage)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            PillChip(stringResource(R.string.bank_import_txt), onClick = onImport)
+            PillChip(stringResource(R.string.bank_import_pdf), onClick = onImportPdf)
+            PillChip(stringResource(R.string.bank_export), onClick = onExport, enabled = total > 0)
+            PillChip(stringResource(R.string.bank_tricky), onClick = onOpenTricky)
         }
     }
 }
@@ -366,13 +308,3 @@ private fun EmptyHint(hasQuery: Boolean) {
         )
     }
 }
-
-internal fun masteryLabel(word: WordEntity): Int = when (word.mastery()) {
-    Mastery.NEW -> R.string.mastery_new
-    Mastery.LEARNING -> R.string.mastery_learning
-    Mastery.MASTERED -> R.string.mastery_mastered
-}
-
-internal fun formatDue(epochSec: Long): String =
-    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
-        .format(Instant.ofEpochSecond(epochSec).atZone(ZoneId.systemDefault()))

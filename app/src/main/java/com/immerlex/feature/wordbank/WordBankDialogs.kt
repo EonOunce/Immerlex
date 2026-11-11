@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.importer.ImportPlan
 
 @Composable
 fun AddWordDialog(onDismiss: () -> Unit, onSubmit: (word: String, gloss: String) -> Unit) {
@@ -74,6 +76,61 @@ fun DeleteWordDialog(word: WordEntity, onDismiss: () -> Unit, onConfirm: () -> U
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
+
+/**
+ * 导入时发现新词和已有词（或同一批里的另一个新词）中文释义逐字相同。
+ * 第一扇窗只列配对：跳过这些（默认）/ 都导入（再问一次）。
+ */
+@Composable
+fun SameGlossNoticeDialog(
+    plan: ImportPlan,
+    onSkip: () -> Unit,
+    onKeep: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.bank_same_gloss_title)) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 280.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                plan.variants.take(SAME_GLOSS_LINES).forEach { pair ->
+                    Text(
+                        stringResource(R.string.bank_same_gloss_line, pair.newWord, pair.otherWord),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                if (plan.variants.size > SAME_GLOSS_LINES) {
+                    Text(
+                        stringResource(R.string.bank_same_gloss_more, plan.variants.size - SAME_GLOSS_LINES),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ImmerlexColors.Meta,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onSkip) { Text(stringResource(R.string.bank_same_gloss_skip)) } },
+        dismissButton = { TextButton(onClick = onKeep) { Text(stringResource(R.string.bank_same_gloss_keep)) } },
+    )
+}
+
+/** 第二扇窗：确认两个都留着，并说清代价（分别排期、不再互相当选项）。 */
+@Composable
+fun SameGlossConfirmDialog(count: Int, onConfirm: () -> Unit, onBack: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onBack,
+        title = { Text(stringResource(R.string.bank_same_gloss_confirm_title)) },
+        text = { Text(stringResource(R.string.bank_same_gloss_confirm_body, count)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.bank_same_gloss_confirm_action)) }
+        },
+        dismissButton = { TextButton(onClick = onBack) { Text(stringResource(R.string.action_back)) } },
+    )
+}
+
+private const val SAME_GLOSS_LINES = 6
 
 @Composable
 fun WordDetailDialog(word: WordEntity, onDismiss: () -> Unit, onDelete: () -> Unit) {

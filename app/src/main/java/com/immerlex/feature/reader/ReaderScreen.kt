@@ -1,31 +1,17 @@
 package com.immerlex.feature.reader
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -40,12 +26,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
-import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.textFor
@@ -177,6 +160,8 @@ private fun ReaderPanes(
                     onGenerate = vm::generate,
                     onOpenChapters = { overlays.chaptersOpen = true },
                     onOpenShelf = { overlays.shelfOpen = true },
+                    onRewrite = { overlays.rewriteOpen = state.chapterId != 0L },
+                    onDelete = { overlays.deleteTarget = state.chapterId },
                 )
                 when {
                     state.loading -> CenteredNote(stringResource(R.string.reader_loading))
@@ -316,115 +301,4 @@ private fun ReaderWordCard(
         onAddTricky = vm::addTrickyManual,
         onDismiss = vm::dismissCard,
     )
-}
-
-@Composable
-private fun ReaderHeader(
-    title: String,
-    book: String,
-    number: Int,
-    mode: ReaderMode,
-    wordCount: Int,
-    learned: Int,
-    recalled: Int,
-    loading: Boolean,
-    hasChapter: Boolean,
-    isShort: Boolean,
-    generating: Boolean,
-    englishOnly: Boolean,
-    chaptersAsSheet: Boolean,
-    onSelectMode: (ReaderMode) -> Unit,
-    onToggleEnglish: () -> Unit,
-    onGenerate: () -> Unit,
-    onOpenChapters: () -> Unit,
-    onOpenShelf: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when {
-                    loading -> stringResource(R.string.reader_loading)
-                    else -> title.ifBlank { book }
-                },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-                    .clickable(enabled = hasChapter && !isShort && chaptersAsSheet, onClick = onOpenChapters),
-            )
-            // 左边已经有章节目录时，标题不再当入口，省得同一件事有两个开关。
-            if (hasChapter && !isShort && chaptersAsSheet) {
-                IconButton(onClick = onOpenChapters, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.reader_chapters_title))
-                }
-            }
-            TextButton(onClick = onOpenShelf) { Text(stringResource(R.string.reader_shelf)) }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End,
-        ) {
-            ReaderMode.entries.forEach { entry ->
-                val selected = entry == mode
-                if (selected) {
-                    Button(onClick = { onSelectMode(entry) }, shape = RoundedCornerShape(10.dp)) {
-                        Text(stringResource(modeLabel(entry)))
-                    }
-                } else {
-                    OutlinedButton(onClick = { onSelectMode(entry) }, shape = RoundedCornerShape(10.dp)) {
-                        Text(stringResource(modeLabel(entry)))
-                    }
-                }
-            }
-            if (hasChapter && !isShort) {
-                TextButton(onClick = onGenerate, enabled = !generating) {
-                    Text(
-                        stringResource(
-                            if (generating) R.string.reader_generating else R.string.reader_generate,
-                        ),
-                    )
-                }
-            }
-        }
-        if (hasChapter) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (isShort) {
-                        stringResource(R.string.reader_short_progress, wordCount, learned, recalled)
-                    } else {
-                        stringResource(R.string.reader_progress, number, wordCount, learned, recalled)
-                    },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ImmerlexColors.Meta,
-                )
-                TextButton(onClick = onToggleEnglish) {
-                    Text(
-                        stringResource(
-                            if (englishOnly) R.string.reader_english_only_on else R.string.reader_english_only,
-                        ),
-                    )
-                }
-            }
-        }
-        if (generating) {
-            Text(
-                stringResource(R.string.reader_generating),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
-
-private fun modeLabel(mode: ReaderMode): Int = when (mode) {
-    ReaderMode.LEARN -> R.string.reader_mode_learn
-    ReaderMode.REVIEW -> R.string.reader_mode_review
 }

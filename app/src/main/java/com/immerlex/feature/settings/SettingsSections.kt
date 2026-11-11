@@ -22,6 +22,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,12 +35,33 @@ import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.AccentSwatches
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.PillSegmented
 import com.immerlex.app.ui.accentLabel
 import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.ProviderPresets
 
 @Composable
 internal fun AiSection(state: SettingsState, vm: SettingsViewModel) {
+    var editing by rememberSaveable { mutableStateOf(false) }
+    if (state.aiConfigured && !editing) {
+        Text(stringResource(R.string.settings_ai_using, state.model), style = MaterialTheme.typography.bodyMedium)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedButton(onClick = vm::testConnection, enabled = !state.busy) {
+                Text(stringResource(R.string.settings_test))
+            }
+            ConnectionLink(open = false) { editing = true }
+        }
+    } else {
+        AiForm(state, vm)
+        if (state.aiConfigured) ConnectionLink(open = true) { editing = false }
+    }
+}
+
+@Composable
+private fun AiForm(state: SettingsState, vm: SettingsViewModel) {
     Text(stringResource(R.string.settings_presets), style = MaterialTheme.typography.labelLarge)
     ChipRow(
         options = ProviderPresets.map { it.baseUrl to presetName(it.id) },
@@ -98,10 +123,11 @@ internal fun GenerateSection(state: SettingsState, vm: SettingsViewModel, onOpen
         label = { Text(stringResource(R.string.settings_genre)) },
     )
     Text(stringResource(R.string.settings_density), style = MaterialTheme.typography.labelLarge)
-    SegmentedRow(
+    PillSegmented(
         options = Density.entries.map { it to stringResource(densityLabel(it)) },
         selected = state.density,
         onPick = vm::onDensity,
+        modifier = Modifier.fillMaxWidth(),
     )
     Text(
         stringResource(densityRange(state.density)),

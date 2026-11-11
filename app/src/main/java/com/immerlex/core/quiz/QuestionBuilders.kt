@@ -163,19 +163,23 @@ private enum class Face { WORD, GLOSS }
 private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): List<QuizOption>? {
     val correct = correctChoice(word, face) ?: return null
     val key = correct.text.trim().lowercase()
-    val confusable = context.confusables[word.id].orEmpty()
-        .mapNotNull { choice(it.word, it.zh, face) }
+    val answerZh = correct.zh(face)
+    // 中文面一样的两个词不能同场：harbor / harbour 若都在词库，一个选项摆出来就是两个正确答案。
+    fun usable(choices: List<Choice>): List<Choice> = choices
         .filterNot { it.text.trim().lowercase() == key }
+        .filterNot { answerZh.isNotEmpty() && it.zh(face) == answerZh }
+    val confusable = usable(context.confusables[word.id].orEmpty().mapNotNull { choice(it.word, it.zh, face) })
         .distinctBy { it.text.trim().lowercase() }
-    val ai = context.enrichment.of(word)?.distractors.orEmpty().mapNotNull { choice(it.word, it.zh, face) }
-    val bank = context.pool
-        .filter { it.id != word.id }
-        .mapNotNull { choice(it.word, it.translation, face) }
+    val ai = usable(context.enrichment.of(word)?.distractors.orEmpty().mapNotNull { choice(it.word, it.zh, face) })
+    val bank = usable(context.pool.filter { it.id != word.id }.mapNotNull { choice(it.word, it.translation, face) })
     val kept = confusable.take(KEEP_CONFUSABLES)
     val fixed = kept.map { it.text.trim().lowercase() }.toSet()
+    val fixedZh = kept.mapTo(HashSet()) { it.zh(face) }
     val rest = (confusable.drop(kept.size) + ai + bank)
         .filterNot { val text = it.text.trim().lowercase(); text == key || text in fixed }
+        .filterNot { it.zh(face) in fixedZh }
         .distinctBy { it.text.trim().lowercase() }
+        .distinctBy { it.zh(face) }
     val picked = kept + rotate(rest, context.attempts[word.id] ?: 0, MAX_DISTRACTORS - kept.size)
     if (picked.isEmpty()) return null
     return (listOf(correct) + picked)
@@ -188,6 +192,9 @@ private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): 
             )
         }
 }
+
+/** 中文那一面：摆英文时它在 [Choice.gloss] 里，摆中文时它就是 [Choice.text]。 */
+private fun Choice.zh(face: Face): String = if (face == Face.WORD) gloss.trim() else text.trim()
 
 /**
  * 选项只摆一个面，另一个面存进 [Choice.gloss] 等答完再揭开：

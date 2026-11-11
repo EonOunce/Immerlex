@@ -7,6 +7,7 @@ import com.immerlex.app.ui.UiMessage
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.dict.DictionarySearch
+import com.immerlex.core.importer.ImportPlan
 import com.immerlex.core.material.MaterialEntry
 import com.immerlex.core.word.wordSurface
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class)
@@ -68,6 +70,10 @@ class WordBankViewModel(private val repo: WordBankRepository) : ViewModel() {
     private val _messages = MutableSharedFlow<UiMessage>()
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
+    /** 导入里撞上了释义逐字相同的词：先看一眼，再由用户决定跳不跳。 */
+    private val _pendingImport = MutableStateFlow<PendingImport?>(null)
+    val pendingImport: StateFlow<PendingImport?> = _pendingImport
+
     fun onQueryChange(value: String) { _query.value = value }
 
     suspend fun materialFor(word: String): MaterialEntry? = repo.materialOf(word)
@@ -84,12 +90,48 @@ class WordBankViewModel(private val repo: WordBankRepository) : ViewModel() {
     }
 
     fun importText(text: String, source: String = "import") = launchBusy {
-        val summary = repo.importText(text, source)
+        val plan = repo.prepareImport(text)
+        if (plan.variants.isEmpty()) {
+            finishImport(plan, source, skipVariants = false)
+        } else {
+            _pendingImport.value = PendingImport(plan, source, confirming = false)
+        }
+    }
+
+    /** 第一个窗口选「跳过这些」：同义的词一条不写。 */
+    fun skipSameGloss() = finishPending(skipVariants = true)
+
+    /** 第一个窗口那张列表先收起来，换成第二个确认窗口。 */
+    fun askToKeepSameGloss() {
+        _pendingImport.update { it?.copy(confirming = true) }
+    }
+
+    /** 第二个窗口点「确定导入」：同义的词也照常进库。 */
+    fun keepSameGloss() = finishPending(skipVariants = false)
+
+    /** 第二个窗口点「返回」：回到那张列表，这次导入还在。 */
+    fun backToSameGlossNotice() {
+        _pendingImport.update { it?.copy(confirming = false) }
+    }
+
+    /** 关掉窗口（返回键 / 点外面）= 这次导入整件事不做。 */
+    fun cancelImport() { _pendingImport.value = null }
+
+    private fun finishPending(skipVariants: Boolean) {
+        val pending = _pendingImport.value ?: return
+        _pendingImport.value = null
+        launchBusy { finishImport(pending.plan, pending.source, skipVariants) }
+    }
+
+    private suspend fun finishImport(plan: ImportPlan, source: String, skipVariants: Boolean) {
+        val summary = repo.commitImport(plan, source, skipVariants)
+        val counts = listOf(summary.parsed, summary.added, summary.duplicates, summary.missingGloss)
         _messages.emit(
-            UiMessage(
-                R.string.bank_import_result,
-                listOf(summary.parsed, summary.added, summary.duplicates, summary.missingGloss),
-            ),
+            if (summary.skippedVariants > 0) {
+                UiMessage(R.string.bank_import_result_skipped, counts + summary.skippedVariants)
+            } else {
+                UiMessage(R.string.bank_import_result, counts)
+            },
         )
     }
 
@@ -113,3 +155,10 @@ class WordBankViewModel(private val repo: WordBankRepository) : ViewModel() {
         const val SEARCH_DEBOUNCE_MS = 220L
     }
 }
+
+/** [confirming] = 第一个窗口已经问了"跳过还是都导入"，现在在等第二个窗口的确认。 */
+data class PendingImport(
+    val plan: ImportPlan,
+    val source: String,
+    val confirming: Boolean,
+)

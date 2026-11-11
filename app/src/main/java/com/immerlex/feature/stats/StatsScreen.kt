@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.LocalAccent
+import com.immerlex.app.ui.capsule
 import com.immerlex.core.schedule.RetentionReport
 
 @Composable
@@ -188,9 +189,7 @@ private fun StatCard(
 ) {
     Column(
         modifier = modifier
-            .shadow(3.dp, RoundedCornerShape(22.dp))
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .capsule()
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

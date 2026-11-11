@@ -6,6 +6,7 @@ import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.dict.DictEntry
 import com.immerlex.core.dict.DictionarySource
+import com.immerlex.core.importer.ImportPlan
 import com.immerlex.core.importer.ImportRepository
 import com.immerlex.core.importer.ImportSummary
 import com.immerlex.core.importer.WordListParser
@@ -48,8 +49,12 @@ class WordBankRepository(
     suspend fun materialOf(word: String): MaterialEntry? = material.peek(word)
 
     // First call also copies the 11MB ECDICT asset out of the APK.
-    suspend fun importText(text: String, source: String): ImportSummary =
-        withContext(Dispatchers.IO) { imports.importWords(WordListParser.parse(text), source) }
+    /** 解析 + 补释义 + 找同义词，不写库；同义词由界面问过用户再落盘。 */
+    suspend fun prepareImport(text: String): ImportPlan =
+        withContext(Dispatchers.IO) { imports.prepare(WordListParser.parse(text)) }
+
+    suspend fun commitImport(plan: ImportPlan, source: String, skipVariants: Boolean): ImportSummary =
+        withContext(Dispatchers.IO) { imports.commit(plan, source, skipVariants) }
 
     /** @return false when the word is blank or already in the bank. */
     suspend fun addManual(word: String, gloss: String): Boolean = withContext(Dispatchers.IO) {

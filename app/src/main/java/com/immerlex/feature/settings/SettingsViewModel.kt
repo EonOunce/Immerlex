@@ -19,21 +19,15 @@ import com.immerlex.core.ai.Density
 import com.immerlex.core.ai.OpenAiCompatClient
 import com.immerlex.core.ai.ProviderPreset
 import com.immerlex.core.backup.BackupService
-import com.immerlex.core.backup.DownloadVerdict
 import com.immerlex.core.backup.Listing
-import com.immerlex.core.backup.RemoteFile
 import com.immerlex.core.backup.RestoreOutcome
-import com.immerlex.core.backup.SnapshotProblem
 import com.immerlex.core.db.BackupRunEntity
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.notify.ReminderControl
-import com.immerlex.core.quiz.EarlyReview
 import com.immerlex.core.settings.Accent
 import com.immerlex.core.settings.AppPreferences
-import com.immerlex.core.settings.DEFAULT_FONT_SCALE
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -42,67 +36,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-
-data class SettingsState(
-    val baseUrl: String = "",
-    val model: String = "",
-    val apiKey: String = "",
-    val keyPersistent: Boolean = true,
-    val genre: String = "",
-    val density: Density = Density.MEDIUM,
-    val dailyNewLimit: Int = AppPreferences.DEFAULT_NEW_LIMIT,
-    val fontScale: Float = DEFAULT_FONT_SCALE,
-    val darkMode: Boolean = false,
-    val autoSpeak: Boolean = false,
-    /** 全 app 主色，两档暖色，改了立即生效。 */
-    val accent: Accent = Accent.DEFAULT,
-    /** 提前复习一组几个词：5 / 10 / 20。 */
-    val earlyGroupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
-    /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
-    val models: List<String> = emptyList(),
-    val bankTotal: Int = 0,
-    val bankNew: Int = 0,
-    val bankDue: Int = 0,
-    val busy: Boolean = false,
-    val reminderEnabled: Boolean = true,
-    val reminderMinute: Int = AppPreferences.DEFAULT_REMINDER_MINUTE,
-    val notificationsAllowed: Boolean = true,
-    val backupUrl: String = "",
-    val backupAccount: String = "",
-    /** 应用密码只进不出：这里存的只是本次页面上的草稿，保存后立刻清空。 */
-    val backupPassword: String = "",
-    val backupPasswordSaved: Boolean = false,
-    /** 这台机器在备份文件名里叫什么；留空表示用机型名，core 那边还会再洗一遍。 */
-    val backupDevice: String = "",
-    val backupAuto: Boolean = false,
-    /** "还没备份过 / 上次备份… / 上次备份失败…" 这一整行，措辞都在 strings.xml 里。 */
-    val backupLine: UiMessage = UiMessage(R.string.backup_never),
-    val remoteBackups: List<RemoteFile> = emptyList(),
-    /** 覆盖本机之前自动留下的那几份，不联网就能列出来。 */
-    val localBackups: List<RemoteFile> = emptyList(),
-    val pickerOpen: Boolean = false,
-    val pendingRestore: PendingRestore? = null,
-    val refusedIssues: List<SnapshotProblem> = emptyList(),
-    /** 本地库连接已经关掉：页面只剩"重开应用"这一个出口。[restartDetail] 非空说明是没换成的那一种。 */
-    val restartRequired: Boolean = false,
-    val restartDetail: String = "",
-) {
-    val reminderTime: String get() = LocalTime.ofSecondOfDay(reminderMinute.toLong() * 60).toString()
-
-    /** 那行字失败时要标红，但内容已经整条在那条消息里了，这里只认它是哪一种。 */
-    val backupFailed: Boolean get() = backupLine.resId == R.string.backup_last_failed
-}
-
-/**
- * 选中的那一份，和点它那一刻本机的处境。判定跟着目标一起存，对话框才不会在重绘时
- * 拿另一台机器此刻的状态去问第二个问题。
- */
-data class PendingRestore(
-    val name: String,
-    /** true = 退回本机留的快照，不联网。 */
-    val local: Boolean,
-    val verdict: DownloadVerdict,
-)
 
 class SettingsViewModel(
     private val prefs: AppPreferences,
@@ -361,28 +294,32 @@ class SettingsViewModel(
         }
     }
 
-    private fun load(): SettingsState = SettingsState(
-        baseUrl = prefs.baseUrl,
-        model = prefs.model,
-        apiKey = keyStore.key(),
-        keyPersistent = keyStore.isPersistent,
-        genre = prefs.genre,
-        density = prefs.density,
-        dailyNewLimit = prefs.dailyNewLimit,
-        fontScale = prefs.fontScale,
-        darkMode = prefs.darkMode,
-        autoSpeak = prefs.autoSpeak,
-        accent = prefs.accent,
-        earlyGroupSize = prefs.earlyGroupSize,
-        reminderEnabled = reminder.enabled,
-        reminderMinute = reminder.minuteOfDay,
-        notificationsAllowed = reminder.areNotificationsAllowed(),
-        backupUrl = prefs.webDavUrl,
-        backupAccount = prefs.webDavAccount,
-        backupDevice = prefs.deviceName,
-        backupAuto = prefs.backupEnabled,
-        backupPasswordSaved = backup.hasPassword,
-    )
+    private fun load(): SettingsState {
+        val key = keyStore.key()
+        return SettingsState(
+            baseUrl = prefs.baseUrl,
+            model = prefs.model,
+            apiKey = key,
+            keyPersistent = keyStore.isPersistent,
+            aiConfigSaved = prefs.baseUrl.isNotBlank() && prefs.model.isNotBlank() && key.isNotBlank(),
+            genre = prefs.genre,
+            density = prefs.density,
+            dailyNewLimit = prefs.dailyNewLimit,
+            fontScale = prefs.fontScale,
+            darkMode = prefs.darkMode,
+            autoSpeak = prefs.autoSpeak,
+            accent = prefs.accent,
+            earlyGroupSize = prefs.earlyGroupSize,
+            reminderEnabled = reminder.enabled,
+            reminderMinute = reminder.minuteOfDay,
+            notificationsAllowed = reminder.areNotificationsAllowed(),
+            backupUrl = prefs.webDavUrl,
+            backupAccount = prefs.webDavAccount,
+            backupDevice = prefs.deviceName,
+            backupAuto = prefs.backupEnabled,
+            backupPasswordSaved = backup.hasPassword,
+        )
+    }
 
     private suspend fun refreshCounts() {
         _state.value = _state.value.copy(

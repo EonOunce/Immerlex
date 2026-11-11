@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -30,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
+import com.immerlex.app.ui.PillSegmented
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.accentLabel
 import com.immerlex.app.ui.textFor
@@ -64,20 +64,30 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // 换机要先解决的事排在最前面：学完上传、学前下载，所以这一节是唯一默认摊开的。
-            Section(SECTION_BACKUP, R.string.settings_backup_section, context.textFor(state.backupLine), opened) {
+            Section(
+                SECTION_BACKUP,
+                R.string.settings_backup_section,
+                stringResource(
+                    when {
+                        !state.backupConfigured -> R.string.settings_summary_unset
+                        state.backupFailed -> R.string.settings_summary_failed
+                        else -> R.string.settings_summary_ready
+                    },
+                ),
+                opened,
+                alert = !state.backupConfigured || state.backupFailed,
+            ) {
                 BackupSection(state, vm)
             }
             Section(
                 SECTION_MATERIAL,
                 R.string.settings_material_section,
-                stringResource(
-                    if (materialState.words == 0) R.string.material_none else R.string.material_count,
-                    materialState.words,
-                ),
+                stringResource(R.string.settings_summary_material, materialState.words),
                 opened,
+                alert = materialState.words == 0,
             ) {
                 MaterialSection(material, snackbar)
             }
@@ -110,10 +120,11 @@ fun SettingsScreen(
                 opened,
             ) {
                 Text(stringResource(R.string.settings_early_group), style = MaterialTheme.typography.labelLarge)
-                SegmentedRow(
+                PillSegmented(
                     options = EarlyReview.GROUP_SIZES.map { it to stringResource(R.string.settings_early_group_count, it) },
                     selected = state.earlyGroupSize,
                     onPick = vm::onEarlyGroupSize,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             Section(
@@ -127,9 +138,9 @@ fun SettingsScreen(
             Section(
                 SECTION_AI,
                 R.string.settings_ai_section,
-                state.model.takeIf { it.isNotBlank() && state.apiKey.isNotBlank() }
-                    ?: stringResource(R.string.settings_summary_unset),
+                state.model.takeIf { state.aiConfigured } ?: stringResource(R.string.settings_summary_unset),
                 opened,
+                alert = !state.aiConfigured,
             ) {
                 AiSection(state, vm)
             }
@@ -139,9 +150,7 @@ fun SettingsScreen(
                 stringResource(R.string.settings_bank_summary, state.bankTotal, state.bankNew, state.bankDue),
             )
 
-            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onOpenAbout) {
-                Text(stringResource(R.string.about_open))
-            }
+            NavSection(stringResource(R.string.about_open), onOpenAbout)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -154,6 +163,7 @@ private fun Section(
     @StringRes title: Int,
     summary: String,
     opened: MutableState<String?>,
+    alert: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     DisclosureSection(
@@ -161,6 +171,7 @@ private fun Section(
         summary = summary,
         opened = opened.value == key,
         onToggle = { opened.value = if (opened.value == key) null else key },
+        alert = alert,
         content = content,
     )
 }

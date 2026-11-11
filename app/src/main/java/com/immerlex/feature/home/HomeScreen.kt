@@ -49,6 +49,7 @@ import com.immerlex.app.ui.FishIcon
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.LocalAccent
 import com.immerlex.app.ui.LocalAppearance
+import com.immerlex.app.ui.capsule
 
 @Composable
 fun HomeScreen(
@@ -250,9 +251,7 @@ private fun SecondaryCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(3.dp, RoundedCornerShape(22.dp))
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .capsule()
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),

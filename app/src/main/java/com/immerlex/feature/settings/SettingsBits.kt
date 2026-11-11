@@ -1,32 +1,41 @@
 package com.immerlex.feature.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.R
+import com.immerlex.app.ui.LocalAccent
+import com.immerlex.app.ui.capsule
 
 /**
- * 设置页的每一节都收成一条标题：折起来只剩"现在设成了什么"那一行，点开才是控件。
+ * 设置页的每一节都是一张胶囊：折起来只剩标题和右边那半行现状，点开才是控件。
  * 一次只摊开一节——整页八个区同时展开时，找一样设置要滚两屏。
  */
 @Composable
@@ -35,38 +44,49 @@ internal fun DisclosureSection(
     summary: String,
     opened: Boolean,
     onToggle: () -> Unit,
+    alert: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().capsule(radius = 20.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (!opened) {
-                    Text(
-                        summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ImmerlexColors.Meta,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            Box(
+                Modifier.size(7.dp).clip(CircleShape).background(
+                    if (alert) LocalAccent.current else MaterialTheme.colorScheme.outlineVariant,
+                ),
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(10.dp))
+            if (opened) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                Text(
+                    summary,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Icon(
                 Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,
-                tint = ImmerlexColors.Meta,
-                modifier = Modifier.rotate(if (opened) 180f else 0f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp).rotate(if (opened) 180f else 0f),
             )
         }
         if (opened) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Column(
-                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 content = content,
             )
@@ -77,31 +97,64 @@ internal fun DisclosureSection(
 /** 不用设、只想看一眼的那一节：没有可折叠的东西，标题下面直接给数。 */
 @Composable
 internal fun InfoSection(title: String, text: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(text, style = MaterialTheme.typography.bodyMedium)
+    Column(
+        modifier = Modifier.fillMaxWidth().capsule(radius = 20.dp)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
-/** 互斥的一排档位：选中的那颗实心，其余描边。密度与提前复习组数都用它。 */
+/** 只通往另一页的那一节：折不起也展不开，右边一个箭头。 */
 @Composable
-internal fun <T> SegmentedRow(
-    options: List<Pair<T, String>>,
-    selected: T,
-    enabled: Boolean = true,
-    onPick: (T) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { (value, label) ->
-            if (value == selected) {
-                Button(onClick = { onPick(value) }, enabled = enabled, shape = RoundedCornerShape(10.dp)) {
-                    Text(label)
-                }
-            } else {
-                OutlinedButton(onClick = { onPick(value) }, enabled = enabled, shape = RoundedCornerShape(10.dp)) {
-                    Text(label)
-                }
-            }
+internal fun NavSection(title: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().capsule(radius = 20.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Icon(
+            Icons.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/** 接口配好之后账号密码网址都收起来，这一行是唯一回去改的入口。 */
+@Composable
+internal fun ConnectionLink(open: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.clip(CircleShape).clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(if (open) R.string.settings_collapse else R.string.settings_connection),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (!open) {
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
