@@ -13,6 +13,9 @@ import org.junit.runner.RunWith
  * v17 -> v18 只加两张表：做完的测验成绩、每天一个"此刻大概能想起几个词"的影子。
  * 升级上来的老库这两张表必须是空的——战绩页要能分得清"还没测过"和"测过但对错了 0 题"，
  * 不能凭空造出历史。词、章节、复习记录、没做完的会话一个字节都不动。
+ *
+ * v18 -> v19 只给成绩表补一列"这一组让巅峰分动了多少"：老行必须留空，
+ * 因为 0 会被界面读成"这一组不痛不痒"，而它其实只是没算过。
  */
 @RunWith(AndroidJUnit4::class)
 class QuizRunMigrationTest {
@@ -33,7 +36,8 @@ class QuizRunMigrationTest {
             )
             execSQL(
                 "INSERT INTO review_logs (wordId, rating, source, reviewEpochSec, elapsedDays, " +
-                    "scheduledDays, kind) VALUES (1, 3, 'quiz', 1700003600, 4, 6, 'recall')",
+                    "scheduledDays, preState, preDueEpochSec, kind) " +
+                    "VALUES (1, 3, 'quiz', 1700003600, 4, 6, 1, 1700007200, 'recall')",
             )
             execSQL("INSERT INTO quiz_session (mode, payload) VALUES ('DUE', '{\"due\":true}')")
             close()
@@ -91,6 +95,31 @@ class QuizRunMigrationTest {
     }
 
     @Test
+    fun v18KeepsItsRunsAndLeavesPeakChangeBlank() {
+        helper.createDatabase(DB_V18, 18).apply {
+            execSQL(
+                "INSERT INTO quiz_runs (mode, finishedAtSec, asked, correct, wrong, bestStreak) " +
+                    "VALUES ('DUE', 1700007200, 20, 14, 6, 5)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_V18, 19, true, MIGRATION_18_19)
+
+        db.query(
+            "SELECT asked, correct, wrong, bestStreak, peakChange FROM quiz_runs WHERE mode = 'DUE'",
+        ).use { cursor ->
+            assertTrue("迁移弄丢了留下的成绩", cursor.moveToFirst())
+            assertEquals(20, cursor.getInt(0))
+            assertEquals(14, cursor.getInt(1))
+            assertEquals(6, cursor.getInt(2))
+            assertEquals(5, cursor.getInt(3))
+            assertTrue("老行没算过涨跌，必须是空的而不是 0", cursor.isNull(4))
+        }
+        db.close()
+    }
+
+    @Test
     fun v1ChainsAllTheWay() {
         helper.createDatabase(DB_V1, 1).apply {
             execSQL(
@@ -102,7 +131,7 @@ class QuizRunMigrationTest {
 
         val db = helper.runMigrationsAndValidate(
             DB_V1,
-            18,
+            19,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -121,21 +150,23 @@ class QuizRunMigrationTest {
             MIGRATION_15_16,
             MIGRATION_16_17,
             MIGRATION_17_18,
+            MIGRATION_18_19,
         )
 
         db.query("SELECT title FROM chapters WHERE number = 1").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals("第1章", cursor.getString(0))
         }
-        db.query("SELECT COUNT(*) FROM quiz_runs").use { cursor ->
+        db.query("SELECT COUNT(peakChange) FROM quiz_runs").use { cursor ->
             assertTrue(cursor.moveToFirst())
-            assertEquals(0, cursor.getInt(0))
+            assertEquals("老库一路升上来，这两列一个都不该凭空多出来", 0, cursor.getInt(0))
         }
         db.close()
     }
 
     private companion object {
         const val DB_V17 = "quiz-run-migration-17.db"
+        const val DB_V18 = "quiz-run-migration-18.db"
         const val DB_V1 = "quiz-run-migration-1.db"
     }
 }

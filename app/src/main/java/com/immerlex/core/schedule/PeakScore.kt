@@ -1,5 +1,6 @@
 package com.immerlex.core.schedule
 
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
 import com.immerlex.core.db.RecallEventRow
 import com.immerlex.core.fsrs.Rating
 import kotlin.math.pow
@@ -36,6 +37,33 @@ object PeakScoreReplay {
             if (me > best) best = me
         }
         return PeakScore(me.roundToInt(), best.roundToInt(), events.size)
+    }
+
+    /**
+     * 重放途中每一步之后的分，与 [replay] 同一套算法，只是不把首尾折成两个数。
+     * 「这一周最高到过哪」要的是每一步，所以影子对决读这一份。
+     */
+    fun trajectory(events: List<RecallEventRow>): List<Int> {
+        var me = BASE
+        return events.map { event ->
+            me += K * (outcome(event.rating) - expected(me, opponent(event)))
+            me.roundToInt()
+        }
+    }
+
+    /**
+     * 一组测验自己的功过：把这一组写下的那些回忆从整段历史里抽掉再重放一遍，两次相减。
+     * 抽的是 `source = quiz` 且时刻不早于 [startedAtSec] 的那些——同一段时间里读小说记的账
+     * 两边都有，减下来正好抵消，不会算成这一组的分数。
+     *
+     * 记录不足 [MIN_SAMPLES] 时这个分本身就没有意义，返回 null；
+     * [startedAtSec] 没记下来（升级前的旧会话）也返回 null，不猜一个数顶上。
+     */
+    fun groupChange(events: List<RecallEventRow>, startedAtSec: Long): Int? {
+        if (startedAtSec <= 0L || events.size < MIN_SAMPLES) return null
+        val kept = events.filterNot { it.source == LOG_SOURCE_QUIZ && it.epochSec >= startedAtSec }
+        if (kept.size == events.size) return 0
+        return replay(events).current - replay(kept).current
     }
 
     /** 「困难」是想起来了但费劲，给半分——把它当答错会凭空贬低一次真实的回忆。 */

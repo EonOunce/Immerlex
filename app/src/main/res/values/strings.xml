@@ -26,20 +26,24 @@
     <string name="home_streak_unit">连续</string>
     <string name="home_streak_days">%1$d 天</string>
     <string name="home_quiz_card">今日测验</string>
+    <string name="home_review_card">今日复习</string>
     <string name="home_early_card">提前复习</string>
     <string name="home_quiz_card_count">%1$d 词</string>
     <string name="home_quiz_card_resume">接着测</string>
     <string name="home_quiz_card_empty">今天没有要测的</string>
+    <string name="home_review_card_count">%1$d 词</string>
+    <string name="home_review_card_resume">接着练</string>
+    <string name="home_review_card_empty">没有要补的</string>
     <string name="home_early_card_count">%1$d 词可练</string>
     <string name="home_early_card_none">暂无可练</string>
-    <string name="home_tricky_card">易错练习 %1$d 词</string>
+    <string name="home_tricky_card">易错练习</string>
+    <string name="home_tricky_card_count">%1$d 词</string>
     <string name="settings_accent">主色</string>
     <string name="accent_warm">暖阳杏黄</string>
     <string name="accent_coral">珊瑚橘</string>
     <string name="tab_stats">战绩</string>
-    <string name="stats_hero_label">此刻大概能想起</string>
+    <string name="stats_can_recall_label">此刻能想起</string>
     <string name="stats_words_unit">词</string>
-    <string name="stats_strength_label">战斗力</string>
     <string name="stats_mastered_label">已掌握</string>
     <string name="stats_nemesis_label">常忘的词</string>
     <string name="stats_nemesis_count">忘了 %1$d 次</string>
@@ -48,14 +52,19 @@
     <string name="stats_rank_label">段位</string>
     <string name="stats_rank_next">再掌握 %1$d 个词，升 %2$s</string>
     <string name="stats_rank_top">已到头</string>
-    <string name="stats_peak_now">巅峰分 %1$d · 最高 %2$d</string>
+    <string name="stats_peak_badge">巅峰分 %1$d</string>
     <string name="stats_peak_thin">只重放了 %1$d 次记录，还不算分</string>
+    <string name="stats_duel_title">这周 vs 上周</string>
+    <string name="stats_duel_this">这周最高</string>
+    <string name="stats_duel_last">上周最高</string>
+    <string name="stats_duel_change">比上周 %1$s</string>
     <string name="stats_best_day">以前最好的一天 %1$d 个</string>
     <string name="stats_beat_best">已超过以前最好的一天</string>
     <string name="stats_revenge_label">还欠你一次的词 %1$d 个</string>
     <string name="stats_revenge_action">复仇</string>
     <string name="stats_runs_title">最近测验</string>
     <string name="stats_run_rate">正确率 %1$d%%</string>
+    <string name="stats_run_peak">巅峰分 %1$s</string>
     <string name="rank_white">白词</string>
     <string name="rank_cyan">青词</string>
     <string name="rank_blue">蓝词</string>
@@ -68,7 +77,6 @@
     <string name="rank_sage">词圣</string>
     <string name="rank_level_form">%1$s %2$d 级</string>
     <string name="rank_duan_form">%1$s %2$d 段</string>
-    <string name="share_card_strength">战斗力</string>
     <string name="share_card_can_recall">此刻能想起</string>
     <string name="share_card_mastered">已掌握</string>
     <string name="share_card_nemesis">最常忘的词</string>
@@ -392,11 +400,12 @@
     <string name="gen_failed">生成失败：%1$s</string>
 
     <string name="reader_loading">正在载入章节…</string>
+    <string name="reader_header_chapter">第 %1$d 章</string>
     <string name="reader_mode_learn">学习模式</string>
     <string name="reader_mode_review">复习模式</string>
     <string name="reader_english_only">只留英文</string>
     <string name="reader_english_only_on">显示汉字</string>
-    <string name="reader_progress">第 %1$d 章 · 本章 %2$d 个词 · 本次已学 %3$d · 本次已回忆 %4$d</string>
+    <string name="reader_progress">本章 %1$d 个词 · 本次已学 %2$d · 本次已回忆 %3$d</string>
     <string name="reader_speak">朗读</string>
     <string name="reader_speak_no_engine">这台手机没有可用的语音引擎，装一个带英文语音的（例如 Google 语音服务）再回来。</string>
     <string name="reader_speak_no_english">语音引擎里没有英文语音包：到系统设置 → 语言与输入 → 文字转语音里下载英文。</string>
@@ -519,25 +528,29 @@
     <string name="quiz_doubt_result">算没记住</string>
     <string name="quiz_next">下一题</string>
     <string name="quiz_finish">完成</string>
-    <string name="quiz_result">本轮 %1$d 题，答对 %2$d 题</string>
-    <string name="quiz_result_wrong_done">有 %1$d 个词答错，已用另一种题型练过一遍（不计分）</string>
+    <string name="quiz_result_label">这组答对</string>
+    <string name="quiz_result_of">/ %1$d</string>
+    <string name="quiz_result_missed">没答对 %1$d 个</string>
+    <string name="quiz_review_now">把今天测过的词再过一遍</string>
     <string name="quiz_retry_badge">练习 · 不计分</string>
     <string name="quiz_retry_progress">练习 %1$d/%2$d · %3$s</string>
-    <string name="quiz_retry_done">练习结束</string>
     <string name="quiz_early_badge">提前复习</string>
+    <string name="quiz_review_badge">今日复习</string>
     <string name="quiz_tricky_badge">易错练习</string>
     <string name="quiz_tricky_empty">易错词今天都练过了。</string>
     <string name="quiz_nemesis_badge">宿敌</string>
     <string name="quiz_nemesis_empty">没有欠你的词了：上次答错的都打赢了。</string>
-    <string name="quiz_result_streak">最长连对 %1$d 题</string>
-    <string name="quiz_record_beaten">这一组破了你自己的纪录</string>
+    <string name="quiz_result_streak">最长连对 %1$d</string>
+    <string name="quiz_result_peak">巅峰分 %1$s</string>
+    <string name="quiz_record_beaten">破了自己的纪录</string>
     <string name="quiz_mode_due">到期词</string>
+    <string name="quiz_mode_review">今日复习</string>
     <string name="quiz_mode_early">提前复习</string>
     <string name="quiz_mode_tricky">易错练习</string>
     <string name="quiz_mode_nemesis">宿敌复仇</string>
-    <string name="quiz_early_result">本组 %1$d 个词，答对 %2$d 个</string>
     <string name="quiz_again_group">再来一组</string>
     <string name="quiz_early_empty">还没有可提前复习的词：先读几章学些新词吧。</string>
+    <string name="quiz_review_empty">今天测过的词都已认出来，或者还没到期的词不用再碰。</string>
     <string name="quiz_option_correct">正确</string>
     <string name="quiz_option_yours">你的选择</string>
     <string name="quiz_tricky_retire">移出易错</string>
@@ -551,16 +564,16 @@
     <string name="about_checkin_body">今天学过或回忆过任意一个词，就算打卡。\n漏一天不会归零：第二天清空当天的到期词，就自动补回昨天，每周最多补一次。\n当天还有没背完的到期词，这一天到凌晨 1 点才结束；到期词清完或当天没学，零点就翻页。\n没有积分，也没有兑换。</string>
 
     <string name="about_home_title">关于今日页</string>
-    <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。\n点标题旁的分享按钮，可以把今天这一页生成一张图（连续天数、今天新学与回忆、今天学过的词与今天测验过的词、近 13 周热力图）；词多时只列一小截，数字仍是全数。图只在本机生成，不上传。</string>
+    <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，再减掉今天已经碰过的（在测验里过完一轮，或在阅读里真回忆过一次）；写下一章时交给 AI 的仍是完整那一份——减掉的是“今天的待办”，不是这个词的排期。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。\n点标题旁的分享按钮，可以把今天这一页生成一张图（连续天数、今天新学与回忆、今天学过的词与今天测验过的词、近 13 周热力图）；词多时只列一小截，数字仍是全数。图只在本机生成，不上传。</string>
 
     <string name="about_stats_title">关于战绩与主色</string>
-    <string name="about_stats_body">“战绩”只把已经存下来的记录读成一份报告：不写库、不改排期、不给你加作业。这一页只跟你自己比——没有排行榜，也不上传任何东西。\n“此刻大概能想起”用的是调度算法自己的遗忘曲线——把每个词此刻想起来的把握加起来再四舍五入，10 个词各有一半把握就写 5；这是估计，不是考你。\n“已掌握”是复习间隔已经排到 21 天以上的词。\n“战斗力”把上面两件事合成一个 0–100 的数，只给人看，不参与任何调度。\n“常忘的词”是忘得最多的那一个和它忘的次数。\n“段位”数的是已掌握的词：白词、青词、蓝词、绿词、橙词、紫词各带一级到六级，再往上赤段、玄段、金段各带一段到三段，顶上是不带数字的词圣。门槛依次是 20、60、150、300、600、1000、1600、2400、3500 个——光读过一遍不算，要把间隔真推远才算。它只是一个名字，不动排期。\n“巅峰分”把你的整段复习历史从头重放一遍（起点 1200）：答得越费劲、拖得越久才想起来，涨得越多；页上给“现在”和“以前最高”两个数。重放的记录不足 20 次时这个数只是噪声，那时候不说它叫巅峰分。\n“以前最好的一天”是每天留下的那个最高点：把握算的是卡片此刻的状态，明天再也回推不出今天，所以当天要落一笔。\n“还欠你一次的词”是最后一次真记账答错了的那些词，点“复仇”就是一组只考它们的测验。在任一入口真记账地认出来一次，它自己就从名单上下去——四选一攒着的那三次“认出”不算。\n“最近测验”每做完一组留一行：哪个入口、几个题、对几个、最长连对几题。正确率只算计分的题，答错后当堂重练的那些不掺进去；同一入口考得比自己以前最好的一组还好，结果页才说“破了你自己的纪录”，一个入口的第一组永远不说。\n标题旁的“炫耀一下”把这一页导成一张图走系统分享（段位、战斗力、巅峰最高分都在上面），和今日页的分享卡一样只在本机生成、不上传。\n两个圆点是主色（暖阳杏黄、珊瑚橘），今日页和设置页都能换，点了立即生效；换的只有配色，词库、排期、记录一条都不动。</string>
+    <string name="about_stats_body">“战绩”只把已经存下来的记录读成一份报告：不写库、不改排期、不给你加作业。这一页只跟你自己比——没有排行榜，也不上传任何东西。\n“此刻大概能想起”用的是调度算法自己的遗忘曲线——把每个词此刻想起来的把握加起来再四舍五入，10 个词各有一半把握就写 5；这是估计，不是考你。\n“已掌握”是复习间隔已经排到 21 天以上的词。\n“常忘的词”是忘得最多的那一个和它忘的次数。\n“段位”是这一页的主角，数的是已掌握的词：白词、青词、蓝词、绿词、橙词、紫词各带一级到六级，再往上赤段、玄段、金段各带一段到三段，顶上是不带数字的词圣。门槛依次是 20、60、150、300、600、1000、1600、2400、3500 个——光读过一遍不算，要把间隔真推远才算。它只是一个名字，不动排期。\n“巅峰分”把你的整段复习历史从头重放一遍（起点 1200）：答得越费劲、拖得越久才想起来，涨得越多。它在这页只占一行小字——一张图不能有两个主角。重放的记录不足 20 次时这个数只是噪声，那时候不说它叫巅峰分。\n“这周 vs 上周”不是另一个分：把同一条巅峰分曲线按日历周（周一到周日）折开来，比的是这两周各自最高到过哪。上周没记录就只说这周，不报涨跌，也不拿起点 1200 冒充“上周打过”。对手还是以前的自己，没有别人。\n“以前最好的一天”是每天留下的那个最高点：把握算的是卡片此刻的状态，明天再也回推不出今天，所以当天要落一笔。\n“还欠你一次的词”是最后一次真记账答错了的那些词，点“复仇”就是一组只考它们的测验。在任一入口真记账地认出来一次，它自己就从名单上下去——四选一攒着的那三次“认出”不算。\n“最近测验”每做完一组留一行：哪个入口、几个题、对几个、最长连对几题，还有这一组让巅峰分涨跌了多少——只算这一组自己写下的那几笔，同一段时间里读小说记的账不算在它头上；记录还不够多、或这一组一条真记账都没写（四选一全攒着当“认出”），就不写这一句。正确率只算计分的题，答错后当堂重练的那些不掺进去；同一入口考得比自己以前最好的一组还好，结果页才说“破了你自己的纪录”，一个入口的第一组永远不说。\n标题旁的“炫耀一下”把这一页导成一张图走系统分享（主角是段位那个称号，巅峰最高分只占下面一行小字），和今日页的分享卡一样只在本机生成、不上传。\n两个圆点是主色（暖阳杏黄、珊瑚橘），今日页和设置页都能换，点了立即生效；换的只有配色，词库、排期、记录一条都不动。</string>
 
     <string name="about_reading_title">关于阅读与评分</string>
     <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点左上角那颗圆键换回看其它章（平板上目录常驻在左边，就不用点）；右上角那颗里是书架与本章：写下一章、重写本章、删除本章。重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。\n开了自动发音，点开词卡就先读一遍这个词。手机里没有语音引擎或没下载英文语音包时读不出来，卡上会写清楚缺哪一样。</string>
 
     <string name="about_quiz_title">关于测验与计分</string>
-    <string name="about_quiz_body">五种题型：英→中、中→英、句子挖空、英文释义选词、搭配（选出短语的意思）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词和搭配。易错词一开始五种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n四选一认出比凭空想起容易，所以答对先攒着：连着认出三次才算一次真正的回忆，复习间隔也只在那一刻推远；答错立刻按一次没记住记账，攒的次数清零。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n一个词标成易错之后连着认出 6 次（只数标上之后的记录，中间答错就从头算），题目下面会问一句要不要移出易错：点了只清易错标记和易混连线，复习记录一条不动，不点就一切照旧。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习从所有学过、还没到期的词里取最近到期的一组（默认 5 个，可在设置页「测验」里选 5 / 10 / 20 个；今天已经回忆过的不算），照常计分；一组做完可以“再来一组”，没有每日上限。\n还有一条只用测验就能走完今天的路：「易错练习」只考你亲手标过易错的词，错得最多的先来，一个都没标时今日页不出现这一行。它和到期、提前复习用的是同一套记账。\n战绩页那个「复仇」是第四个入口：只考最后一次真记账答错了的那些词，真记账地认出来一次它就从名单上下去（四选一刚答对只算「认出」，要连着三次升成一次真正的回忆才算）；这一组照样逐题记账、中途退出照样原位续做。\n结果页会说这一组最长连对了几题；如果这一组比同一入口以前最好的一组还对得多，会多说一句「破了你自己的纪录」——一个入口的第一组没得比，所以永远不说这句话。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。\n释义一模一样的两个词（harbor 和 harbour 这种拼写变体）可以都在词库里、各自排期，但测验里不会互相当选项——四个选项里不会出现两个意思相同的中文。</string>
+    <string name="about_quiz_body">五种题型：英→中、中→英、句子挖空、英文释义选词、搭配（选出短语的意思）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词和搭配。易错词一开始五种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n四选一认出比凭空想起容易，所以答对先攒着：连着认出三次才算一次真正的回忆，复习间隔也只在那一刻推远；答错立刻按一次没记住记账，攒的次数清零。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n一个词标成易错之后连着认出 6 次（只数标上之后的记录，中间答错就从头算），题目下面会问一句要不要移出易错：点了只清易错标记和易混连线，复习记录一条不动，不点就一切照旧。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n一个词今天只要在测验里过完一轮（不管答对答错），当天就从「今日到期」里减掉，明天它自己回来；在阅读页真记账地回忆过一次也算碰过当天。减的是「今天不必再碰它」，不是「以后不必再碰它」——四选一答对先攒着，连着三次才升成一次真正的回忆，复习间隔只在那一刻推远。\n今日页因此分成两扇门：「今日测验」是今天还没碰过的那些词（今天到期或今天刚学过），测完之后「今日复习」是同一批词的第二遍——那一格只留真正还没过去的：答错的，以及认出还没攒满三次的；已经升成一次真正回忆的词自己就下去了。提前复习测的不是今天到期的词（它取学过、还没到期的那一批），所以自己一格。\n提前复习从所有学过、还没到期的词里取最近到期的一组（默认 5 个，可在设置页「测验」里选 5 / 10 / 20 个；今天已经回忆过的不算），照常计分；一组做完可以“再来一组”，没有每日上限。\n还有一条只用测验就能走完今天的路：「易错练习」只考你亲手标过易错的词，错得最多的先来，一个都没标时今日页不出现这一格。它和到期、提前复习用的是同一套记账。\n战绩页那个「复仇」是另一个入口：只考最后一次真记账答错了的那些词，真记账地认出来一次它就从名单上下去（四选一刚答对只算「认出」，要连着三次升成一次真正的回忆才算）；这一组照样逐题记账、中途退出照样原位续做。\n结果页会说这一组最长连对了几题、这一组让巅峰分涨跌了多少；如果这一组比同一入口以前最好的一组还对得多，会多说一句「破了你自己的纪录」——一个入口的第一组没得比，所以永远不说这句话。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。\n释义一模一样的两个词（harbor 和 harbour 这种拼写变体）可以都在词库里、各自排期，但测验里不会互相当选项——四个选项里不会出现两个意思相同的中文。</string>
 
     <string name="about_keyboard_title">关于键盘</string>
     <string name="about_keyboard_body">外接键盘或平板的键盘可以直接用，键位在设置页「键盘快捷键」里改，改完立即生效；同一个键被另一个动作用着时会互换，音量键和返回键不占用。

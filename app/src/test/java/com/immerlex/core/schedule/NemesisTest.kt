@@ -14,6 +14,7 @@ class NemesisTest {
         source = "quiz",
         difficulty = 5.0,
         scheduledDays = 1,
+        epochSec = 0L,
     )
 
     @Test

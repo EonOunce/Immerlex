@@ -195,6 +195,9 @@ fun ImmerlexRoot() {
                         onStartEarly = {
                             navController.navigate(quizRoute(QuizMode.EARLY)) { launchSingleTop = true }
                         },
+                        onStartReview = {
+                            navController.navigate(quizRoute(QuizMode.REVIEW)) { launchSingleTop = true }
+                        },
                         onStartTricky = {
                             navController.navigate(quizRoute(QuizMode.TRICKY)) { launchSingleTop = true }
                         },

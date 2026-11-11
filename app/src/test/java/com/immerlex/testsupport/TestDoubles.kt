@@ -120,6 +120,21 @@ internal class FakeReviewLogDao : ReviewLogDao {
         .map { it.wordId }
         .distinct()
 
+    override suspend fun handledWordIdsSince(quizSource: String, sinceSec: Long) = items
+        .filter { (it.kind == LOG_KIND_RECALL || it.source == quizSource) && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun quizzedWordIdsSince(quizSource: String, sinceSec: Long) = items
+        .filter { it.source == quizSource && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
+    override suspend fun recalledGoodIdsSince(sinceSec: Long) = items
+        .filter { it.kind == LOG_KIND_RECALL && it.rating >= 3 && it.reviewEpochSec >= sinceSec }
+        .map { it.wordId }
+        .distinct()
+
     override suspend fun readerLearnedIdsAmong(wordIds: List<Long>) = items
         .filter { it.source == LOG_SOURCE_READER && it.wordId in wordIds }
         .map { it.wordId }

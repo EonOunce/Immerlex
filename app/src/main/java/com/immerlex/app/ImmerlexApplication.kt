@@ -100,11 +100,11 @@ class AppContainer(context: Context) {
         )
     }
     val importRepository: ImportRepository by lazy { ImportRepository(db.wordDao(), dictionary) }
-    val scheduleService: ScheduleService by lazy {
-        ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler, db)
-    }
     // 今日页、测验、阅读页共用这一份"今天是哪天"：凌晨那段算不算前一天只能有一处判。
     val dayBoundary: DayBoundary by lazy { DayBoundary(db.dailyLoopDao(), db.reviewLogDao()) }
+    val scheduleService: ScheduleService by lazy {
+        ScheduleService(db.wordDao(), db.reviewLogDao(), scheduler, dayBoundary, db)
+    }
     val dailyLoopService: DailyLoopService by lazy {
         DailyLoopService(db.dailyLoopDao(), db.reviewLogDao(), db.wordDao(), boundary = dayBoundary)
     }
@@ -131,7 +131,8 @@ class AppContainer(context: Context) {
     }
     val quizResumeStore: QuizResumeStore by lazy { QuizResumeStore(db.quizSessionDao()) }
     // 做完的每一组另留一行：会话表结束时整行删掉，不留底就没人知道自己破过什么纪录。
-    val quizRunStore: QuizRunStore by lazy { QuizRunStore(db.quizRunDao()) }
+    // 巅峰分的涨跌要读复习历史，所以这一行顺手把历史也带上。
+    val quizRunStore: QuizRunStore by lazy { QuizRunStore(db.quizRunDao(), db.reviewHistoryDao()) }
     // 出题素材跟着"这个词"走，不跟着词库那一行走，所以一个包可以先装进机器、词以后才进词库。
     val materialRepository: MaterialRepository by lazy { MaterialRepository(db, dictionary) }
     // 素材包在 GitHub 上分片放着，取回来一片一片验过校验值才进库；本机导入一直是退路。
@@ -194,7 +195,8 @@ class AppContainer(context: Context) {
             ),
             store = roommateAssetStore,
             streakProvider = { now ->
-                val queue = scheduleService.todaysQueue(now, prefs.dailyNewLimit)
+                // 与今日页同一个口径：喂给 info 的到期数就是首页那一个"今天还没碰的"。
+                val queue = scheduleService.pendingQueue(now, prefs.dailyNewLimit)
                 dailyLoopService.info(now, queue.reviewWords.size + queue.newWords.size).streakDays
             },
         )

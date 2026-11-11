@@ -8,6 +8,7 @@ import com.immerlex.core.db.ImmerlexDatabase
 import com.immerlex.core.db.LOG_KIND_ATTEMPT
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
 import com.immerlex.core.db.PRE_DUE_LEGACY
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
@@ -66,6 +67,8 @@ class ScheduleService(
     private val wordDao: WordDao,
     private val logDao: ReviewLogDao,
     private val scheduler: Scheduler,
+    /** "今天"从哪一秒开始：凌晨那段可能还算前一天，与今日页、测验同一个判定。 */
+    private val boundary: DayBoundary,
     /** 生产环境传入，把"改卡片 + 写日志"放进同一个 Room 事务；无库的单测可省略。 */
     private val database: ImmerlexDatabase? = null,
 ) : WordQueue {
@@ -197,11 +200,30 @@ class ScheduleService(
     }
 
     /**
-     * 今日页、生成器、设置页共用这一个数：新词被每日上限截断之后，今天到底还有几个词要读。
-     * 各算各的话，首页会说"还有 40 个"，而生成的章节只塞了 25 个。
+     * 首页与提醒看的是这一份：到期词里**今天还没碰过的**。
+     * 测验答对只攒一条 attempt、不动卡片，词在库里照样是到期，但今天确实过了一轮，
+     * 不该继续挂在"今日到期"上压人（用户 v4.1 第一条）。
+     * 章节生成仍用 [todaysQueue] 的原始队列——今天测过的词照样能复现在正文里。
+     */
+    suspend fun pendingQueue(now: Instant, dailyNewLimit: Int): TodayQueue {
+        val handled = handledWordIds(now)
+        val queue = todaysQueue(now, dailyNewLimit)
+        return TodayQueue(
+            reviewWords = queue.reviewWords.filterNot { it.id in handled },
+            newWords = queue.newWords.filterNot { it.id in handled },
+        )
+    }
+
+    /** 今天碰过的词：真回忆过，或被测验写过任意一条记录（含没攒满的 attempt）。 */
+    suspend fun handledWordIds(now: Instant): Set<Long> =
+        logDao.handledWordIdsSince(LOG_SOURCE_QUIZ, boundary.startOf(now)).toSet()
+
+    /**
+     * 提醒文案里的"还有几个词到期"：按 [pendingQueue]，今天测过的词不再算进来。
+     * 生成章节喂的是 [todaysQueue] 那份原始队列，两边不是同一个数，也不该是。
      */
     suspend fun todayDueCount(now: Instant, dailyNewLimit: Int): Int =
-        todaysQueue(now, dailyNewLimit).let { it.reviewWords.size + it.newWords.size }
+        pendingQueue(now, dailyNewLimit).let { it.reviewWords.size + it.newWords.size }
 
     private suspend fun record(
         word: WordEntity,

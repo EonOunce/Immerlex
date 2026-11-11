@@ -73,7 +73,8 @@ private val PosterMeta = Color(0xFF63677A)
 private val PosterRule = Color(0xFFD9D6CD)
 
 /**
- * 战绩炫耀卡：与今日报告卡同一种纸色海报，只是把主角换成"战斗力"这一数字。
+ * 战绩炫耀卡：与今日报告卡同一种纸色海报，主角只有段位这一个称号。
+ * 巅峰分在下面那三个数之后留一行小字，不再自己占一个大字号——一张卡不能有两个人说话。
  * 预览即导出的那张位图，不另画缩放版；深色主题下正文仍钉死墨色。
  */
 @Composable
@@ -190,7 +191,7 @@ private fun StatsCard(report: RetentionReport, modifier: Modifier = Modifier) {
         ) {
             PosterHeader()
             // 空白摊开匀着留，而不是全堆在页脚上面一条：这张卡的内容天生就比今日报告卡少。
-            Spacer(Modifier.height(56.dp))
+            Spacer(Modifier.height(72.dp))
             Column {
                 Text(
                     stringResource(R.string.stats_rank_label),
@@ -198,34 +199,24 @@ private fun StatsCard(report: RetentionReport, modifier: Modifier = Modifier) {
                     color = PosterMeta,
                     letterSpacing = 2.sp,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
                 Text(
                     rankTitle(report.rank),
-                    fontSize = 88.sp,
-                    lineHeight = 88.sp,
+                    fontSize = 128.sp,
+                    lineHeight = 128.sp,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Black,
                 )
             }
-            Spacer(Modifier.height(48.dp))
-            Row {
-                Text(
-                    stringResource(R.string.share_card_strength),
-                    fontSize = 96.sp,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.alignByBaseline(),
-                )
-                Text(
-                    report.strength.toString(),
-                    fontSize = 240.sp,
-                    lineHeight = 196.sp,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.padding(start = 24.dp).alignByBaseline(),
-                )
-            }
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(24.dp))
+            Text(
+                rankNextLine(report.rank),
+                fontSize = 28.sp,
+                color = PosterMeta,
+            )
+            // 战斗力那一格删掉后，卡上的字比原来少了一大截。剩下的空白分成两份匀着留——
+            // 全堆在中间会把它劈成上下两张不相干的纸。
+            Spacer(Modifier.weight(1f))
             Box(Modifier.fillMaxWidth().height(1.dp).background(PosterRule))
             Spacer(Modifier.height(36.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(74.dp)) {

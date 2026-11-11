@@ -23,8 +23,9 @@ data class TodayTally(
  * 今日页的唯一取数入口（docs/adr/0006 第 1 条）：把已经存在的事实拼成 [DailyInfo]，
  * 并顺手记下两件过后查不到的事——今天的到期词清空了、今天用掉了本周的补卡。
  *
- * [dueCount] 由调用方从 [ScheduleService.todaysQueue] 传来，而不是在这里另算一遍，
- * 这样阅读页头部和今日页永远说同一个数。
+ * [dueCount] 由调用方从 [ScheduleService.pendingQueue] 传来，而不是在这里另算一遍，
+ * 这样阅读页头部和今日页永远说同一个数。它认"今天碰过"，所以测完一组就算清掉一部分到期，
+ * 凌晨宽限也就当场结束。
  */
 class DailyLoopService(
     private val loopDao: DailyLoopDao,

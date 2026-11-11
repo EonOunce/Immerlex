@@ -1,9 +1,12 @@
 package com.immerlex.core.schedule
 
+import com.immerlex.core.db.LOG_SOURCE_QUIZ
+import com.immerlex.core.db.LOG_SOURCE_READER
 import com.immerlex.core.db.RecallEventRow
 import com.immerlex.core.fsrs.Rating
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,12 +17,15 @@ class PeakScoreTest {
         rating: Rating = Rating.GOOD,
         difficulty: Double = 5.0,
         scheduledDays: Int = 0,
+        source: String = "quiz",
+        epochSec: Long = 0,
     ) = RecallEventRow(
         wordId = wordId,
         rating = rating.value,
-        source = "quiz",
+        source = source,
         difficulty = difficulty,
         scheduledDays = scheduledDays,
+        epochSec = epochSec,
     )
 
     @Test
@@ -105,5 +111,51 @@ class PeakScoreTest {
     fun theScoreNeedsEnoughHistoryToBeCalledAPeak() {
         assertFalse(PeakScoreReplay.replay(List(PeakScoreReplay.MIN_SAMPLES - 1) { event(wordId = it.toLong()) }).usable)
         assertTrue(PeakScoreReplay.replay(List(PeakScoreReplay.MIN_SAMPLES) { event(wordId = it.toLong()) }).usable)
+    }
+
+    @Test
+    fun theTrajectoryEndsWhereTheReplayDoes() {
+        val events = List(6) { index -> event(wordId = index.toLong(), scheduledDays = index) }
+        val steps = PeakScoreReplay.trajectory(events)
+
+        assertEquals(events.size, steps.size)
+        assertEquals("按周折起来的每一步，最后要落在同一个数上", PeakScoreReplay.replay(events).current, steps.last())
+    }
+
+    @Test
+    fun aGroupIsChargedOnlyForItsOwnRecalls() {
+        val before = List(PeakScoreReplay.MIN_SAMPLES) { index -> event(wordId = index.toLong(), epochSec = 100L + index) }
+        // 这一组的时间窗里还夹着一笔读小说记的账：两边都有，减下来正好抵消。
+        val inWindow = before +
+            event(wordId = 90, rating = Rating.AGAIN, source = LOG_SOURCE_QUIZ, epochSec = 300L) +
+            event(wordId = 91, source = LOG_SOURCE_READER, epochSec = 310L)
+
+        val change = PeakScoreReplay.groupChange(inWindow, startedAtSec = 200L)
+        val expected = PeakScoreReplay.replay(inWindow).current -
+            PeakScoreReplay.replay(before + event(wordId = 91, source = LOG_SOURCE_READER, epochSec = 310L)).current
+
+        assertEquals("只把这一组自己那笔记分的题算在它头上", expected, change)
+    }
+
+    @Test
+    fun aGroupThatWroteNoRealRecallChangesNothing() {
+        val all = List(PeakScoreReplay.MIN_SAMPLES) { index -> event(wordId = index.toLong(), epochSec = 100L + index) }
+
+        assertEquals(
+            "四选一全攒着当 attempt，库里没多一条真记账，这一组就是一个字都没动",
+            0,
+            PeakScoreReplay.groupChange(all, startedAtSec = 500L),
+        )
+    }
+
+    @Test
+    fun aGroupSaysNothingWhenTheScoreOrTheStartIsMissing() {
+        val thin = List(PeakScoreReplay.MIN_SAMPLES - 2) { index -> event(wordId = index.toLong(), epochSec = 100L + index) } +
+            event(wordId = 90, epochSec = 300L)
+        val enough = List(PeakScoreReplay.MIN_SAMPLES) { index -> event(wordId = index.toLong(), epochSec = 100L + index) } +
+            event(wordId = 90, epochSec = 300L)
+
+        assertNull("记录还不够多，这个分本身就没有意义", PeakScoreReplay.groupChange(thin, startedAtSec = 200L))
+        assertNull("升级前留下的会话没记开始时刻，不猜一个数顶上", PeakScoreReplay.groupChange(enough, startedAtSec = 0L))
     }
 }

@@ -38,6 +38,8 @@ data class HomeState(
     val quizzedToday: List<String> = emptyList(),
     val quizCount: Int = 0,
     val quizResumable: Boolean = false,
+    val reviewCount: Int = 0,
+    val reviewResumable: Boolean = false,
     val earlyCount: Int = 0,
     val trickyCount: Int = 0,
     val roomMet: Boolean = false,
@@ -47,8 +49,9 @@ data class HomeState(
 )
 
 /**
- * 今日任务页。数字全部来自 [ScheduleService.todayDueCount] 与 [DailyLoopService]，
- * 也就是生成章节时用的同一份今日队列——首页不许另算一套"还剩几个词"。
+ * 今日任务页。数字全部来自 [ScheduleService.pendingQueue] 与 [DailyLoopService]：
+ * 首页那个"今日到期"只数今天还没碰过的词，测过一轮的当场减掉。
+ * 章节生成仍用原始到期队列，两边不是同一个数，也不该是。
  */
 class HomeViewModel(
     private val dailyLoop: DailyLoopService,
@@ -78,7 +81,8 @@ class HomeViewModel(
     private suspend fun load() {
         val now = Instant.now()
         val limit = prefs.dailyNewLimit
-        val queue = schedule.todaysQueue(now, limit)
+        // 首页那个数是"今天还没碰的"：测过一轮的词当场从到期里减掉，即使它明天照样到期。
+        val queue = schedule.pendingQueue(now, limit)
         val info = dailyLoop.info(now, queue.reviewWords.size + queue.newWords.size)
         val tally = dailyLoop.todayTally(now)
         val latest = chapterDao.latest(prefs.genre)
@@ -99,11 +103,14 @@ class HomeViewModel(
             learnedToday = tally.learned,
             recalledToday = tally.recalled,
             quizzedToday = tally.quizzed,
-            // 入口数字与测验自己的候选集合同源：今天到期 + 今天学过但还没回忆的词。
+            // 入口数字与测验自己的候选集合同源：今天到期或今天刚学过、且今天还没碰过的词。
             // 一组最多 40 题，入口显示的就是这一组能测多少，不是候选池总数。
             quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),
             // 答完最后一题却没点完成时候选已经清零，入口只有靠存下的会话才还能进去。
             quizResumable = resume.has(QuizMode.DUE),
+            // 今日复习：今天已经测过、还没真认出来的那些词，和到期组同一批，只是换了扇门。
+            reviewCount = quiz.reviewCandidates(now).size.coerceAtMost(QuizService.SESSION_LIMIT),
+            reviewResumable = resume.has(QuizMode.REVIEW),
             // 提前复习一组 5 / 10 / 20 个（设置页选）：入口数字是这一组能练多少，不是学过的词总数。
             earlyCount = quiz.earlyCandidates(now).size.coerceAtMost(prefs.earlyGroupSize),
             // 易错练习没标过的词就整条入口不出现，所以这里只报真实可练的个数。

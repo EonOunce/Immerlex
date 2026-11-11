@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,7 +73,7 @@ fun StatsScreen(vm: StatsViewModel, onTakeRevenge: () -> Unit) {
             )
         } else {
             StatsHero(state.report, accent)
-            RankCard(state.report.rank, state.report.peak)
+            DuelCard(state.report.duel, state.report.peak)
             SecondaryRow(state.report)
             if (state.report.rivals.isNotEmpty()) {
                 RevengeRow(state.report.rivals.size, onTakeRevenge)
@@ -90,6 +89,7 @@ fun StatsScreen(vm: StatsViewModel, onTakeRevenge: () -> Unit) {
     }
 }
 
+/** 这一栏只有一个主角：段位。巅峰分只在这张卡右上角留一行小字，其余都在下面那一张。 */
 @Composable
 private fun StatsHero(report: RetentionReport, accent: Color) {
     Column(
@@ -101,79 +101,75 @@ private fun StatsHero(report: RetentionReport, accent: Color) {
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            stringResource(R.string.stats_hero_label),
-            style = MaterialTheme.typography.titleMedium,
-            color = ImmerlexColors.Ink.copy(alpha = 0.72f),
-        )
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (report.canRecall == 0) "≈0" else report.canRecall.toString(),
-                fontSize = 72.sp,
-                lineHeight = 68.sp,
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.Black,
-                color = ImmerlexColors.Ink,
-                modifier = Modifier.alignByBaseline(),
-            )
-            Text(
-                stringResource(R.string.stats_words_unit),
-                fontSize = 24.sp,
-                color = ImmerlexColors.Ink.copy(alpha = 0.8f),
-                modifier = Modifier.padding(start = 8.dp).alignByBaseline(),
-            )
-            Spacer(Modifier.weight(1f))
-            StrengthPill(report.strength)
-        }
-        // 以前最好的一天是影子表里留下的那一格：没有对照就不说这句话。
-        if (report.bestDay > 0) {
-            Text(
-                if (report.canRecall > report.bestDay) stringResource(R.string.stats_beat_best)
-                else stringResource(R.string.stats_best_day, report.bestDay),
-                style = MaterialTheme.typography.bodySmall,
+                stringResource(R.string.stats_rank_label),
+                style = MaterialTheme.typography.titleMedium,
                 color = ImmerlexColors.Ink.copy(alpha = 0.72f),
             )
+            Spacer(Modifier.weight(1f))
+            if (report.peak.usable) {
+                Text(
+                    stringResource(R.string.stats_peak_badge, report.peak.current),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ImmerlexColors.Ink.copy(alpha = 0.72f),
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun StrengthPill(strength: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            "$strength",
-            fontSize = 34.sp,
+            rankTitle(report.rank),
             fontFamily = FontFamily.Serif,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Black,
+            fontSize = 44.sp,
+            lineHeight = 44.sp,
             color = ImmerlexColors.Ink,
         )
         Text(
-            stringResource(R.string.stats_strength_label),
-            style = MaterialTheme.typography.labelSmall,
-            color = ImmerlexColors.Ink.copy(alpha = 0.7f),
+            rankNextLine(report.rank),
+            style = MaterialTheme.typography.bodySmall,
+            color = ImmerlexColors.Ink.copy(alpha = 0.72f),
         )
     }
 }
 
 @Composable
 private fun SecondaryRow(report: RetentionReport) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        StatCard(
-            modifier = Modifier.weight(1f),
-            label = stringResource(R.string.stats_mastered_label),
-            value = "${report.mastered}",
-            unit = stringResource(R.string.stats_words_unit),
-        )
-        StatCard(
-            modifier = Modifier.weight(1f),
-            label = stringResource(R.string.stats_nemesis_label),
-            word = report.mostFailedWord,
-            gloss = report.mostFailedGloss,
-            detail = if (report.mostFailedLapses > 0) stringResource(R.string.stats_nemesis_count, report.mostFailedLapses) else null,
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = stringResource(R.string.stats_can_recall_label),
+                value = report.canRecall.toString(),
+                unit = stringResource(R.string.stats_words_unit),
+                // 以前最好的一天是影子表里留下的那一格：没有对照就不说这句话。
+                detail = if (report.bestDay > 0) {
+                    if (report.canRecall > report.bestDay) stringResource(R.string.stats_beat_best)
+                    else stringResource(R.string.stats_best_day, report.bestDay)
+                } else {
+                    null
+                },
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                label = stringResource(R.string.stats_mastered_label),
+                value = "${report.mastered}",
+                unit = stringResource(R.string.stats_words_unit),
+            )
+        }
+        if (report.mostFailedWord != null) {
+            StatCard(
+                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.stats_nemesis_label),
+                word = report.mostFailedWord,
+                gloss = report.mostFailedGloss,
+                detail = if (report.mostFailedLapses > 0) {
+                    stringResource(R.string.stats_nemesis_count, report.mostFailedLapses)
+                } else {
+                    null
+                },
+                detailColor = ImmerlexColors.Rust,
+            )
+        }
     }
 }
 
@@ -186,6 +182,7 @@ private fun StatCard(
     word: String? = null,
     gloss: String? = null,
     detail: String? = null,
+    detailColor: Color = ImmerlexColors.Meta,
 ) {
     Column(
         modifier = modifier
@@ -224,11 +221,11 @@ private fun StatCard(
             if (!gloss.isNullOrBlank()) {
                 Text(gloss, style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Meta)
             }
-            if (detail != null) {
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Rust)
-            }
         } else {
             Text("—", style = MaterialTheme.typography.headlineMedium, color = ImmerlexColors.Meta)
+        }
+        if (detail != null) {
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = detailColor)
         }
     }
 }

@@ -56,6 +56,7 @@ fun HomeScreen(
     vm: HomeViewModel,
     onStartReading: () -> Unit,
     onStartQuiz: () -> Unit,
+    onStartReview: () -> Unit,
     onStartEarly: () -> Unit,
     onStartTricky: () -> Unit,
     onOpenRoom: () -> Unit,
@@ -86,7 +87,12 @@ fun HomeScreen(
 
         HeroCard(state, accent, onStartReading)
 
-        SecondaryStack(state, onStartQuiz, onStartEarly, onStartTricky)
+        QuizEntries(
+            state = state,
+            onStartQuiz = onStartQuiz,
+            onStartReview = onStartReview,
+            onStartEarly = onStartEarly,
+        )
 
         RoommateNote(state, onOpenRoom)
 
@@ -94,6 +100,8 @@ fun HomeScreen(
 
         RecentCard(days = state.heat, trend = state.trend)
         MakeupLine(state)
+
+        TrickyEntry(state, onStartTricky)
     }
 
     if (showShare) {
@@ -190,63 +198,84 @@ private fun StreakStamp(streak: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** 测验与提前复习压成一对略歪、彼此叠靠的白卡——第二层，比主角小一圈、也不铺色。 */
+/**
+ * 今日页的四个测验入口。
+ * 首测与补测是一对略歪、彼此叠靠的白卡——它们是同一天里连着发生的两件事；
+ * 提前复习自成一张横卡，它测的根本不是今天到期的词；
+ * 易错练习压到整页最底下，隔开一整行，它是"今天还想再多练一点"时才点的东西，
+ * 挨着主入口只会被误触。
+ */
 @Composable
-private fun SecondaryStack(
+private fun QuizEntries(
     state: HomeState,
     onStartQuiz: () -> Unit,
+    onStartReview: () -> Unit,
     onStartEarly: () -> Unit,
-    onStartTricky: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy((-14).dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.weight(1f).rotate(-1.4f)) {
-            SecondaryCard(
-                label = stringResource(R.string.home_early_card),
-                value = if (state.earlyCount > 0) stringResource(R.string.home_early_card_count, state.earlyCount) else stringResource(R.string.home_early_card_none),
-                dot = ImmerlexColors.Rust,
-                enabled = !state.loading && state.earlyCount > 0,
-                onClick = onStartEarly,
-            )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy((-14).dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f).rotate(-1.4f)) {
+                EntryCard(
+                    label = stringResource(R.string.home_quiz_card),
+                    value = when {
+                        state.quizResumable -> stringResource(R.string.home_quiz_card_resume)
+                        state.quizCount > 0 -> stringResource(R.string.home_quiz_card_count, state.quizCount)
+                        else -> stringResource(R.string.home_quiz_card_empty)
+                    },
+                    dot = MaterialTheme.colorScheme.primary,
+                    enabled = !state.loading && (state.quizCount > 0 || state.quizResumable),
+                    onClick = onStartQuiz,
+                )
+            }
+            Box(Modifier.weight(1f).rotate(1.4f)) {
+                EntryCard(
+                    label = stringResource(R.string.home_review_card),
+                    value = when {
+                        state.reviewResumable -> stringResource(R.string.home_review_card_resume)
+                        state.reviewCount > 0 -> stringResource(R.string.home_review_card_count, state.reviewCount)
+                        else -> stringResource(R.string.home_review_card_empty)
+                    },
+                    dot = ImmerlexColors.Rust,
+                    enabled = !state.loading && (state.reviewCount > 0 || state.reviewResumable),
+                    onClick = onStartReview,
+                )
+            }
         }
-        Box(Modifier.weight(1f).rotate(1.4f)) {
-            SecondaryCard(
-                label = stringResource(R.string.home_quiz_card),
-                value = when {
-                    state.quizResumable -> stringResource(R.string.home_quiz_card_resume)
-                    state.quizCount > 0 -> stringResource(R.string.home_quiz_card_count, state.quizCount)
-                    else -> stringResource(R.string.home_quiz_card_empty)
-                },
-                dot = MaterialTheme.colorScheme.primary,
-                enabled = !state.loading && (state.quizCount > 0 || state.quizResumable),
-                onClick = onStartQuiz,
-                // 到期词测完了还能只练易错词，今天这一次练习就不用去阅读页点词。
-                extra = if (state.trickyCount > 0) {
-                    SecondaryAction(
-                        text = stringResource(R.string.home_tricky_card, state.trickyCount),
-                        onClick = onStartTricky,
-                    )
-                } else {
-                    null
-                },
-            )
-        }
+        EntryCard(
+            label = stringResource(R.string.home_early_card),
+            value = if (state.earlyCount > 0) stringResource(R.string.home_early_card_count, state.earlyCount) else stringResource(R.string.home_early_card_none),
+            dot = MaterialTheme.colorScheme.primary,
+            enabled = !state.loading && state.earlyCount > 0,
+            onClick = onStartEarly,
+        )
     }
 }
 
-private class SecondaryAction(val text: String, val onClick: () -> Unit)
+/** 一个都没标的时候整块不出现，包括隔开它的那一整行空白。 */
+@Composable
+private fun TrickyEntry(state: HomeState, onStartTricky: () -> Unit) {
+    if (state.trickyCount <= 0) return
+    Spacer(Modifier.height(26.dp))
+    EntryCard(
+        label = stringResource(R.string.home_tricky_card),
+        value = stringResource(R.string.home_tricky_card_count, state.trickyCount),
+        dot = ImmerlexColors.Rust,
+        enabled = true,
+        onClick = onStartTricky,
+    )
+}
 
 @Composable
-private fun SecondaryCard(
+private fun EntryCard(
     label: String,
     value: String,
     dot: Color,
     enabled: Boolean,
     onClick: () -> Unit,
-    extra: SecondaryAction? = null,
 ) {
     Column(
         modifier = Modifier
@@ -267,14 +296,6 @@ private fun SecondaryCard(
             fontWeight = FontWeight.Bold,
             color = if (enabled) MaterialTheme.colorScheme.onSurface else ImmerlexColors.Meta,
         )
-        extra?.let { action ->
-            Text(
-                action.text,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable(onClick = action.onClick),
-            )
-        }
     }
 }
 

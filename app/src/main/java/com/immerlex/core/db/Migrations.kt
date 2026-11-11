@@ -351,6 +351,21 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
     }
 }
 
+/**
+ * v18 -> v19：给做完的每一组补一列"这一组让巅峰分动了多少"。
+ *
+ * 巅峰分本身不用留：拿 `review_logs` 重放一遍就回来了。但**一组自己的功过**回不来——
+ * 它要的是"这一组写下的那几笔记在前面、其余照旧"两次相减，而同一天里再去阅读页记几笔，
+ * 事后重放就分不清哪一笔属于哪一组了。所以当时算出来就落在这一行上。
+ *
+ * 可空：老行没算过，界面那行干脆不说涨跌，不拿 0 冒充"这一组不痛不痒"。
+ */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `quiz_runs` ADD COLUMN `peakChange` INTEGER")
+    }
+}
+
 val MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -369,4 +384,5 @@ val MIGRATIONS = arrayOf(
     MIGRATION_15_16,
     MIGRATION_16_17,
     MIGRATION_17_18,
+    MIGRATION_18_19,
 )

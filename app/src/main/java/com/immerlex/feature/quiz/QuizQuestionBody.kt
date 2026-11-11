@@ -69,6 +69,7 @@ internal fun QuestionBody(
                 QuizMode.TRICKY -> Badge(stringResource(R.string.quiz_tricky_badge))
                 QuizMode.NEMESIS -> Badge(stringResource(R.string.quiz_nemesis_badge))
                 QuizMode.DUE -> Unit
+                QuizMode.REVIEW -> Badge(stringResource(R.string.quiz_review_badge))
             }
             if (state.practice) Badge(stringResource(R.string.quiz_retry_badge))
         }

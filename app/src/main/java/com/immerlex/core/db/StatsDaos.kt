@@ -18,7 +18,7 @@ interface ReviewHistoryDao {
     @Query(
         "SELECT l.wordId AS wordId, l.rating AS rating, l.source AS source, " +
             "COALESCE(l.preDifficulty, w.difficulty, 5.0) AS difficulty, " +
-            "l.scheduledDays AS scheduledDays " +
+            "l.scheduledDays AS scheduledDays, l.reviewEpochSec AS epochSec " +
             "FROM review_logs l LEFT JOIN words w ON w.id = l.wordId " +
             "WHERE l.kind = 'recall' ORDER BY l.reviewEpochSec ASC, l.id ASC",
     )
@@ -31,6 +31,8 @@ data class RecallEventRow(
     val source: String,
     val difficulty: Double,
     val scheduledDays: Int,
+    /** 这一笔是什么时候记的：影子对决按周把它折起来，一组测验的涨跌按它的起止把它认出来。 */
+    val epochSec: Long,
 )
 
 /**

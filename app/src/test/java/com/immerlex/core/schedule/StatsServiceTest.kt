@@ -18,6 +18,8 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -75,8 +77,15 @@ class StatsServiceTest {
         )
     }
 
-    private fun event(wordId: Long, rating: Rating, scheduledDays: Int = 0) =
-        RecallEventRow(wordId, rating.value, "test", 5.0, scheduledDays)
+    private fun event(wordId: Long, rating: Rating, scheduledDays: Int = 0, daysAgo: Long = 0) =
+        RecallEventRow(
+            wordId,
+            rating.value,
+            "test",
+            5.0,
+            scheduledDays,
+            now.minus(daysAgo, ChronoUnit.DAYS).epochSecond,
+        )
 
     @Test
     fun anEmptyNotebookStillHasAName() = runBlocking {
@@ -87,6 +96,8 @@ class StatsServiceTest {
         assertEquals(0, report.peak.samples)
         assertFalse(report.peak.usable)
         assertTrue(report.rivals.isEmpty())
+        assertNull("还没打过，两边都没有", report.duel.thisWeek)
+        assertNull(report.duel.lastWeek)
     }
 
     @Test
@@ -107,7 +118,6 @@ class StatsServiceTest {
         assertEquals("宿敌", report.mostFailedGloss)
         assertEquals(7, report.mostFailedLapses)
         assertTrue("可回忆数落在已学词数之内", report.canRecall in 0..3)
-        assertTrue(report.strength in 0..100)
         assertEquals("段位认的就是那个已掌握数", RankTier.WHITE, report.rank.tier)
         assertEquals(19, report.rank.toNext)
     }
@@ -179,5 +189,32 @@ class StatsServiceTest {
 
         assertEquals(2, report.peak.samples)
         assertFalse("记录还不够多，界面不该管它叫巅峰", report.peak.usable)
+    }
+
+    @Test
+    fun theDuelFoldsThatSameReplayIntoWeeks() = runBlocking {
+        val ctx = Ctx()
+        val harbour = ctx.words.insert(studied("harbour", stability = 20.0, intervalDays = 20))
+        // 上周打过两场，这周还没开场。
+        ctx.history.items += listOf(
+            event(harbour, Rating.GOOD, scheduledDays = 5, daysAgo = 8),
+            event(harbour, Rating.GOOD, scheduledDays = 6, daysAgo = 7),
+        )
+
+        val lastWeekOnly = ctx.service.report(now)
+        assertNotNull(lastWeekOnly.duel.lastWeek)
+        assertNull("这周一条没记，就不能说这周打过", lastWeekOnly.duel.thisWeek)
+        assertNull("只有一边就没得比，界面那句比上周要等两边都在", lastWeekOnly.duel.change)
+
+        ctx.history.items += event(harbour, Rating.GOOD, scheduledDays = 7, daysAgo = 1)
+        val fought = ctx.service.report(now)
+
+        assertNotNull(fought.duel.thisWeek)
+        assertTrue("这一周的新账把最高抬上去了", (fought.duel.thisWeek ?: 0) > (fought.duel.lastWeek ?: 0))
+        assertEquals(
+            "涨跌就是这两周各自最高相减，不另算一套",
+            (fought.duel.thisWeek ?: 0) - (fought.duel.lastWeek ?: 0),
+            fought.duel.change,
+        )
     }
 }

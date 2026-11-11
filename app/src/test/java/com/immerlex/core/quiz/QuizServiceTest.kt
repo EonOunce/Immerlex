@@ -51,26 +51,30 @@ class QuizServiceTest {
         enricher: QuizEnricher? = null,
         material: QuizMaterialStore? = null,
         history: FakeReviewHistoryDao = FakeReviewHistoryDao(),
-    ): QuizService = QuizService(
-        wordDao = words,
-        logDao = logs,
-        chapterDao = FakeChapterDao(),
-        trickyDao = tricky,
-        historyDao = history,
-        schedule = ScheduleService(
+    ): QuizService {
+        val boundary = DayBoundary(FakeDailyLoopDao(), logs, ZoneId.of("Asia/Shanghai"))
+        return QuizService(
             wordDao = words,
             logDao = logs,
-            scheduler = Scheduler(
-                learningSteps = emptyList(),
-                relearningSteps = emptyList(),
-                maximumInterval = 3650,
-                enableFuzzing = false,
+            chapterDao = FakeChapterDao(),
+            trickyDao = tricky,
+            historyDao = history,
+            schedule = ScheduleService(
+                wordDao = words,
+                logDao = logs,
+                scheduler = Scheduler(
+                    learningSteps = emptyList(),
+                    relearningSteps = emptyList(),
+                    maximumInterval = 3650,
+                    enableFuzzing = false,
+                ),
+                boundary = boundary,
             ),
-        ),
-        enricher = enricher,
-        material = material,
-        boundary = DayBoundary(FakeDailyLoopDao(), logs, ZoneId.of("Asia/Shanghai")),
-    )
+            enricher = enricher,
+            material = material,
+            boundary = boundary,
+        )
+    }
 
     @Test
     fun dueCandidatesAreDueWordsPlusWordsLearnedTodayMinusRecalledToday() = runBlocking {
@@ -164,6 +168,72 @@ class QuizServiceTest {
         val last = logs.items.last()
         assertEquals(LOG_KIND_RECALL, last.kind)
         assertEquals(Rating.AGAIN.value, last.rating)
+    }
+
+    @Test
+    fun reviewKeepsWhatTheQuizHasNotSettledTodayAndDropsWhatItDid() = runBlocking {
+        val (service, words, logs) = parts()
+        val attempted = seedDue(words, logs, "harbour")
+        logs.insert(quizLog(attempted, LOG_KIND_ATTEMPT, Rating.GOOD, now.minusSeconds(600)))
+        val failed = seedDue(words, logs, "kiln")
+        logs.insert(quizLog(failed, LOG_KIND_RECALL, Rating.AGAIN, now.minusSeconds(500)))
+        val graduated = seedDue(words, logs, "quay")
+        logs.insert(quizLog(graduated, LOG_KIND_RECALL, Rating.GOOD, now.minusSeconds(400)))
+        val recalledButNotQuizzed = seedDue(words, logs, "balcony")
+        logs.insert(log(recalledButNotQuizzed, LOG_KIND_RECALL, now.minusSeconds(300)))
+
+        val ids = service.reviewCandidates(now).map { it.id }.toSet()
+
+        assertEquals("三次认出攒满才算清账：攒着的与答错的都还得补", setOf(attempted, failed), ids)
+    }
+
+    @Test
+    fun reviewKeepsWordsLearnedTodayEvenThoughTheirCardsAreNotDue() = runBlocking {
+        val (service, words, logs) = parts()
+        val fresh = seedFuture(words, logs, "lantern", daysAhead = 2, learnedAt = now.minusSeconds(900))
+        logs.insert(quizLog(fresh, LOG_KIND_ATTEMPT, Rating.GOOD, now.minusSeconds(600)))
+
+        assertEquals("这一格认的是今天的记录，不是卡片到没到期", setOf(fresh), service.reviewCandidates(now).map { it.id }.toSet())
+    }
+
+    @Test
+    fun planReviewBuildsOneGroupFromWordsQuizzedToday() = runBlocking {
+        val (service, words, logs) = parts()
+        val quizzed = seedDue(words, logs, "harbour")
+        logs.insert(quizLog(quizzed, LOG_KIND_ATTEMPT, Rating.GOOD, now.minusSeconds(600)))
+        seedDue(words, logs, "kiln")
+        seedDue(words, logs, "balcony")
+
+        val session = service.planReview(now, seed = 11)
+
+        assertEquals(QuizMode.REVIEW, session.mode)
+        assertEquals(setOf(quizzed), session.wordIds)
+        assertEquals(1, session.questions.size)
+    }
+
+    @Test
+    fun planReviewIsAnEmptySessionWhenNothingWasQuizzedToday() = runBlocking {
+        val (service, words, logs) = parts()
+        seedDue(words, logs, "harbour")
+        seedDue(words, logs, "kiln")
+
+        val session = service.planReview(now, seed = 11)
+
+        assertEquals(QuizMode.REVIEW, session.mode)
+        assertTrue(session.questions.isEmpty())
+    }
+
+    @Test
+    fun dueCandidatesSkipWordsTheQuizAlreadyWentThroughToday() = runBlocking {
+        val (service, words, logs) = parts()
+        val quizzed = seedDue(words, logs, "harbour")
+        logs.insert(quizLog(quizzed, LOG_KIND_ATTEMPT, Rating.GOOD, now.minusSeconds(600)))
+        val untouched = seedDue(words, logs, "kiln")
+
+        val ids = service.dueCandidateIds(now, dailyNewLimit = 10)
+
+        assertFalse("今天测过一轮的词走「今日复习」，不再进首测", quizzed in ids)
+        assertTrue(untouched in ids)
     }
 
     @Test
@@ -544,7 +614,14 @@ class QuizServiceTest {
     }
 
     private fun recall(wordId: Long, rating: Rating) =
-        RecallEventRow(wordId = wordId, rating = rating.value, source = LOG_SOURCE_READER, difficulty = 5.0, scheduledDays = 1)
+        RecallEventRow(
+            wordId = wordId,
+            rating = rating.value,
+            source = LOG_SOURCE_READER,
+            difficulty = 5.0,
+            scheduledDays = 1,
+            epochSec = 0L,
+        )
 
     private fun material(word: String, collocations: String) =
         QuizMaterialEntity(word = word, collocations = collocations, updatedAtSec = 1)
@@ -632,5 +709,17 @@ class QuizServiceTest {
         elapsedDays = 0,
         scheduledDays = 3,
         kind = kind,
+    )
+
+    /** 测验入口写下的一条记录：`kind` 与评分分开给，攒着的 attempt 也写着 GOOD。 */
+    private fun quizLog(wordId: Long, kind: String, rating: Rating, at: Instant) = ReviewLogEntity(
+        wordId = wordId,
+        rating = rating.value,
+        source = LOG_SOURCE_QUIZ,
+        reviewEpochSec = at.epochSecond,
+        elapsedDays = 1,
+        scheduledDays = 3,
+        kind = kind,
+        questionType = "EN_ZH",
     )
 }

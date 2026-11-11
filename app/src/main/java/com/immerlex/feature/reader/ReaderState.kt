@@ -33,6 +33,7 @@ data class ReaderState(
     val title: String = "",
     val number: Int = 0,
     val kind: String = KIND_SERIAL,
+    /** 这一页属于哪一本连载；读短篇时为空，「写下一章」要续的那本仍留在 prefs 里。 */
     val book: String = "",
     val books: List<BookOption> = emptyList(),
     val shorts: List<ShortRow> = emptyList(),
@@ -85,7 +86,9 @@ internal fun ReaderState.showing(
     title = chapter?.title.orEmpty(),
     number = chapter?.number ?: 0,
     kind = chapter?.kind ?: KIND_SERIAL,
-    book = book,
+    // 短篇没有"书"：读它的时候 prefs.genre 还指着上一本连载（那是「写下一章」该续的那本），
+    // 直接递给界面就会让短篇顶栏挂上别的书的题材。
+    book = if (chapter?.kind == KIND_SHORT) "" else book,
     books = books,
     shorts = shorts,
     chapters = chapters,

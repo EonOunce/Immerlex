@@ -8,10 +8,12 @@ import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.fsrs.Scheduler
+import com.immerlex.testsupport.FakeDailyLoopDao
 import com.immerlex.testsupport.FakeReviewLogDao
 import com.immerlex.testsupport.FakeWordDao
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,6 +35,7 @@ class ScheduleServiceTest {
                     maximumInterval = 3650,
                     enableFuzzing = false,
                 ),
+                boundary = DayBoundary(FakeDailyLoopDao(), logs, ZoneId.of("UTC")),
             ),
             words,
             logs,
@@ -234,6 +237,50 @@ class ScheduleServiceTest {
     }
 
     @Test
+    fun aQuizAttemptTakesTheWordOutOfTodaysPendingButNotOutOfTheQueue() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-06-01T04:00:00Z")
+        val id = dueSinceYesterday(words, logs, "harbour", now)
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plusSeconds(3))
+
+        assertEquals("章节生成照旧看得见它：今天测过的词还能在正文里复现", 1, svc.todaysQueue(now, 10).reviewWords.size)
+        assertEquals("attempt 不动卡片，但今天确实过了一轮", 0, svc.pendingQueue(now, 10).reviewWords.size)
+        assertEquals(0, svc.todayDueCount(now, 10))
+    }
+
+    @Test
+    fun aWrongAnswerCountsAsTouchedTodayToo() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-06-01T04:00:00Z")
+        val id = dueSinceYesterday(words, logs, "kiln", now)
+
+        val wrong = svc.recognize(words.findById(id)!!, false, "quiz", now = now.plusSeconds(3))!!
+
+        assertEquals("答错写的是一条真记账，不是攒着的 attempt", LOG_KIND_RECALL, wrong.kind)
+        assertEquals("坏消息也算今天碰过它", setOf(id), svc.handledWordIds(now.plusSeconds(6)))
+    }
+
+    @Test
+    fun aWordLearnedInTheReaderHasNotBeenTouchedYet() = runBlocking {
+        val (svc, words, _) = parts()
+        val now = Instant.parse("2024-06-01T04:00:00Z")
+        val id = words.insert(WordEntity(word = "lantern", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now.minusSeconds(60))
+
+        assertEquals("学过一遍不等于今天碰过：它还没被回忆过一次", emptySet<Long>(), svc.handledWordIds(now))
+    }
+
+    @Test
+    fun aWordQuizzedYesterdayIsBackInTodaysPending() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-06-01T04:00:00Z")
+        val id = dueSinceYesterday(words, logs, "resin", now)
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.minus(1, ChronoUnit.DAYS))
+
+        assertEquals("昨天测过不算今天碰过：今天没认出来，它还是今天的活", 1, svc.pendingQueue(now, 10).reviewWords.size)
+    }
+
+    @Test
     fun firstCorrectRecognitionIsAnAttemptThatLeavesTheCardAlone() = runBlocking {
         val (svc, words, logs) = parts()
         val now = Instant.parse("2024-01-01T00:00:00Z")
@@ -347,6 +394,42 @@ class ScheduleServiceTest {
         val restored = svc.undo(good.logId, now.plus(10, ChronoUnit.SECONDS))!!
         assertEquals("撤销只看真实事件，attempt 不占 reps", afterLearn, restored.word)
         assertEquals(3, logs.items.size)
+    }
+
+    /**
+     * 一个早就排过、此刻正躺在到期队列里的词：库里有一条三天前的真记账，
+     * 所以测验对它记账不会被"没有记录"挡下。
+     */
+    private suspend fun dueSinceYesterday(
+        words: FakeWordDao,
+        logs: FakeReviewLogDao,
+        name: String,
+        now: Instant,
+    ): Long {
+        val id = words.insert(
+            WordEntity(
+                word = name,
+                source = "test",
+                createdAtSec = 0,
+                stability = 5.0,
+                difficulty = 6.0,
+                dueEpochSec = now.minus(1, ChronoUnit.HOURS).epochSecond,
+                lastReviewEpochSec = now.minus(3, ChronoUnit.DAYS).epochSecond,
+                fsrsState = FSRS_STATE_REVIEW,
+                reps = 2,
+                intervalDays = 3,
+            ),
+        )
+        logs.insert(
+            ReviewLogEntity(
+                wordId = id, rating = Rating.GOOD.value, source = SOURCE,
+                reviewEpochSec = now.minus(3, ChronoUnit.DAYS).epochSecond,
+                elapsedDays = 1, scheduledDays = 3,
+                preState = FSRS_STATE_REVIEW,
+                preDueEpochSec = now.minus(5, ChronoUnit.DAYS).epochSecond,
+            ),
+        )
+        return id
     }
 
     private suspend fun seed(words: FakeWordDao, word: String, dueInDays: Long? = null): Long {

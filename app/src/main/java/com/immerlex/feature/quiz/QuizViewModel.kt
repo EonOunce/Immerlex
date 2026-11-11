@@ -40,7 +40,6 @@ data class QuizState(
     val correct: Boolean = false,
     val correctCount: Int = 0,
     val roundTotal: Int = 0,
-    val wrongCount: Int = 0,
     val group: Int = 1,
     /** 有答错的词排在末尾重练：最后一题的按钮因此仍写"下一题"，点了不该以为会话结束。 */
     val practiceQueued: Boolean = false,
@@ -59,6 +58,13 @@ data class QuizState(
     val bestStreak: Int = 0,
     /** 结果页那句"破纪录"：这一组留底之后才知道，所以是 null 直到写完。 */
     val record: QuizRunSaved? = null,
+    /** 这组答错的词面：结果页下面那一列词墙，写完留底才摆出来。 */
+    val missed: List<String> = emptyList(),
+    /**
+     * 今天测过、还没真认出来的词有几个，决定结果页那颗主按钮是「再过一遍」还是「再测一组」。
+     * null 只在到期组与补测组出现：那几个词要查库才知道，数出来之前那颗按钮先不摆。
+     */
+    val reviewCount: Int? = null,
 ) {
     val answered: Boolean get() = chosen != null || doubt
     val isLast: Boolean get() = total > 0 && index >= total - 1
@@ -109,6 +115,8 @@ class QuizViewModel(
     private var practiceQuestions: List<QuizQuestion> = emptyList()
     private var excluded: Set<Long> = emptySet()
     private var started = false
+    /** 这一组是哪一秒开始摆到面前的：留底时按它把这一组自己写的几笔从历史里认出来。 */
+    private var startedAtSec = 0L
     private val saveLock = Mutex()
 
     /** 路由进入时调用一次；配置变更后重复调用不能把进度清掉。 */
@@ -211,38 +219,34 @@ class QuizViewModel(
         val current = _state.value
         if (current.phase != QuizPhase.DONE) return
         excluded = excluded + questions.map { it.wordId }
-        _state.value = current.fresh().copy(
+        startGroup(current.mode, current.group + 1)
+    }
+
+    /**
+     * 到期组结果页那句"把今天测过的词再过一遍"：就地换成今日复习那一组。
+     * 这些词今天已经测过一轮，认出闸门还差着次数，再过一遍正是它们今天该做的事。
+     */
+    fun review() {
+        val current = _state.value
+        if (current.phase != QuizPhase.DONE || (current.reviewCount ?: 0) <= 0) return
+        startGroup(QuizMode.REVIEW, current.group + 1)
+    }
+
+    private fun startGroup(mode: QuizMode, group: Int) {
+        _state.value = QuizState(
             phase = QuizPhase.LOADING,
+            mode = mode,
             stage = QuizStage.COLLECTING,
-            group = current.group + 1,
-            question = null,
-            index = 0,
-            total = 0,
-            correctCount = 0,
-            roundTotal = 0,
-            wrongCount = 0,
-            streak = 0,
-            bestStreak = 0,
-            record = null,
-            practice = false,
-            materialReady = 0,
-            materialToAsk = 0,
-            materialCanAsk = false,
+            group = group,
         )
-        plan(current.mode)
+        plan(mode)
     }
 
     /** 出题失败后重试同一组；不能把用户永远停在"正在准备题目"。 */
     fun retry() {
         val current = _state.value
         if (current.phase != QuizPhase.ERROR) return
-        _state.value = QuizState(
-            phase = QuizPhase.LOADING,
-            mode = current.mode,
-            stage = QuizStage.COLLECTING,
-            group = current.group,
-        )
-        plan(current.mode)
+        startGroup(current.mode, current.group)
     }
 
     private fun plan(mode: QuizMode) = viewModelScope.launch {
@@ -253,6 +257,11 @@ class QuizViewModel(
                     QuizMode.DUE -> quiz.planDue(
                         now = now,
                         dailyNewLimit = prefs.dailyNewLimit,
+                        onStage = ::publishStage,
+                        onMaterial = ::publishMaterial,
+                    )
+                    QuizMode.REVIEW -> quiz.planReview(
+                        now = now,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
@@ -289,6 +298,7 @@ class QuizViewModel(
         questions = session.questions
         alternatives = session.alternatives
         practiceQuestions = emptyList()
+        startedAtSec = Instant.now().epochSecond
         wrong.clear()
         _state.value = QuizState(
             phase = QuizPhase.QUESTION,
@@ -327,7 +337,6 @@ class QuizViewModel(
             question = practice.first(),
             index = 0,
             total = practice.size,
-            wrongCount = wrong.size,
             practiceQueued = false,
         )
         persist()
@@ -340,12 +349,14 @@ class QuizViewModel(
 
     private fun finish() {
         val current = _state.value
+        val asksReview = current.mode == QuizMode.DUE || current.mode == QuizMode.REVIEW
         _state.value = current.copy(
             phase = QuizPhase.DONE,
             question = null,
             practice = false,
-            wrongCount = wrong.size,
+            missed = wrong.map { it.word }.sortedBy { it.lowercase() },
             record = null,
+            reviewCount = if (asksReview) null else 0,
         )
         clearSaved(current.mode)
         val record = QuizRunRecord(
@@ -354,13 +365,19 @@ class QuizViewModel(
             correct = current.correctCount,
             wrong = wrong.size,
             bestStreak = current.bestStreak,
+            startedAtSec = startedAtSec,
         )
         viewModelScope.launch {
-            val saved = runs.save(record, Instant.now())
-            // 只有还停在同一组的结果页才说这句话：中途已经去下一组了，就没什么纪录可报。
-            if (_state.value.phase == QuizPhase.DONE && _state.value.mode == current.mode) {
-                _state.value = _state.value.copy(record = saved)
+            // 只有还停在同一组的结果页才改这块界面：中途已经去下一组了，就没什么可报的。
+            fun stillOnResult() = _state.value.phase == QuizPhase.DONE && _state.value.mode == current.mode
+            // 先数"今天测过、还没真认出来"的几个，让主按钮在第一帧就摆对；
+            // 留底要把整段记录重放一遍算巅峰涨跌，慢一步，所以那一行照旧晚一拍出现。
+            if ((current.mode == QuizMode.DUE || current.mode == QuizMode.REVIEW) && stillOnResult()) {
+                val left = quiz.reviewCandidates(Instant.now()).size
+                if (stillOnResult()) _state.value = _state.value.copy(reviewCount = left)
             }
+            val saved = runs.save(record, Instant.now())
+            if (stillOnResult()) _state.value = _state.value.copy(record = saved)
         }
     }
 
@@ -377,6 +394,7 @@ class QuizViewModel(
         wrong.clear()
         wrong += saved.wrongIds.mapNotNull { id -> saved.questions.firstOrNull { it.wordId == id } }
         excluded = saved.excludedIds
+        startedAtSec = saved.startedAtSec
         val current = if (saved.inPractice) practiceQuestions[saved.index] else questions[saved.index]
         _state.value = QuizState(
             phase = QuizPhase.QUESTION,
@@ -388,7 +406,6 @@ class QuizViewModel(
             correct = saved.correct,
             correctCount = saved.correctCount,
             roundTotal = questions.size,
-            wrongCount = wrong.size,
             group = saved.group,
             practice = saved.inPractice,
             practiceQueued = !saved.inPractice && wrong.any { alternatives.containsKey(it.wordId) },
@@ -419,6 +436,7 @@ class QuizViewModel(
             trickyIds = current.trickyIds,
             streak = current.streak,
             bestStreak = current.bestStreak,
+            startedAtSec = startedAtSec,
         )
     }
 

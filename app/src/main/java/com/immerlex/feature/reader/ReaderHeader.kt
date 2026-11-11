@@ -84,22 +84,19 @@ internal fun ReaderHeader(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    if (loading) stringResource(R.string.reader_loading) else title.ifBlank { book },
+                    when {
+                        loading -> stringResource(R.string.reader_loading)
+                        // 题材不写在阅读页上了：想知道在读哪本书，去书架，那一本有边框。
+                        isShort -> title
+                        hasChapter -> stringResource(R.string.reader_header_chapter, number)
+                        else -> book
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (!loading && title.isNotBlank() && title != book) {
-                    Text(
-                        book,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
             ChapterMenu(
                 serial = serial,
@@ -116,7 +113,7 @@ internal fun ReaderHeader(
                     if (isShort) {
                         stringResource(R.string.reader_short_progress, wordCount, learned, recalled)
                     } else {
-                        stringResource(R.string.reader_progress, number, wordCount, learned, recalled)
+                        stringResource(R.string.reader_progress, wordCount, learned, recalled)
                     },
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,

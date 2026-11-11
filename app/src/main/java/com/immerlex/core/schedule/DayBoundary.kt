@@ -37,6 +37,13 @@ class DayBoundary(
         dayOf(now).atStartOfDay(zone).toEpochSecond()
 
     /**
+     * 一条记录落在本地日历的哪一天。宽限只回答"今天算哪天"，
+     * 已经过去的每一天按它自己的零点算，不把历史往回粘一天。
+     */
+    fun dayOf(epochSec: Long): Long =
+        Instant.ofEpochSecond(epochSec).atZone(zone).toLocalDate().toEpochDay()
+
+    /**
      * 那天有没有宽限时段以外的复习。只认 01:00 以后的记录，避免把上一个宽限夜里
      * 00:xx 的那几笔当成"新的一天动过手"，否则连着一周每天熬夜会把日期一天天粘住。
      */

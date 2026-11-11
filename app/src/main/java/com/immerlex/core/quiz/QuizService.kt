@@ -42,15 +42,46 @@ class QuizService(
     private val builders: List<QuestionBuilder> = DEFAULT_QUESTION_BUILDERS,
 ) {
 
-    /** 今日到期 + 今天学过但还没回忆的词；今天已经回忆过的不再重复考。 */
+    /** 今日到期 + 今天学过但还没回忆的词；今天已经碰过一轮的不再重复考，它们走「今日复习」。 */
     suspend fun dueCandidateIds(now: Instant, dailyNewLimit: Int): List<Long> {
         val dayStart = boundary.startOf(now)
         val queue = schedule.todaysQueue(now, dailyNewLimit)
         val learned = logDao.learnedWordIdsSince(dayStart)
-        val recalled = logDao.recalledWordIdsSince(dayStart).toSet()
+        val handled = schedule.handledWordIds(now)
         return (queue.reviewWords.map { it.id } + learned.sorted())
             .distinct()
-            .filterNot { it in recalled }
+            .filterNot { it in handled }
+    }
+
+    /**
+     * 今日复习：今天被测验考过、但今天还没真正回忆成功过的词。
+     * 认出来一次（连着三次升成的那条 recall GOOD）它就从这一格里下去；答错写的是 recall AGAIN，
+     * 那是"没认出来"的证据而不是"今天已经算了"，所以照样留着接着练。
+     * 这一格不看卡片到没到期——测验里答对只攒 attempt、不动卡片，到期日还停在今天。
+     */
+    suspend fun reviewCandidates(now: Instant): List<WordEntity> {
+        val dayStart = boundary.startOf(now)
+        val quizzed = logDao.quizzedWordIdsSince(LOG_SOURCE_QUIZ, dayStart).toSet()
+        if (quizzed.isEmpty()) return emptyList()
+        val settled = logDao.recalledGoodIdsSince(dayStart)
+        val ids = (quizzed - settled.toSet()).toList()
+        if (ids.isEmpty()) return emptyList()
+        return wordDao.findByIds(ids)
+            .sortedWith(compareBy({ it.dueEpochSec ?: Long.MAX_VALUE }, { it.id }))
+            .take(SESSION_LIMIT)
+    }
+
+    suspend fun planReview(
+        now: Instant,
+        seed: Long = now.epochSecond,
+        onStage: (QuizStage) -> Unit = {},
+        onMaterial: (QuizMaterialPrep) -> Unit = {},
+    ): QuizSession {
+        onStage(QuizStage.COLLECTING)
+        val words = reviewCandidates(now)
+        if (words.isEmpty()) return QuizSession(QuizMode.REVIEW, emptyList())
+        onStage(QuizStage.READING_LOGS)
+        return build(QuizMode.REVIEW, words, now, seed, onStage, onMaterial)
     }
 
     /**

@@ -199,6 +199,30 @@ interface ReviewLogDao {
     suspend fun recalledWordIdsBySourceSince(source: String, sinceSec: Long): List<Long>
 
     /**
+     * 今天"练过就算碰过"的词：真回忆算，测验里攒着的 attempt 也算。
+     * attempt 不动卡片，词在库里照样到期，但今天确实过了一轮，首页不该再把它当压力（v4.1）。
+     */
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE (kind = 'recall' OR source = :quizSource) AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun handledWordIdsSince(quizSource: String, sinceSec: Long): List<Long>
+
+    /** 今天被哪个入口测过一遍：「今日复习」只认测验自己写下的记录，阅读页点词不算。 */
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE source = :quizSource AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun quizzedWordIdsSince(quizSource: String, sinceSec: Long): List<Long>
+
+    /** 今天已经真正回忆成功（GOOD/EASY）的词：「今日复习」不再留它们。 */
+    @Query(
+        "SELECT DISTINCT wordId FROM review_logs " +
+            "WHERE kind = 'recall' AND rating >= 3 AND reviewEpochSec >= :sinceSec",
+    )
+    suspend fun recalledGoodIdsSince(sinceSec: Long): List<Long>
+
+    /**
      * 阅读页的颜色只听阅读页自己的记录：测验和提前复习排的是同一个词，
      * 但不改它在正文里的颜色。所以这两个查询都钉死 `source = 'reader'`。
      */

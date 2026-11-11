@@ -254,6 +254,10 @@ data class QuizSessionEntity(
  *
  * [wrong] 与 [bestStreak] 是从 `correct + wrong = asked` 推不出来的那一半：
  * 答错换题型重练的那些题不重算，连对次数只在当时那一次走子里存在。
+ *
+ * [peakChange] 留的是同一类东西：巅峰分本身随时能整段重放回来，
+ * 但"这一组让那条曲线动了多少"只在当时那一次算得准，之后同一天里再去阅读页记几笔就把口径搅浑了。
+ * 老行是 null——界面那行不说涨跌，不猜。
  */
 @Entity(tableName = "quiz_runs", indices = [Index("finishedAtSec")])
 data class QuizRunEntity(
@@ -265,6 +269,8 @@ data class QuizRunEntity(
     val correct: Int,
     val wrong: Int,
     val bestStreak: Int,
+    /** 这一组答完，巅峰分比答之前高多少（可以为负）。记录还不够多、或这一组一条真记账都没写时不填。 */
+    val peakChange: Int? = null,
 )
 
 /**

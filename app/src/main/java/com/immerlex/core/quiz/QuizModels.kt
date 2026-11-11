@@ -20,8 +20,14 @@ enum class QuizType(val key: String, val tier: Int) {
     }
 }
 
-/** [TRICKY] 只练用户亲手标过的易错词，给"今天还没练够"留一条不用阅读的路。 */
-enum class QuizMode { DUE, EARLY, TRICKY, NEMESIS }
+/**
+ * 五个测验入口，各自存一份未完成会话（[EARLY] 一组几个可在设置页选）。
+ * [DUE] 是首测：今天还没碰过的词——到期词，加上今天刚在阅读里学过、还没回忆过的词。
+ * 碰过一轮的词当天从 [REVIEW] 那一格进来：攒满三次认出才算一次真回忆，
+ * 没攒满的词照样到期，但不该再挂在"今日到期"上压人。
+ * [TRICKY] 只练用户亲手标过的易错词，给"今天还没练够"留一条不用阅读的路。
+ */
+enum class QuizMode { DUE, REVIEW, EARLY, TRICKY, NEMESIS }
 
 /** 选项：[text] 是摆在屏上的那一面，[gloss] 是答完才揭开的另一面。 */
 data class QuizOption(

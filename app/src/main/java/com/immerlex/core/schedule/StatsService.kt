@@ -1,5 +1,6 @@
 package com.immerlex.core.schedule
 
+import com.immerlex.core.db.RecallEventRow
 import com.immerlex.core.db.RecallSnapshotDao
 import com.immerlex.core.db.RecallSnapshotEntity
 import com.immerlex.core.db.ReviewHistoryDao
@@ -13,10 +14,10 @@ import kotlin.math.roundToInt
  *
  * 卡片当下算出来的：[canRecall] = 已学词的 [Scheduler.retrievability] 之和四舍五入，
  * 读作"此刻大约能想起几个词"；[mastered] = 间隔 ≥ [ScheduleService.MASTERED_INTERVAL_DAYS] 天的词数；
- * [strength] 是给炫耀卡的一个 0–100 分，平均可回忆度与已掌握占比各占一半；
  * [mostFailedWord] 是忘得最多次的那一个。
  *
  * 历史算出来的：[rank] 按已掌握数落在哪一档；[peak] 把整段记录重放一遍得到的巅峰分；
+ * [duel] 把这同一条曲线按本地周折成"这周最好 vs 上周最好"；
  * [bestDay] 是以前最好的一天有过多少个（今天的数字就在 [canRecall] 里，跟自己比不用两个数）；
  * [rivals] 是最后一次真记账答错的那些词——它们欠一次复仇。
  */
@@ -28,9 +29,9 @@ data class RetentionReport(
     val mostFailedWord: String?,
     val mostFailedGloss: String?,
     val mostFailedLapses: Int,
-    val strength: Int,
     val rank: Rank,
     val peak: PeakScore,
+    val duel: WeekDuel,
     val bestDay: Int,
     val rivals: List<RivalWord>,
 ) {
@@ -44,9 +45,9 @@ data class RetentionReport(
             mostFailedWord = null,
             mostFailedGloss = null,
             mostFailedLapses = 0,
-            strength = 0,
             rank = RankLadder.of(0),
             peak = PeakScoreReplay.replay(emptyList()),
+            duel = WeekDuel(null, null),
             bestDay = 0,
             rivals = emptyList(),
         )
@@ -79,6 +80,7 @@ class StatsService(
             return RetentionReport.blank().copy(
                 totalWords = words.size,
                 peak = PeakScoreReplay.replay(events),
+                duel = duelOf(events, now),
                 bestDay = snapshotDao.bestBefore(today),
             )
         }
@@ -90,10 +92,9 @@ class StatsService(
             if (w.intervalDays >= ScheduleService.MASTERED_INTERVAL_DAYS) mastered++
         }
         val mostFailed = learned.maxByOrNull { it.lapses }?.takeIf { it.lapses > 0 }
-        val avgR = recallSum / learned.size
-        val masteredFraction = mastered.toDouble() / learned.size
         val canRecall = recallSum.roundToInt()
         val peak = PeakScoreReplay.replay(events)
+        val duel = duelOf(events, now)
         val rivalIds = Nemesis.wordIds(events)
         val byId = learned.associateBy { it.id }
 
@@ -107,14 +108,24 @@ class StatsService(
             mostFailedWord = mostFailed?.word,
             mostFailedGloss = mostFailed?.translation?.ifBlank { null },
             mostFailedLapses = mostFailed?.lapses ?: 0,
-            strength = (100 * (0.5 * avgR + 0.5 * masteredFraction)).roundToInt().coerceIn(0, 100),
             rank = RankLadder.of(mastered),
             peak = peak,
+            duel = duel,
             bestDay = snapshotDao.bestBefore(today),
             rivals = rivalIds.mapNotNull { id ->
                 byId[id]?.let { RivalWord(id, it.word, it.translation) }
             },
         )
+    }
+
+    /**
+     * 影子对决：把 [peak] 那条曲线按本地周折起来，这周的最高对上上周的最高。
+     * 周界跟着 [DayBoundary] 的时区走，与"哪天算今天"是同一把尺。
+     */
+    private suspend fun duelOf(events: List<RecallEventRow>, now: Instant): WeekDuel {
+        val thisWeek = WeeklyDuel.weekOf(boundary.dayOf(now).toEpochDay())
+        val weeks = events.map { WeeklyDuel.weekOf(boundary.dayOf(it.epochSec)) }
+        return WeeklyDuel.of(events, weeks, thisWeek)
     }
 
     /** 只往"更高"的方向写，所以同一天里反复打开战绩页不会把高点抹平。 */

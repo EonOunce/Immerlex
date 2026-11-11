@@ -28,6 +28,11 @@ data class QuizResume(
     /** 连对次数与这组里最长的一段：存下来是为了续做之后"破纪录"那句还说得准。 */
     val streak: Int = 0,
     val bestStreak: Int = 0,
+    /**
+     * 这一组是哪一秒开始出的：做完留底时要按它把"这一组自己写的那几笔"从历史里认出来。
+     * 升级前存的会话没有它，留 0 表示不知道，宁可不算一个数也不猜。
+     */
+    val startedAtSec: Long = 0,
 )
 
 /** 只留当前这一组；做完或换组就按入口删掉，读不到（含存坏了）一律当没存过。 */
@@ -71,6 +76,7 @@ private fun QuizResume.toRow() = ResumeRow(
     trickyIds = trickyIds.toList(),
     streak = streak,
     bestStreak = bestStreak,
+    startedAtSec = startedAtSec,
 )
 
 private fun QuizQuestion.toRow() = QuestionRow(
@@ -109,6 +115,7 @@ private fun ResumeRow.toModel(): QuizResume? {
         trickyIds = trickyIds.toSet(),
         streak = streak.coerceAtLeast(0),
         bestStreak = bestStreak.coerceAtLeast(0),
+        startedAtSec = startedAtSec.coerceAtLeast(0),
     )
 }
 
@@ -145,6 +152,7 @@ private data class ResumeRow(
     val trickyIds: List<Long> = emptyList(),
     val streak: Int = 0,
     val bestStreak: Int = 0,
+    val startedAtSec: Long = 0,
 )
 
 @Serializable
