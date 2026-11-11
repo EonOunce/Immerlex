@@ -7,12 +7,8 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +24,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.immerlex.app.ui.AppBottomBar
 import com.immerlex.app.ui.ImmerlexTheme
+import com.immerlex.app.ui.NavSlot
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.feature.home.HomeScreen
 import com.immerlex.feature.home.HomeViewModel
@@ -48,6 +46,8 @@ import com.immerlex.feature.settings.KeyboardViewModel
 import com.immerlex.feature.settings.MaterialViewModel
 import com.immerlex.feature.settings.SettingsScreen
 import com.immerlex.feature.settings.SettingsViewModel
+import com.immerlex.feature.stats.StatsScreen
+import com.immerlex.feature.stats.StatsViewModel
 import com.immerlex.feature.tricky.TrickyScreen
 import com.immerlex.feature.tricky.TrickyViewModel
 import com.immerlex.feature.wordbank.WordBankViewModel
@@ -134,6 +134,7 @@ fun ImmerlexRoot() {
                 prefs = container.prefs,
                 resume = container.quizResumeStore,
                 tricky = container.trickyRepository,
+                runs = container.quizRunStore,
             )
         }
         initializer {
@@ -144,6 +145,12 @@ fun ImmerlexRoot() {
         }
         initializer {
             KeyboardViewModel(container.prefs)
+        }
+        initializer {
+            StatsViewModel(
+                stats = container.statsService,
+                runs = container.quizRunStore,
+            )
         }
     }
 
@@ -156,27 +163,21 @@ fun ImmerlexRoot() {
         val currentRoute = backStack?.destination?.route
 
         // 今日页的"开始今日阅读"和底栏走的是同一套换栏逻辑，否则两处会一个存状态一个不存。
-        val goToTab: (Destinations) -> Unit = { dest ->
-            navController.navigate(dest.route) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
+        // 不存也不还原状态：一还原就会把舍友页、易混词页这类挂在某栏上面的子页一起带回来，
+        // 点主页却回到子页。各页的数据本来就从库里现读，换栏时没什么可丢的。
+        val goToTab: (String) -> Unit = { route ->
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id)
                 launchSingleTop = true
-                restoreState = true
             }
         }
 
         Scaffold(bottomBar = {
-            NavigationBar {
-                Destinations.entries.forEach { dest ->
-                    NavigationBarItem(
-                        selected = currentRoute == dest.route,
-                        onClick = { goToTab(dest) },
-                        icon = { Icon(dest.icon, contentDescription = null) },
-                        label = { Text(stringResource(dest.labelRes)) },
-                    )
-                }
-            }
+            AppBottomBar(
+                slots = Destinations.entries.map { NavSlot(it.route, it.labelRes, it.icon) },
+                currentRoute = currentRoute,
+                onSelect = { slot -> goToTab(slot.route) },
+            )
         }) { padding ->
             NavHost(
                 navController = navController,
@@ -187,12 +188,15 @@ fun ImmerlexRoot() {
                     val vm: HomeViewModel = viewModel(factory = appViewModelFactory)
                     HomeScreen(
                         vm,
-                        onStartReading = { goToTab(Destinations.READER) },
+                        onStartReading = { goToTab(Destinations.READER.route) },
                         onStartQuiz = {
                             navController.navigate(quizRoute(QuizMode.DUE)) { launchSingleTop = true }
                         },
                         onStartEarly = {
                             navController.navigate(quizRoute(QuizMode.EARLY)) { launchSingleTop = true }
+                        },
+                        onStartTricky = {
+                            navController.navigate(quizRoute(QuizMode.TRICKY)) { launchSingleTop = true }
                         },
                         onOpenRoom = {
                             navController.navigate(ROUTE_ROOM) { launchSingleTop = true }
@@ -210,6 +214,15 @@ fun ImmerlexRoot() {
                     ReaderScreen(vm, keyMap, onOpenSettings = {
                         navController.navigate(Destinations.SETTINGS.route) { launchSingleTop = true }
                     })
+                }
+                composable(Destinations.STATS.route) {
+                    val vm: StatsViewModel = viewModel(factory = appViewModelFactory)
+                    StatsScreen(
+                        vm,
+                        onTakeRevenge = {
+                            navController.navigate(quizRoute(QuizMode.NEMESIS)) { launchSingleTop = true }
+                        },
+                    )
                 }
                 composable(Destinations.SETTINGS.route) {
                     val vm: SettingsViewModel = viewModel(factory = appViewModelFactory)
@@ -259,8 +272,10 @@ private enum class Destinations(
     val labelRes: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    HOME("home", R.string.tab_home, Icons.Filled.Home),
+    // 底栏按这个顺序摆：中间一格（HOME）画成抬起的主色圆，左右各两格。
     BANK("bank", R.string.tab_bank, Icons.AutoMirrored.Filled.List),
     READER("reader", R.string.tab_reader, Icons.Filled.Create),
+    HOME("home", R.string.tab_home, Icons.Filled.Home),
+    STATS("stats", R.string.tab_stats, Icons.Filled.Star),
     SETTINGS("settings", R.string.tab_settings, Icons.Filled.Settings),
 }

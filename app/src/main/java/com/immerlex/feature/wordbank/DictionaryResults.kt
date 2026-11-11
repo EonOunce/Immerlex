@@ -26,7 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
@@ -56,25 +58,27 @@ fun LazyListScope.dictionaryGroup(hits: List<DictEntry>, onOpen: (DictEntry) -> 
 private fun DictionaryRow(entry: DictEntry, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(entry.word, style = MaterialTheme.typography.titleMedium)
+                Text(entry.word, style = MaterialTheme.typography.titleSmall)
                 if (entry.phonetic.isNotEmpty()) {
                     Spacer(Modifier.width(8.dp))
-                    Text(entry.phonetic, style = MaterialTheme.typography.labelMedium, color = ImmerlexColors.Meta)
+                    Text(entry.phonetic, style = MaterialTheme.typography.labelSmall, color = ImmerlexColors.Meta)
                 }
             }
             if (entry.translation.isNotEmpty()) {
                 Text(
                     entry.translation,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

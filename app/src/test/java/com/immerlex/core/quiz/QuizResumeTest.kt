@@ -84,6 +84,28 @@ class QuizResumeTest {
         assertEquals(resume, back)
     }
 
+    /** 连对是这一组走子里的状态：中途退出再回来，那段连对不该从零起算。 */
+    @Test
+    fun aStreakAlreadyRunComesBackWithTheGroup() {
+        val resume = QuizResume(
+            mode = QuizMode.DUE,
+            questions = listOf(question(1, "harbour"), question(2, "lantern")),
+            alternatives = emptyMap(),
+            wrongIds = emptyList(),
+            excludedIds = emptySet(),
+            index = 1,
+            inPractice = false,
+            chosen = 0,
+            correct = true,
+            correctCount = 1,
+            group = 1,
+            streak = 2,
+            bestStreak = 4,
+        )
+
+        assertEquals(resume, decodeQuizResume(encodeQuizResume(resume)))
+    }
+
     @Test
     fun garbageOrOutOfRangePayloadsMeanNoSavedGroup() {
         assertNull(decodeQuizResume("not json"))

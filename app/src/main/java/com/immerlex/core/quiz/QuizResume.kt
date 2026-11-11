@@ -25,6 +25,9 @@ data class QuizResume(
     val doubt: Boolean = false,
     /** 这一组里已经标过易错的词，续做时不该再问一遍。 */
     val trickyIds: Set<Long> = emptySet(),
+    /** 连对次数与这组里最长的一段：存下来是为了续做之后"破纪录"那句还说得准。 */
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
 )
 
 /** 只留当前这一组；做完或换组就按入口删掉，读不到（含存坏了）一律当没存过。 */
@@ -66,6 +69,8 @@ private fun QuizResume.toRow() = ResumeRow(
     group = group,
     doubt = doubt,
     trickyIds = trickyIds.toList(),
+    streak = streak,
+    bestStreak = bestStreak,
 )
 
 private fun QuizQuestion.toRow() = QuestionRow(
@@ -102,6 +107,8 @@ private fun ResumeRow.toModel(): QuizResume? {
         group = group,
         doubt = doubt,
         trickyIds = trickyIds.toSet(),
+        streak = streak.coerceAtLeast(0),
+        bestStreak = bestStreak.coerceAtLeast(0),
     )
 }
 
@@ -136,6 +143,8 @@ private data class ResumeRow(
     val group: Int = 1,
     val doubt: Boolean = false,
     val trickyIds: List<Long> = emptyList(),
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
 )
 
 @Serializable

@@ -30,6 +30,7 @@ import com.immerlex.core.ocr.PdfOcr
 import com.immerlex.core.quiz.AiQuizEnricher
 import com.immerlex.core.quiz.QuizMaterialStore
 import com.immerlex.core.quiz.QuizResumeStore
+import com.immerlex.core.quiz.QuizRunStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.roommate.RoommateAssetStore
 import com.immerlex.core.roommate.RoommateGenerator
@@ -40,6 +41,7 @@ import com.immerlex.core.secret.SecretStore
 import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.ScheduleService
+import com.immerlex.core.schedule.StatsService
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.tricky.TrickyRepository
 import java.time.Instant
@@ -106,6 +108,10 @@ class AppContainer(context: Context) {
     val dailyLoopService: DailyLoopService by lazy {
         DailyLoopService(db.dailyLoopDao(), db.reviewLogDao(), db.wordDao(), boundary = dayBoundary)
     }
+    // 战绩页的那几个数：卡片此刻的回忆把握 + 整段历史重放出来的巅峰分，只读，不碰排期。
+    val statsService: StatsService by lazy {
+        StatsService(db.wordDao(), db.reviewHistoryDao(), db.recallSnapshotDao(), scheduler, dayBoundary)
+    }
     // 测验不依赖 API key：AI 只在配置可用时补释义/例句/干扰项，失败静默退化到本地题库。
     val quizService: QuizService by lazy {
         QuizService(
@@ -113,6 +119,7 @@ class AppContainer(context: Context) {
             logDao = db.reviewLogDao(),
             chapterDao = db.chapterDao(),
             trickyDao = db.trickyDao(),
+            historyDao = db.reviewHistoryDao(),
             schedule = scheduleService,
             boundary = dayBoundary,
             enricher = AiQuizEnricher(
@@ -123,6 +130,8 @@ class AppContainer(context: Context) {
         )
     }
     val quizResumeStore: QuizResumeStore by lazy { QuizResumeStore(db.quizSessionDao()) }
+    // 做完的每一组另留一行：会话表结束时整行删掉，不留底就没人知道自己破过什么纪录。
+    val quizRunStore: QuizRunStore by lazy { QuizRunStore(db.quizRunDao()) }
     // 出题素材跟着"这个词"走，不跟着词库那一行走，所以一个包可以先装进机器、词以后才进词库。
     val materialRepository: MaterialRepository by lazy { MaterialRepository(db, dictionary) }
     // 素材包在 GitHub 上分片放着，取回来一片一片验过校验值才进库；本机导入一直是退路。

@@ -30,6 +30,7 @@ private data class AboutSection(val title: Int, val body: Int)
 private val SECTIONS = listOf(
     AboutSection(R.string.about_checkin_title, R.string.about_checkin_body),
     AboutSection(R.string.about_home_title, R.string.about_home_body),
+    AboutSection(R.string.about_stats_title, R.string.about_stats_body),
     AboutSection(R.string.about_reading_title, R.string.about_reading_body),
     AboutSection(R.string.about_quiz_title, R.string.about_quiz_body),
     AboutSection(R.string.about_keyboard_title, R.string.about_keyboard_body),

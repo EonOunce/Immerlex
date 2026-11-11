@@ -324,6 +324,33 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
     }
 }
 
+/**
+ * v17 -> v18：两张只装"过后算不回来"的东西。
+ *
+ * `quiz_runs` 留做完的每一组题的成绩——会话表在结束时整行删掉，之前"最近测了什么、
+ * 各组对了几个"没有任何地方能查，破纪录也就无从比。
+ * `recall_snapshots` 每天留一个"此刻大概能想起几个词"的影子：这个数算的是卡片当下的
+ * 回忆把握，明天再也回推不出今天的样子。
+ *
+ * 巅峰分、段位、宿敌都不建表——它们全部能从 `review_logs` 现推，写进库里就会有两套说法。
+ * 老库这两张表是空的，战绩页第一次打开只会显示"还没有记录"，不编一个数凑数。
+ */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `quiz_runs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`mode` TEXT NOT NULL, `finishedAtSec` INTEGER NOT NULL, `asked` INTEGER NOT NULL, " +
+                "`correct` INTEGER NOT NULL, `wrong` INTEGER NOT NULL, `bestStreak` INTEGER NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_quiz_runs_finishedAtSec` ON `quiz_runs` (`finishedAtSec`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `recall_snapshots` (`epochDay` INTEGER NOT NULL, " +
+                "`canRecall` INTEGER NOT NULL, `mastered` INTEGER NOT NULL, `atSec` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`epochDay`))",
+        )
+    }
+}
+
 val MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -341,4 +368,5 @@ val MIGRATIONS = arrayOf(
     MIGRATION_14_15,
     MIGRATION_15_16,
     MIGRATION_16_17,
+    MIGRATION_17_18,
 )

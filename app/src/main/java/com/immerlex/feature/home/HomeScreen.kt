@@ -1,6 +1,5 @@
 package com.immerlex.feature.home
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,20 +10,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,19 +31,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
-import com.immerlex.app.ui.FishPill
+import com.immerlex.app.ui.AccentSwatches
+import com.immerlex.app.ui.FishIcon
 import com.immerlex.app.ui.ImmerlexColors
-import com.immerlex.core.schedule.HeatDay
-import com.immerlex.core.schedule.TrendDay
+import com.immerlex.app.ui.LocalAccent
+import com.immerlex.app.ui.LocalAppearance
 
 @Composable
 fun HomeScreen(
@@ -54,9 +56,12 @@ fun HomeScreen(
     onStartReading: () -> Unit,
     onStartQuiz: () -> Unit,
     onStartEarly: () -> Unit,
+    onStartTricky: () -> Unit,
     onOpenRoom: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val accent = LocalAccent.current
+    val appearance = LocalAppearance.current
     var showShare by rememberSaveable { mutableStateOf(false) }
     // 阅读页打完分回到这一栏，数字必须跟着重算，否则"今日完成"会停在进来时的值。
     LaunchedEffect(Unit) { vm.refresh() }
@@ -65,85 +70,29 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.home_title), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.home_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            IconButton(
-                onClick = { showShare = true },
-                enabled = !state.loading,
-            ) {
-                Icon(
-                    painterResource(R.drawable.ic_share),
-                    contentDescription = stringResource(R.string.home_share),
-                )
+            AccentSwatches(selected = appearance.accent, onPick = vm::setAccent, size = 22.dp)
+            Spacer(Modifier.width(6.dp))
+            IconButton(onClick = { showShare = true }, enabled = !state.loading) {
+                Icon(painterResource(R.drawable.ic_share), contentDescription = stringResource(R.string.home_share))
             }
         }
 
-        StreakCard(state)
+        HeroCard(state, accent, onStartReading)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CountCard(stringResource(R.string.home_due), state.due, Modifier.weight(1f))
-            CountCard(stringResource(R.string.home_done), state.done, Modifier.weight(1f))
-        }
-        HeatmapCard(days = state.heat, todayWords = state.done)
-        TrendCard(days = state.trend)
-        if (state.newWords > 0) {
-            Text(
-                stringResource(R.string.home_new_words, state.newWords),
-                style = MaterialTheme.typography.bodySmall,
-                color = ImmerlexColors.Meta,
-            )
-        }
+        SecondaryStack(state, onStartQuiz, onStartEarly, onStartTricky)
+
+        RoommateNote(state, onOpenRoom)
+
+        SmallStatLine(state)
+
+        RecentCard(days = state.heat, trend = state.trend)
         MakeupLine(state)
-
-        Button(
-            onClick = onStartReading,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !state.loading,
-        ) {
-            Text(
-                stringResource(
-                    when {
-                        state.loading -> R.string.home_loading
-                        !state.hasChapter -> R.string.home_start_first
-                        else -> R.string.home_start_reading
-                    },
-                ),
-            )
-        }
-        if (state.hasChapter) {
-            Text(
-                stringResource(R.string.home_continue, state.chapterNumber),
-                style = MaterialTheme.typography.bodySmall,
-                color = ImmerlexColors.Meta,
-            )
-        }
-
-        RoommateCard(state, onOpenRoom)
-
-        FilledTonalButton(
-            onClick = onStartQuiz,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !state.loading && (state.quizCount > 0 || state.quizResumable),
-        ) {
-            Text(
-                when {
-                    state.quizResumable -> stringResource(R.string.home_quiz_resume)
-                    state.quizCount > 0 -> stringResource(R.string.home_quiz_count, state.quizCount)
-                    else -> stringResource(R.string.home_quiz_empty)
-                },
-            )
-        }
-        OutlinedButton(
-            onClick = onStartEarly,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !state.loading && state.earlyCount > 0,
-        ) {
-            Text(stringResource(R.string.home_early_count, state.earlyCount))
-        }
     }
 
     if (showShare) {
@@ -151,78 +100,240 @@ fun HomeScreen(
     }
 }
 
+/**
+ * 整页唯一的主角：一个铺满主色的大圆角块，只回答"今天到期几个词、从哪开始"。
+ * 连续天数做成压在右上角的圆形印章，探出去半截——它靠叠压成为第二层，而不是另起一张卡。
+ * 卡片恒为亮主色，所以上面的字与药丸一律用固定墨色，深浅色都不跟主题走。
+ */
 @Composable
-private fun RoommateCard(state: HomeState, onOpenRoom: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+private fun HeroCard(state: HomeState, accent: Color, onStartReading: () -> Unit) {
+    Box(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenRoom)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .shadow(6.dp, RoundedCornerShape(30.dp))
+                .clip(RoundedCornerShape(30.dp))
+                .background(accent)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.home_due),
+                style = MaterialTheme.typography.titleMedium,
+                color = ImmerlexColors.Ink.copy(alpha = 0.72f),
+            )
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    if (state.roomMet) {
-                        stringResource(R.string.home_room_met, state.roomName)
-                    } else {
-                        stringResource(R.string.home_room_unmet)
-                    },
+                    if (state.loading) "—" else state.due.toString(),
+                    fontSize = 72.sp,
+                    lineHeight = 68.sp,
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Black,
+                    color = ImmerlexColors.Ink,
+                    modifier = Modifier.alignByBaseline(),
+                )
+                Text(
+                    stringResource(R.string.home_hero_unit),
+                    fontSize = 24.sp,
+                    color = ImmerlexColors.Ink.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(start = 8.dp).alignByBaseline(),
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CircleShape)
+                    .background(ImmerlexColors.Ink)
+                    .clickable(enabled = !state.loading, onClick = onStartReading)
+                    .padding(vertical = 15.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    stringResource(
+                        when {
+                            state.loading -> R.string.home_loading
+                            !state.hasChapter -> R.string.home_start_first
+                            else -> R.string.home_hero_start
+                        },
+                    ) + "  →",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                )
-                if (state.roomMet) {
-                    Spacer(Modifier.weight(1f))
-                    FishPill(state.roomBalance)
-                }
-            }
-            if (state.roomMet && state.roomLine.isNotBlank()) {
-                Text(
-                    state.roomLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ImmerlexColors.Body,
+                    color = ImmerlexColors.Paper,
                 )
             }
         }
+        StreakStamp(state.streak, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp))
     }
 }
 
 @Composable
-private fun StreakCard(state: HomeState) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(
+private fun StreakStamp(streak: Int, modifier: Modifier = Modifier) {
+    val days = stringResource(R.string.home_streak_days, streak)
+    Column(
+        modifier = modifier
+            .rotate(8f)
+            .size(74.dp)
+            .shadow(4.dp, CircleShape)
+            .clip(CircleShape)
+            .background(ImmerlexColors.Paper),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(days, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+        Text(
+            stringResource(R.string.home_streak_unit),
+            style = MaterialTheme.typography.labelSmall,
+            color = ImmerlexColors.Meta,
+        )
+    }
+}
+
+/** 测验与提前复习压成一对略歪、彼此叠靠的白卡——第二层，比主角小一圈、也不铺色。 */
+@Composable
+private fun SecondaryStack(
+    state: HomeState,
+    onStartQuiz: () -> Unit,
+    onStartEarly: () -> Unit,
+    onStartTricky: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy((-14).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f).rotate(-1.4f)) {
+            SecondaryCard(
+                label = stringResource(R.string.home_early_card),
+                value = if (state.earlyCount > 0) stringResource(R.string.home_early_card_count, state.earlyCount) else stringResource(R.string.home_early_card_none),
+                dot = ImmerlexColors.Rust,
+                enabled = !state.loading && state.earlyCount > 0,
+                onClick = onStartEarly,
+            )
+        }
+        Box(Modifier.weight(1f).rotate(1.4f)) {
+            SecondaryCard(
+                label = stringResource(R.string.home_quiz_card),
+                value = when {
+                    state.quizResumable -> stringResource(R.string.home_quiz_card_resume)
+                    state.quizCount > 0 -> stringResource(R.string.home_quiz_card_count, state.quizCount)
+                    else -> stringResource(R.string.home_quiz_card_empty)
+                },
+                dot = MaterialTheme.colorScheme.primary,
+                enabled = !state.loading && (state.quizCount > 0 || state.quizResumable),
+                onClick = onStartQuiz,
+                // 到期词测完了还能只练易错词，今天这一次练习就不用去阅读页点词。
+                extra = if (state.trickyCount > 0) {
+                    SecondaryAction(
+                        text = stringResource(R.string.home_tricky_card, state.trickyCount),
+                        onClick = onStartTricky,
+                    )
+                } else {
+                    null
+                },
+            )
+        }
+    }
+}
+
+private class SecondaryAction(val text: String, val onClick: () -> Unit)
+
+@Composable
+private fun SecondaryCard(
+    label: String,
+    value: String,
+    dot: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    extra: SecondaryAction? = null,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(3.dp, RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(9.dp).clip(CircleShape).background(if (enabled) dot else ImmerlexColors.Line))
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = if (enabled) ImmerlexColors.Body else ImmerlexColors.Meta)
+        }
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else ImmerlexColors.Meta,
+        )
+        extra?.let { action ->
+            Text(
+                action.text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable(onClick = action.onClick),
+            )
+        }
+    }
+}
+
+/** 室友是一张贴在角落的便签，不是一张标准卡：暖底、衬线、歪一点点，只占一行。 */
+@Composable
+private fun RoommateNote(state: HomeState, onOpenRoom: () -> Unit) {
+    val fishColor = MaterialTheme.colorScheme.onPrimaryContainer
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .widthIn(max = 260.dp)
+                .rotate(-0.8f)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(onClick = onOpenRoom)
+                .padding(start = 13.dp, end = 13.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(
-                stringResource(R.string.home_streak, state.streak),
-                style = MaterialTheme.typography.headlineMedium,
+                text = when {
+                    !state.roomMet -> stringResource(R.string.home_room_unmet)
+                    state.roomLine.isNotBlank() ->
+                        stringResource(R.string.home_room_slip, state.roomName, state.roomLine)
+                    else -> state.roomName
+                },
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
+                color = fishColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                stringResource(if (state.checkedIn) R.string.home_checked_in else R.string.home_not_yet),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (state.checkedIn) MaterialTheme.colorScheme.primary else ImmerlexColors.Meta,
-            )
+            if (state.roomMet) {
+                FishIcon(Modifier.size(11.dp), fishColor)
+                Text(
+                    state.roomBalance.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = fishColor,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun CountCard(label: String, value: Int, modifier: Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Text(value.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Meta)
-        }
-    }
+private fun SmallStatLine(state: HomeState) {
+    val parts = mutableListOf(stringResource(R.string.home_hero_done_count, state.done))
+    if (state.newWords > 0) parts += stringResource(R.string.home_new_words, state.newWords)
+    Text(
+        parts.joinToString("　·　"),
+        style = MaterialTheme.typography.bodySmall,
+        color = ImmerlexColors.Meta,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** 补卡是"漏一天不归零"的唯一机制，所以它用没用过要摆在明面上。 */
@@ -234,134 +345,4 @@ private fun MakeupLine(state: HomeState) {
         else -> R.string.home_makeup_unused
     }
     Text(stringResource(text), style = MaterialTheme.typography.bodySmall, color = ImmerlexColors.Body)
-}
-
-/**
- * 13 周 × 7 天的格子，颜色只回答一件事：那天背过或复习过多少词。
- * 未来的几天留在网格里但不给颜色，免得最后一行看起来像"没背"。
- */
-@Composable
-private fun HeatmapCard(days: List<HeatDay>, todayWords: Int) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.home_heat_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                stringResource(R.string.home_heat_caption, todayWords),
-                style = MaterialTheme.typography.bodySmall,
-                color = ImmerlexColors.Meta,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                days.chunked(7).forEach { week ->
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        week.forEach { day -> HeatCell(day.level) }
-                    }
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    stringResource(R.string.home_heat_less),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ImmerlexColors.Meta,
-                )
-                (0..4).forEach { HeatCell(it) }
-                Text(
-                    stringResource(R.string.home_heat_more),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ImmerlexColors.Meta,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeatCell(level: Int) {
-    val color = if (level == 0) {
-        MaterialTheme.colorScheme.surfaceVariant
-    } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f + 0.2f * level)
-    }
-    Box(Modifier.size(18.dp).background(color, RoundedCornerShape(3.dp)))
-}
-
-/**
- * 近 30 天的柱状趋势：每根柱是一天的去重词数，最后一根是今天。
- * 0 个词的日子留一条浅色底座，避免"没背"和"漏画"分不清。
- */
-@Composable
-private fun TrendCard(days: List<TrendDay>) {
-    val barColor = MaterialTheme.colorScheme.primary
-    val emptyColor = MaterialTheme.colorScheme.surfaceVariant
-    val max = days.maxOfOrNull { it.words } ?: 0
-    val chartHeight = 84.dp
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                stringResource(R.string.home_trend_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                stringResource(R.string.home_trend_caption),
-                style = MaterialTheme.typography.bodySmall,
-                color = ImmerlexColors.Meta,
-            )
-            Row {
-                Column(
-                    modifier = Modifier.width(20.dp).height(chartHeight),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    Text(
-                        if (max > 0) max.toString() else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ImmerlexColors.Meta,
-                    )
-                    Text("0", style = MaterialTheme.typography.labelSmall, color = ImmerlexColors.Meta)
-                }
-                Canvas(Modifier.padding(start = 6.dp).weight(1f).height(chartHeight)) {
-                    if (days.isEmpty()) return@Canvas
-                    val slot = size.width / days.size
-                    val gap = 1.dp.toPx()
-                    val base = 2.dp.toPx()
-                    days.forEachIndexed { index, day ->
-                        val height = if (max == 0) base else (size.height * day.words / max).coerceAtLeast(base)
-                        drawRoundRect(
-                            color = if (day.words == 0) emptyColor else barColor.copy(
-                                alpha = if (index == days.lastIndex) 1f else 0.55f,
-                            ),
-                            topLeft = Offset(index * slot + gap, size.height - height),
-                            size = Size((slot - 2 * gap).coerceAtLeast(1f), height),
-                            cornerRadius = CornerRadius(base, base),
-                        )
-                    }
-                }
-            }
-            Row(Modifier.padding(start = 26.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    stringResource(R.string.home_trend_start, days.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ImmerlexColors.Meta,
-                )
-                Text(
-                    stringResource(R.string.home_trend_today),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ImmerlexColors.Meta,
-                )
-            }
-        }
-    }
 }

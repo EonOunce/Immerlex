@@ -13,12 +13,34 @@ const val DEFAULT_FONT_SCALE = 17f
 const val MIN_FONT_SCALE = 14f
 const val MAX_FONT_SCALE = 21f
 
+/**
+ * 全 app 的主色，用户在设置页与今日页一键切换。core 只存 ARGB 整数，
+ * 换成 Compose 颜色、派生 materialScheme 都留在 `app/ui/Theme.kt`——这一层不碰界面。
+ *
+ * 两档都是"够亮的暖色"：杏黄与珊瑚橘。因为它们本身偏亮，深底浅底都能直接当 primary，
+ * 反色一律用墨黑（配在亮黄/亮橘上比白色更清楚，也满足对比度）。
+ */
+enum class Accent(val key: String, val argb: Int, val onArgb: Int, val containerLight: Int, val containerDark: Int) {
+    WARM("warm", 0xFFFFC94D.toInt(), 0xFF201D1A.toInt(), 0xFFFFE9A8.toInt(), 0xFF4A3A12.toInt()),
+    CORAL("coral", 0xFFFF8A5C.toInt(), 0xFF201D1A.toInt(), 0xFFFFD3BC.toInt(), 0xFF4A271A.toInt()),
+    ;
+
+    companion object {
+        val DEFAULT = WARM
+
+        /** 存的字符串认不出来（老版本、手改、备份里带来）一律退回默认，不崩。 */
+        fun saneOr(stored: String?): Accent = entries.firstOrNull { it.key == stored } ?: DEFAULT
+    }
+}
+
 /** Presentation settings that must take effect immediately, without a restart or a save button. */
 data class Appearance(
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
     /** 点开词卡、翻出一道题就自动朗读英文。 */
     val autoSpeak: Boolean = false,
+    /** 全 app 主色，两档暖色，改了立即生效。 */
+    val accent: Accent = Accent.DEFAULT,
 )
 
 /** Non-secret app preferences. The API key lives in [com.immerlex.core.ai.ApiKeyStore]. */
@@ -36,7 +58,7 @@ class AppPreferences(context: Context) {
     // SharedPreferences keeps listeners weakly, so the listener must be a field or it is collected.
     private val changeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
-            KEY_FONT_SCALE, KEY_DARK, KEY_AUTO_SPEAK -> _appearance.value = readAppearance()
+            KEY_FONT_SCALE, KEY_DARK, KEY_AUTO_SPEAK, KEY_ACCENT -> _appearance.value = readAppearance()
             KEY_KEY_BINDINGS -> _keyBindings.value = readKeyBindings()
         }
     }
@@ -49,6 +71,7 @@ class AppPreferences(context: Context) {
         fontScale = prefs.getFloat(KEY_FONT_SCALE, DEFAULT_FONT_SCALE),
         darkMode = prefs.getBoolean(KEY_DARK, false),
         autoSpeak = prefs.getBoolean(KEY_AUTO_SPEAK, false),
+        accent = Accent.saneOr(prefs.getString(KEY_ACCENT, null)),
     )
 
     private fun readKeyBindings() = KeyMap.decode(prefs.getString(KEY_KEY_BINDINGS, "").orEmpty())
@@ -100,6 +123,11 @@ class AppPreferences(context: Context) {
     var autoSpeak: Boolean
         get() = prefs.getBoolean(KEY_AUTO_SPEAK, false)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SPEAK, value).apply()
+
+    /** 全 app 主色，两档暖色，改了立即生效（走 appearance StateFlow）。 */
+    var accent: Accent
+        get() = Accent.saneOr(prefs.getString(KEY_ACCENT, null))
+        set(value) = prefs.edit().putString(KEY_ACCENT, value.key).apply()
 
     /** 每日到期提醒的开关。关了就不排任务，打开时排到当天的设定时刻。 */
     var reminderEnabled: Boolean
@@ -163,6 +191,7 @@ class AppPreferences(context: Context) {
         private const val KEY_FONT_SCALE = "font_scale"
         private const val KEY_DARK = "dark_mode"
         private const val KEY_AUTO_SPEAK = "auto_speak"
+        private const val KEY_ACCENT = "accent"
         private const val KEY_REMINDER_ON = "reminder_enabled"
         private const val KEY_REMINDER_MINUTE = "reminder_minute"
         private const val KEY_REMINDED_DAY = "last_reminded_day"

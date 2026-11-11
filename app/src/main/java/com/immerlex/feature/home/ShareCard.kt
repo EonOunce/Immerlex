@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,6 +73,9 @@ private const val MAX_WALL_LINES = 2
 private const val WALL_LINE_CHARS = 56
 private const val WALL_SEPARATOR = " · "
 private val ShareRule = Color(0xFFD9D6CD)
+
+/** 海报上的次要标签统一压深一档：#F5F4F0 纸上原来的 Meta 灰偏淡，字看不清。 */
+private val PosterMeta = Color(0xFF63677A)
 
 /**
  * 分享卡永远是纸色，不跟深色主题走——它是一张要发出去的海报，
@@ -183,7 +187,12 @@ private fun ShareCardPreview(image: ImageBitmap?) {
 
 @Composable
 private fun ShareCard(state: HomeState, modifier: Modifier = Modifier) {
-    CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+    CompositionLocalProvider(
+        LocalDensity provides Density(1f, 1f),
+        // 海报背景恒为纸色，正文一律吃固定墨色：否则深色主题下默认内容色是接近白的 onSurface，
+        // 白字压在纸上看不清（用户 2026-11-11 反馈）。
+        LocalContentColor provides ImmerlexColors.Ink,
+    ) {
         Column(
             modifier = modifier
                 .requiredSize(CARD_WIDTH_PX.dp, CARD_HEIGHT_PX.dp)
@@ -236,7 +245,7 @@ private fun ShareHeader() {
         Text(
             date,
             fontSize = 26.sp,
-            color = ImmerlexColors.Meta,
+            color = PosterMeta,
             letterSpacing = 1.sp,
             modifier = Modifier.alignByBaseline(),
         )
@@ -276,7 +285,7 @@ private fun ShareStat(value: Int, label: String) {
     Column {
         Text(value.toString(), fontSize = 72.sp, fontWeight = FontWeight.Bold, lineHeight = 72.sp)
         Spacer(Modifier.height(12.dp))
-        Text(label, fontSize = 26.sp, color = ImmerlexColors.Meta)
+        Text(label, fontSize = 26.sp, color = PosterMeta)
     }
 }
 
@@ -290,7 +299,7 @@ private fun ShareWall(label: String, words: List<String>) {
     val shown = remember(words) { wallLines(words).take(MAX_WALL_LINES) }
     val listed = shown.sumOf { it.size }
     Column(Modifier.fillMaxWidth()) {
-        Text(label, fontSize = 24.sp, color = ImmerlexColors.Meta, letterSpacing = 2.sp)
+        Text(label, fontSize = 24.sp, color = PosterMeta, letterSpacing = 2.sp)
         Spacer(Modifier.height(10.dp))
         shown.forEach { line ->
             Text(
@@ -306,7 +315,7 @@ private fun ShareWall(label: String, words: List<String>) {
             Text(
                 stringResource(R.string.share_card_more, words.size - listed),
                 fontSize = 22.sp,
-                color = ImmerlexColors.Meta,
+                color = PosterMeta,
             )
         }
     }
@@ -344,7 +353,7 @@ private fun ShareHeat(days: List<HeatDay>) {
         Text(
             stringResource(R.string.share_card_days, days.count { it.words > 0 }),
             fontSize = 24.sp,
-            color = ImmerlexColors.Meta,
+            color = PosterMeta,
             modifier = Modifier.alignByBaseline(),
         )
     }
@@ -370,13 +379,13 @@ private fun ShareFooter() {
         Text(
             stringResource(R.string.app_subtitle),
             fontSize = 24.sp,
-            color = ImmerlexColors.Meta,
+            color = PosterMeta,
             letterSpacing = 1.4.sp,
         )
         Text(
             stringResource(R.string.share_card_handle),
             fontSize = 24.sp,
-            color = ImmerlexColors.Meta,
+            color = PosterMeta,
         )
     }
 }

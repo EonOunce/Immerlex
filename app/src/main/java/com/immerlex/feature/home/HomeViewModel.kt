@@ -11,6 +11,7 @@ import com.immerlex.core.schedule.DailyLoopService
 import com.immerlex.core.schedule.HeatDay
 import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.core.schedule.TrendDay
+import com.immerlex.core.settings.Accent
 import com.immerlex.core.settings.AppPreferences
 import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,7 @@ data class HomeState(
     val quizCount: Int = 0,
     val quizResumable: Boolean = false,
     val earlyCount: Int = 0,
+    val trickyCount: Int = 0,
     val roomMet: Boolean = false,
     val roomName: String = "",
     val roomLine: String = "",
@@ -67,6 +69,11 @@ class HomeViewModel(
 
     /** 从阅读页打分回来时要重算：连续天数和"今日已完成"跟着打分走。 */
     fun refresh() = viewModelScope.launch { load() }
+
+    /** 今日页顶部的两个小圆点直接换主色：走 appearance StateFlow，全 app 当场跟着换。 */
+    fun setAccent(value: Accent) {
+        prefs.accent = value
+    }
 
     private suspend fun load() {
         val now = Instant.now()
@@ -99,6 +106,8 @@ class HomeViewModel(
             quizResumable = resume.has(QuizMode.DUE),
             // 提前复习一组 5 / 10 / 20 个（设置页选）：入口数字是这一组能练多少，不是学过的词总数。
             earlyCount = quiz.earlyCandidates(now).size.coerceAtMost(prefs.earlyGroupSize),
+            // 易错练习没标过的词就整条入口不出现，所以这里只报真实可练的个数。
+            trickyCount = quiz.trickyCandidates(now).size.coerceAtMost(QuizService.SESSION_LIMIT),
             roomMet = room.met,
             roomName = room.name,
             roomLine = room.line,

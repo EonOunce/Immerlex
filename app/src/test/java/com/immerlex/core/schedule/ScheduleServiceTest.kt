@@ -1,6 +1,7 @@
 package com.immerlex.core.schedule
 
 import com.immerlex.core.db.FSRS_STATE_REVIEW
+import com.immerlex.core.db.LOG_KIND_ATTEMPT
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.ReviewLogEntity
@@ -230,6 +231,122 @@ class ScheduleServiceTest {
 
         assertEquals(2, queue.newWords.size)
         assertEquals(0, queue.reviewWords.size)
+    }
+
+    @Test
+    fun firstCorrectRecognitionIsAnAttemptThatLeavesTheCardAlone() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "resist", source = "test", createdAtSec = 0))
+        val afterLearn = svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)!!.word
+
+        val result = svc.recognize(
+            words.findById(id)!!, correct = true, source = "quiz",
+            questionType = "EN_ZH", now = now.plus(3, ChronoUnit.SECONDS),
+        )!!
+
+        assertEquals(LOG_KIND_ATTEMPT, result.kind)
+        assertEquals("attempt 绝不动卡片", afterLearn, words.findById(id))
+        assertEquals(LOG_KIND_ATTEMPT, logs.items.last().kind)
+        assertEquals("EN_ZH", logs.items.last().questionType)
+    }
+
+    @Test
+    fun threeCorrectRecognitionsCollapseToOneRecallGood() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "column", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+        val afterLearn = words.findById(id)!!
+
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(6, ChronoUnit.SECONDS))
+        assertEquals("两次 attempt 一个参数都没动", afterLearn, words.findById(id))
+
+        val third = svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(9, ChronoUnit.SECONDS))!!
+        assertEquals(LOG_KIND_RECALL, third.kind)
+        assertEquals("第三次才 +1 reps", 2, third.word.reps)
+        assertEquals(
+            listOf(LOG_KIND_LEARN, LOG_KIND_ATTEMPT, LOG_KIND_ATTEMPT, LOG_KIND_RECALL),
+            logs.items.map { it.kind },
+        )
+    }
+
+    @Test
+    fun aWrongRecognitionIsAnImmediateAgainAndResetsTheStreak() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "bin", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))
+        val wrong = svc.recognize(words.findById(id)!!, false, "quiz", now = now.plus(6, ChronoUnit.SECONDS))!!
+        assertEquals(LOG_KIND_RECALL, wrong.kind)
+        assertEquals(Rating.AGAIN.value, logs.items.last().rating)
+
+        val next = svc.recognize(
+            words.findById(id)!!, true, "quiz", now = now.plus(60, ChronoUnit.MINUTES),
+        )!!
+        assertEquals("连对清零后下一次答对仍是 attempt", LOG_KIND_ATTEMPT, next.kind)
+    }
+
+    @Test
+    fun theStreakAccumulatesAcrossDifferentEntries() = runBlocking {
+        val (svc, words, _) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "harbour", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        assertEquals(
+            LOG_KIND_ATTEMPT,
+            svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))!!.kind,
+        )
+        assertEquals(
+            LOG_KIND_ATTEMPT,
+            svc.recognize(words.findById(id)!!, true, "early", now = now.plus(6, ChronoUnit.SECONDS))!!.kind,
+        )
+        val third = svc.recognize(words.findById(id)!!, true, "tricky", now = now.plus(9, ChronoUnit.SECONDS))!!
+        assertEquals("换入口也加到同一计数上", LOG_KIND_RECALL, third.kind)
+    }
+
+    @Test
+    fun readerRecallIsStillOneShotEvenWithAttemptsPending() = runBlocking {
+        val (svc, words, _) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "resin", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))
+
+        val reader = svc.recall(words.findById(id)!!, Rating.GOOD, SOURCE, now = now.plus(4, ChronoUnit.DAYS))!!
+        assertEquals("想起来一次就够", LOG_KIND_RECALL, reader.kind)
+    }
+
+    @Test
+    fun attemptLogsAreNotUndoable() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "kiln", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+        val attempt = svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))!!
+
+        assertNull("attempt 没快照，撤销跳过它", svc.undo(attempt.logId, now.plus(5, ChronoUnit.SECONDS)))
+        assertEquals(2, logs.items.size)
+    }
+
+    @Test
+    fun undoingTheCollapsedGoodIgnoresAttempts() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "quay", source = "test", createdAtSec = 0))
+        val afterLearn = svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)!!.word
+
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(3, ChronoUnit.SECONDS))
+        svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(6, ChronoUnit.SECONDS))
+        val good = svc.recognize(words.findById(id)!!, true, "quiz", now = now.plus(9, ChronoUnit.SECONDS))!!
+
+        val restored = svc.undo(good.logId, now.plus(10, ChronoUnit.SECONDS))!!
+        assertEquals("撤销只看真实事件，attempt 不占 reps", afterLearn, restored.word)
+        assertEquals(3, logs.items.size)
     }
 
     private suspend fun seed(words: FakeWordDao, word: String, dueInDays: Long? = null): Long {

@@ -20,7 +20,8 @@ enum class QuizType(val key: String, val tier: Int) {
     }
 }
 
-enum class QuizMode { DUE, EARLY }
+/** [TRICKY] 只练用户亲手标过的易错词，给"今天还没练够"留一条不用阅读的路。 */
+enum class QuizMode { DUE, EARLY, TRICKY, NEMESIS }
 
 /** 选项：[text] 是摆在屏上的那一面，[gloss] 是答完才揭开的另一面。 */
 data class QuizOption(

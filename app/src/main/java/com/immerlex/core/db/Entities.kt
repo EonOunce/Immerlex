@@ -107,6 +107,14 @@ const val LOG_KIND_LEARN = "learn"
 /** 先回忆再反馈的一次记录；阅读复习、测验、提前复习都记这个。 */
 const val LOG_KIND_RECALL = "recall"
 
+/**
+ * 测验类入口里"认出来了但还差几次"的一笔（docs/adr/0028）：四选一认出一个词不该
+ * 和凭空想起来等价记一次 GOOD，于是每满 [GOOD_STREAK] 次连对才写一条 recall。
+ * 这一行**不动 FSRS 卡片、不算 reps、不改到期日**，只当活动点亮热力图与打卡；
+ * 所有按 `kind='recall'` 过滤的地方（题型闸门、颜色、"今日回忆"、素材账）都自动看不见它。
+ */
+const val LOG_KIND_ATTEMPT = "attempt"
+
 /** 阅读页写下的记录。正文里的颜色只听这一类：测验和提前复习排的是同一个词，但不改颜色。 */
 const val LOG_SOURCE_READER = "reader"
 
@@ -238,6 +246,39 @@ data class QuizMaterialEntity(
 data class QuizSessionEntity(
     @PrimaryKey val mode: String,
     val payload: String,
+)
+
+/**
+ * 做完的一组题留下的成绩。会话表在结束时整行删掉，"最近测了哪几组、各组对了几个"
+ * 就再也没处查了，所以这里单独留一行——战绩页的最近记录与破纪录都只读这张表。
+ *
+ * [wrong] 与 [bestStreak] 是从 `correct + wrong = asked` 推不出来的那一半：
+ * 答错换题型重练的那些题不重算，连对次数只在当时那一次走子里存在。
+ */
+@Entity(tableName = "quiz_runs", indices = [Index("finishedAtSec")])
+data class QuizRunEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** [com.immerlex.core.quiz.QuizMode] 名：到期 / 提前 / 易错 / 宿敌。 */
+    val mode: String,
+    val finishedAtSec: Long,
+    val asked: Int,
+    val correct: Int,
+    val wrong: Int,
+    val bestStreak: Int,
+)
+
+/**
+ * 每天留一个影子：那天"此刻大概能想起几个词"最好的那一次。
+ * 这个数算的是卡片**当下**的回忆把握，明天就再也回推不出今天的样子，
+ * 所以要按天存一份；一天只留高点，越算越多不会把之前的高度顶掉。
+ */
+@Entity(tableName = "recall_snapshots")
+data class RecallSnapshotEntity(
+    /** 本地日历日序号（`LocalDate.toEpochDay()`），与 `daily_loop` 同一套日子。 */
+    @PrimaryKey val epochDay: Long,
+    val canRecall: Int,
+    val mastered: Int,
+    val atSec: Long,
 )
 
 /** `sync_lineage` 只有一行，永远是这个 id。 */

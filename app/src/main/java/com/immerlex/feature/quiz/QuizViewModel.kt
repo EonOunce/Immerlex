@@ -7,6 +7,9 @@ import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizQuestion
 import com.immerlex.core.quiz.QuizResume
 import com.immerlex.core.quiz.QuizResumeStore
+import com.immerlex.core.quiz.QuizRunRecord
+import com.immerlex.core.quiz.QuizRunSaved
+import com.immerlex.core.quiz.QuizRunStore
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.settings.AppPreferences
@@ -45,27 +48,43 @@ data class QuizState(
     val doubt: Boolean = false,
     /** 这一组里已经标过易错的词：只有没标过的才问那一句"要不要标"。 */
     val trickyIds: Set<Long> = emptySet(),
+    /** 连对够次数后，这个词的词面：问一句要不要移出易错；没得问就是 null。 */
+    val retirement: String? = null,
     /** 出题前的素材账：库里已有几个词的素材、几个还得问模型；0/0 表示还没算出来。 */
     val materialReady: Int = 0,
     val materialToAsk: Int = 0,
     val materialCanAsk: Boolean = false,
+    /** 这组里连对了几个、最长连过一段几个。 */
+    val streak: Int = 0,
+    val bestStreak: Int = 0,
+    /** 结果页那句"破纪录"：这一组留底之后才知道，所以是 null 直到写完。 */
+    val record: QuizRunSaved? = null,
 ) {
     val answered: Boolean get() = chosen != null || doubt
     val isLast: Boolean get() = total > 0 && index >= total - 1
     val showsFinish: Boolean get() = isLast && !practiceQueued
 
-    /** 练习轮只是当堂重练，答对也不计入本组得分。 */
-    fun afterAnswer(index: Int, correct: Boolean): QuizState = copy(
-        chosen = index,
-        correct = correct,
-        correctCount = correctCount + if (correct && !practice) 1 else 0,
+    /** 练习轮只是当堂重练，答对也不计入本组得分，也不算进连对。 */
+    fun afterAnswer(index: Int, correct: Boolean): QuizState {
+        val run = if (practice) streak else if (correct) streak + 1 else 0
+        return copy(
+            chosen = index,
+            correct = correct,
+            correctCount = correctCount + if (correct && !practice) 1 else 0,
+            streak = run,
+            bestStreak = maxOf(bestStreak, run),
+        )
+    }
+
+    /** 不确定就是没记住：没有"你选的这一项"可标，只把答案翻开；连对到此为止。 */
+    fun afterDoubt(): QuizState = copy(
+        doubt = true,
+        correct = false,
+        streak = if (practice) streak else 0,
     )
 
-    /** 不确定就是没记住：没有"你选的这一项"可标，只把答案翻开。 */
-    fun afterDoubt(): QuizState = copy(doubt = true, correct = false)
-
     /** 换下一题：上一题的选择与"不确定"都该清掉。 */
-    fun fresh(): QuizState = copy(chosen = null, correct = false, doubt = false)
+    fun fresh(): QuizState = copy(chosen = null, correct = false, doubt = false, retirement = null)
 }
 
 /**
@@ -78,6 +97,7 @@ class QuizViewModel(
     private val prefs: AppPreferences,
     private val resume: QuizResumeStore,
     private val tricky: TrickyRepository,
+    private val runs: QuizRunStore,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuizState())
@@ -118,7 +138,10 @@ class QuizViewModel(
         _state.value = current.afterAnswer(index, correct)
         if (!current.practice) {
             if (!correct) markMissed(question)
-            viewModelScope.launch { quiz.record(question, correct) }
+            viewModelScope.launch {
+                quiz.record(question, correct)
+                if (correct) offerRetirement(question)
+            }
         }
         persist()
     }
@@ -143,6 +166,22 @@ class QuizViewModel(
         if (question.wordId in current.trickyIds) return
         _state.value = current.copy(trickyIds = current.trickyIds + question.wordId)
         viewModelScope.launch { tricky.mark(question.word) }
+    }
+
+    /** 标了易错的词连对够了次数，才问那一句"要不要移出"：这一题还摆在面前时问才有意义。 */
+    private suspend fun offerRetirement(question: QuizQuestion) {
+        val name = quiz.retirementCandidate(question.wordId) ?: return
+        if (_state.value.question?.wordId == question.wordId) {
+            _state.value = _state.value.copy(retirement = name)
+        }
+    }
+
+    /** 移出易错只清易错这两张表上的标记与连线，复习记录一条不动。 */
+    fun retire() {
+        val current = _state.value
+        val name = current.retirement ?: return
+        _state.value = current.copy(retirement = null)
+        viewModelScope.launch { tricky.deleteWord(name) }
     }
 
     private fun markMissed(question: QuizQuestion) {
@@ -182,6 +221,9 @@ class QuizViewModel(
             correctCount = 0,
             roundTotal = 0,
             wrongCount = 0,
+            streak = 0,
+            bestStreak = 0,
+            record = null,
             practice = false,
             materialReady = 0,
             materialToAsk = 0,
@@ -218,6 +260,16 @@ class QuizViewModel(
                         now = now,
                         excludeWordIds = excluded,
                         groupSize = prefs.earlyGroupSize,
+                        onStage = ::publishStage,
+                        onMaterial = ::publishMaterial,
+                    )
+                    QuizMode.TRICKY -> quiz.planTricky(
+                        now = now,
+                        onStage = ::publishStage,
+                        onMaterial = ::publishMaterial,
+                    )
+                    QuizMode.NEMESIS -> quiz.planNemesis(
+                        now = now,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
@@ -287,13 +339,29 @@ class QuizViewModel(
     }
 
     private fun finish() {
-        _state.value = _state.value.copy(
+        val current = _state.value
+        _state.value = current.copy(
             phase = QuizPhase.DONE,
             question = null,
             practice = false,
             wrongCount = wrong.size,
+            record = null,
         )
-        clearSaved(_state.value.mode)
+        clearSaved(current.mode)
+        val record = QuizRunRecord(
+            mode = current.mode,
+            asked = current.roundTotal,
+            correct = current.correctCount,
+            wrong = wrong.size,
+            bestStreak = current.bestStreak,
+        )
+        viewModelScope.launch {
+            val saved = runs.save(record, Instant.now())
+            // 只有还停在同一组的结果页才说这句话：中途已经去下一组了，就没什么纪录可报。
+            if (_state.value.phase == QuizPhase.DONE && _state.value.mode == current.mode) {
+                _state.value = _state.value.copy(record = saved)
+            }
+        }
     }
 
     /** 回到上次没做完的那一组：题目与进度原样复原，作答记录早已写过，不重考不重记。 */
@@ -326,6 +394,8 @@ class QuizViewModel(
             practiceQueued = !saved.inPractice && wrong.any { alternatives.containsKey(it.wordId) },
             doubt = saved.doubt,
             trickyIds = saved.trickyIds,
+            streak = saved.streak,
+            bestStreak = saved.bestStreak,
         )
         return true
     }
@@ -347,6 +417,8 @@ class QuizViewModel(
             group = current.group,
             doubt = current.doubt,
             trickyIds = current.trickyIds,
+            streak = current.streak,
+            bestStreak = current.bestStreak,
         )
     }
 

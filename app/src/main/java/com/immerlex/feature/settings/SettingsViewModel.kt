@@ -29,6 +29,7 @@ import com.immerlex.core.db.WordDao
 import com.immerlex.core.notify.GenerationNotifier
 import com.immerlex.core.notify.ReminderControl
 import com.immerlex.core.quiz.EarlyReview
+import com.immerlex.core.settings.Accent
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.settings.DEFAULT_FONT_SCALE
 import java.time.Instant
@@ -53,6 +54,8 @@ data class SettingsState(
     val fontScale: Float = DEFAULT_FONT_SCALE,
     val darkMode: Boolean = false,
     val autoSpeak: Boolean = false,
+    /** 全 app 主色，两档暖色，改了立即生效。 */
+    val accent: Accent = Accent.DEFAULT,
     /** 提前复习一组几个词：5 / 10 / 20。 */
     val earlyGroupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
     /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
@@ -133,6 +136,12 @@ class SettingsViewModel(
     fun onAutoSpeak(value: Boolean) {
         prefs.autoSpeak = value
         _state.value = _state.value.copy(autoSpeak = prefs.autoSpeak)
+    }
+
+    /** 主色改了即生效：theme 走 appearance StateFlow，全 app 的 primary 当场跟着换。 */
+    fun onAccent(value: Accent) {
+        prefs.accent = value
+        _state.value = _state.value.copy(accent = prefs.accent)
     }
 
     /** 档位也改了即生效：下一次点「提前复习」就按新的一组词数出题。 */
@@ -363,6 +372,7 @@ class SettingsViewModel(
         fontScale = prefs.fontScale,
         darkMode = prefs.darkMode,
         autoSpeak = prefs.autoSpeak,
+        accent = prefs.accent,
         earlyGroupSize = prefs.earlyGroupSize,
         reminderEnabled = reminder.enabled,
         reminderMinute = reminder.minuteOfDay,

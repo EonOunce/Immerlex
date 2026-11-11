@@ -18,6 +18,12 @@ import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.LOG_SOURCE_READER
 import com.immerlex.core.db.QuizMaterialDao
 import com.immerlex.core.db.QuizMaterialEntity
+import com.immerlex.core.db.QuizRunDao
+import com.immerlex.core.db.QuizRunEntity
+import com.immerlex.core.db.RecallEventRow
+import com.immerlex.core.db.RecallSnapshotDao
+import com.immerlex.core.db.RecallSnapshotEntity
+import com.immerlex.core.db.ReviewHistoryDao
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewActivity
 import com.immerlex.core.db.ReviewLogEntity
@@ -186,6 +192,24 @@ internal class FakeQuizMaterialDao : QuizMaterialDao {
     override suspend fun allWords() = items.keys.sorted()
 }
 
+/** 做完一组的留底表：只追加，最近几组按完成时刻往回排。 */
+internal class FakeQuizRunDao : QuizRunDao {
+    val items = mutableListOf<QuizRunEntity>()
+    private var nextId = 1L
+
+    override suspend fun insert(entity: QuizRunEntity): Long {
+        val id = nextId++
+        items += entity.copy(id = id)
+        return id
+    }
+
+    override suspend fun recent(limit: Int) = items
+        .sortedWith(compareByDescending<QuizRunEntity> { it.finishedAtSec }.thenByDescending { it.id })
+        .take(limit)
+
+    override suspend fun bestCorrect(mode: String) = items.filter { it.mode == mode }.maxOfOrNull { it.correct }
+}
+
 internal class FakeChapterDao : ChapterDao {
     val items = mutableListOf<ChapterEntity>()
     private var nextId = 1L
@@ -283,6 +307,32 @@ internal class FakeBibleEntryDao : BibleEntryDao {
     override suspend fun deleteGenerated(genre: String) {
         items.removeAll { it.genre == genre && !it.authoredByUser }
     }
+}
+
+/** 战绩页重放历史时读的那一份：只装 `kind='recall'` 的事件，与真库一样从旧到新。 */
+internal class FakeReviewHistoryDao : ReviewHistoryDao {
+    val items = mutableListOf<RecallEventRow>()
+
+    override suspend fun recallEvents() = items
+}
+
+/** 每日"此刻能想起几个"的影子表：一天只留最高的一次，与真 DAO 的两条 SQL 同语义。 */
+internal class FakeRecallSnapshotDao : RecallSnapshotDao {
+    val items = mutableMapOf<Long, RecallSnapshotEntity>()
+
+    override suspend fun insertIfAbsent(entity: RecallSnapshotEntity) {
+        items.putIfAbsent(entity.epochDay, entity)
+    }
+
+    override suspend fun raiseBest(epochDay: Long, canRecall: Int, mastered: Int, atSec: Long): Int {
+        val current = items[epochDay] ?: return 0
+        if (current.canRecall >= canRecall) return 0
+        items[epochDay] = current.copy(canRecall = canRecall, mastered = mastered, atSec = atSec)
+        return 1
+    }
+
+    override suspend fun bestBefore(today: Long) =
+        items.values.filter { it.epochDay < today }.maxOfOrNull { it.canRecall } ?: 0
 }
 
 internal class FakeTrickyDao : TrickyDao {

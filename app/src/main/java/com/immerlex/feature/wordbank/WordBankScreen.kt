@@ -3,33 +3,37 @@ package com.immerlex.feature.wordbank
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,9 +43,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.ImmerlexApplication
@@ -49,7 +56,7 @@ import com.immerlex.app.R
 import com.immerlex.app.readPlainText
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.RootHandledInsets
-import com.immerlex.app.ui.masteryPalette
+import com.immerlex.app.ui.masteryInk
 import com.immerlex.app.ui.textFor
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.dict.DictEntry
@@ -193,7 +200,7 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
             }
             LazyColumn(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(words, key = { it.id }) { word ->
                     WordRow(word, onClick = { detail = word })
@@ -248,6 +255,7 @@ fun WordBankScreen(vm: WordBankViewModel, onOpenTricky: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BankHeader(
     total: Int,
@@ -259,7 +267,10 @@ private fun BankHeader(
     onExport: () -> Unit,
     onOpenTricky: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(R.string.bank_title),
@@ -272,28 +283,6 @@ private fun BankHeader(
                 style = MaterialTheme.typography.labelLarge,
                 color = ImmerlexColors.Meta,
             )
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onExport, enabled = total > 0) {
-                Text(stringResource(R.string.bank_export))
-            }
-            TextButton(onClick = onOpenTricky) {
-                Text(stringResource(R.string.bank_tricky))
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onImport) {
-                Text(stringResource(R.string.bank_import_txt))
-            }
-            TextButton(onClick = onImportImage) {
-                Text(stringResource(R.string.bank_import_image))
-            }
-            TextButton(onClick = onImportPdf) {
-                Text(stringResource(R.string.bank_import_pdf))
-            }
         }
         OutlinedTextField(
             value = query,
@@ -301,44 +290,65 @@ private fun BankHeader(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             label = { Text(stringResource(R.string.bank_search)) },
+            trailingIcon = {
+                IconButton(onClick = onImportImage) {
+                    Icon(
+                        painterResource(R.drawable.ic_camera),
+                        contentDescription = stringResource(R.string.bank_import_image),
+                    )
+                }
+            },
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BankChip(R.string.bank_import_txt, onClick = onImport)
+            BankChip(R.string.bank_import_pdf, onClick = onImportPdf)
+            BankChip(R.string.bank_export, onClick = onExport, enabled = total > 0)
+            BankChip(R.string.bank_tricky, onClick = onOpenTricky)
+        }
+    }
+}
+
+@Composable
+private fun BankChip(@StringRes label: Int, onClick: () -> Unit, enabled: Boolean = true) {
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else ImmerlexColors.Meta,
+            modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 11.dp, vertical = 6.dp),
         )
     }
 }
 
 @Composable
 private fun WordRow(word: WordEntity, onClick: () -> Unit) {
-    val (soft, deep) = masteryPalette(word)
     Row(
         modifier = Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(start = 10.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .height(34.dp)
-                .background(soft, RoundedCornerShape(2.dp)),
-        )
-        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(word.word, style = MaterialTheme.typography.titleMedium)
+            Text(word.word, style = MaterialTheme.typography.titleSmall)
             if (word.translation.isNotEmpty()) {
                 Text(
                     word.translation,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 stringResource(masteryLabel(word)),
-                style = MaterialTheme.typography.labelLarge,
-                color = deep,
+                style = MaterialTheme.typography.labelMedium,
+                color = masteryInk(word),
             )
             word.dueEpochSec?.let {
                 Text(formatDue(it), style = MaterialTheme.typography.labelSmall, color = ImmerlexColors.Meta)

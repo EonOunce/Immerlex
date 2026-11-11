@@ -3,13 +3,16 @@ package com.immerlex.core.quiz
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.LOG_SOURCE_QUIZ
+import com.immerlex.core.db.ReviewHistoryDao
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.TrickyDao
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
-import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.schedule.DayBoundary
+import com.immerlex.core.schedule.Nemesis
 import com.immerlex.core.schedule.ScheduleService
+import com.immerlex.core.tricky.TrickyRetirement
+import com.immerlex.core.word.wordSurface
 import java.time.Instant
 
 /**
@@ -29,6 +32,8 @@ class QuizService(
     private val logDao: ReviewLogDao,
     private val chapterDao: ChapterDao,
     private val trickyDao: TrickyDao,
+    /** 宿敌名单从真记账的历史里现推，不另建表。 */
+    private val historyDao: ReviewHistoryDao,
     private val schedule: ScheduleService,
     /** "今天"的起点：凌晨那段可能还算前一天，与今日页、阅读页同一套判定。 */
     private val boundary: DayBoundary,
@@ -75,6 +80,63 @@ class QuizService(
         return build(QuizMode.DUE, words, now, seed, onStage, onMaterial)
     }
 
+    /**
+     * 标过易错、又在词库里的词：错得最多的排前面，其次按到期日。
+     * 今天已经回忆过的不再重复考——这条闸门和到期、提前复习用的是同一个口径。
+     * 易错表存的是词面，词库里的词可能大写开头，两边都过 [wordSurface] 才对得上。
+     */
+    suspend fun trickyCandidates(now: Instant): List<WordEntity> {
+        val marked = trickyDao.all().mapTo(HashSet()) { wordSurface(it.word) }
+        if (marked.isEmpty()) return emptyList()
+        val recalledToday = logDao.recalledWordIdsSince(boundary.startOf(now)).toSet()
+        return wordDao.allWords()
+            .filter { wordSurface(it.word) in marked && it.id !in recalledToday }
+            .sortedWith(
+                compareByDescending<WordEntity> { it.lapses }
+                    .thenBy { it.dueEpochSec ?: Long.MAX_VALUE }
+                    .thenBy { it.id },
+            )
+            .take(SESSION_LIMIT)
+    }
+
+    suspend fun planTricky(
+        now: Instant,
+        seed: Long = now.epochSecond,
+        onStage: (QuizStage) -> Unit = {},
+        onMaterial: (QuizMaterialPrep) -> Unit = {},
+    ): QuizSession {
+        onStage(QuizStage.COLLECTING)
+        val words = trickyCandidates(now)
+        if (words.isEmpty()) return QuizSession(QuizMode.TRICKY, emptyList())
+        onStage(QuizStage.READING_LOGS)
+        return build(QuizMode.TRICKY, words, now, seed, onStage, onMaterial)
+    }
+
+    /**
+     * 宿敌：最后一次真记账是「没想起来」的那些词，最近把你说倒的那个排在最前面。
+     * 这里不加"今天已经回忆过就不再考"的闸门——认出来一次它自己就从名单上下去了，
+     * 还留在名单上的，就是今天也没打赢的那个。
+     */
+    suspend fun nemesisCandidates(): List<WordEntity> {
+        val ids = Nemesis.wordIds(historyDao.recallEvents()).take(SESSION_LIMIT)
+        if (ids.isEmpty()) return emptyList()
+        val byId = wordDao.findByIds(ids).associateBy { it.id }
+        return ids.mapNotNull { byId[it] }
+    }
+
+    suspend fun planNemesis(
+        now: Instant,
+        seed: Long = now.epochSecond,
+        onStage: (QuizStage) -> Unit = {},
+        onMaterial: (QuizMaterialPrep) -> Unit = {},
+    ): QuizSession {
+        onStage(QuizStage.COLLECTING)
+        val words = nemesisCandidates()
+        if (words.isEmpty()) return QuizSession(QuizMode.NEMESIS, emptyList())
+        onStage(QuizStage.READING_LOGS)
+        return build(QuizMode.NEMESIS, words, now, seed, onStage, onMaterial)
+    }
+
     suspend fun planEarly(
         now: Instant,
         excludeWordIds: Set<Long>,
@@ -97,23 +159,37 @@ class QuizService(
         return build(QuizMode.EARLY, picked, now, seed, onStage, onMaterial)
     }
 
-    /** 一次作答 = 一次独立回忆；答对记记得，答错记忘了。提前复习照常记，不压成困难。 */
+    /**
+     * 一次作答折算成一次"认出来"（[ScheduleService.recognize]）：四选一认出比凭空想起容易，
+     * 答对先攒连对、满 [ScheduleService.GOOD_STREAK] 次才写一次 recall GOOD；答错立即一次
+     * recall AGAIN 并清零。是否该考由候选集决定，这里不再按 due 拦一次，所以刚学过的词也能作答。
+     */
     suspend fun record(
         question: QuizQuestion,
         correct: Boolean,
         now: Instant = Instant.now(),
     ): Boolean {
         val word = wordDao.findById(question.wordId) ?: return false
-        val result = schedule.recall(
+        val result = schedule.recognize(
             word = word,
-            rating = if (correct) Rating.GOOD else Rating.AGAIN,
+            correct = correct,
             source = LOG_SOURCE_QUIZ,
             questionType = question.type.key,
             now = now,
-            // 今天的词（含刚学过的）都允许作答；是否该考由候选集决定，不靠 due 再拦一次。
-            allowEarly = true,
         )
         return result != null
+    }
+
+    /**
+     * 一个词标成易错后连对满 [TrickyRetirement.STREAK] 次（认出来与真回忆都算一次答对），
+     * 就报出它的词面，问一句要不要移出易错；没标过、或中间答错过，返回 null。
+     */
+    suspend fun retirementCandidate(wordId: Long): String? {
+        val word = wordDao.findById(wordId) ?: return null
+        val name = word.word.trim().lowercase()
+        val marked = trickyDao.byWord(name) ?: return null
+        val streak = TrickyRetirement.correctStreakSinceMarked(logDao.forWord(wordId), marked.createdAtSec)
+        return if (TrickyRetirement.shouldRetire(streak)) name else null
     }
 
     private suspend fun build(
@@ -192,25 +268,49 @@ class QuizService(
 
     /**
      * 用户亲手标过的易混词排在所有候选之前：affect ↔ effect 是这个人真的会错的那一组，
-     * 模型给的池子再大也换不掉它。释义取易错词表，其次取词库，两处都没有就不做成选项。
+     * 模型给的池子再大也换不掉它。直接挂的词先上，同一连通组件里隔了一层的补足到上限——
+     * 只挑直接邻居时常常凑不满三个易混选项，而组件本身就是"这人认定会混的一簇"。
+     * 释义取易错词表，其次取词库，两处都没有就不做成选项。
      */
     private suspend fun confusablesFor(words: List<WordEntity>): Map<Long, List<EnrichedDistractor>> {
         val names = words.map { it.word.trim().lowercase() }
-        val links = trickyDao.linksAmong(names)
-        if (links.isEmpty()) return emptyMap()
-        val glosses = glossFor((links.map { it.wordA } + links.map { it.wordB }).distinct())
-        val out = mutableMapOf<Long, List<EnrichedDistractor>>()
-        words.forEach { word ->
+        if (trickyDao.linksAmong(names).isEmpty()) return emptyMap()
+        val adjacency = mutableMapOf<String, MutableSet<String>>()
+        trickyDao.allLinks().forEach { link ->
+            adjacency.getOrPut(link.wordA) { mutableSetOf() } += link.wordB
+            adjacency.getOrPut(link.wordB) { mutableSetOf() } += link.wordA
+        }
+        val planned = words.map { word ->
             val name = word.word.trim().lowercase()
-            val partners = links
-                .filter { it.wordA == name || it.wordB == name }
-                .map { if (it.wordA == name) it.wordB else it.wordA }
+            val direct = adjacency[name].orEmpty()
+            val component = componentOf(name, adjacency)
+            word to (direct.sorted() + (component - direct).sorted())
+                .filter { it != name }
                 .distinct()
-                .mapNotNull { other -> glosses[other]?.let { EnrichedDistractor(other, it) } }
                 .take(MAX_CONFUSABLES)
-            if (partners.isNotEmpty()) out[word.id] = partners
+        }
+        val glosses = glossFor(planned.flatMap { it.second }.distinct())
+        val out = mutableMapOf<Long, List<EnrichedDistractor>>()
+        planned.forEach { (word, partners) ->
+            val built = partners.mapNotNull { other -> glosses[other]?.let { EnrichedDistractor(other, it) } }
+            if (built.isNotEmpty()) out[word.id] = built
         }
         return out
+    }
+
+    /** 顺着易混链能走到的所有词（不含起点自己）：直接挂的与隔了一层的都算同一组件。 */
+    private fun componentOf(start: String, adjacency: Map<String, Set<String>>): Set<String> {
+        val seen = mutableSetOf(start)
+        val queue = ArrayDeque<String>()
+        queue.addLast(start)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            adjacency[current].orEmpty().forEach { next ->
+                if (seen.add(next)) queue.addLast(next)
+            }
+        }
+        seen.remove(start)
+        return seen
     }
 
     private suspend fun glossFor(names: List<String>): Map<String, String> {

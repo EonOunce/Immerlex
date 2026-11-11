@@ -40,3 +40,20 @@ interface QuizSessionDao {
     @Query("SELECT EXISTS(SELECT 1 FROM quiz_session WHERE mode = :mode)")
     suspend fun exists(mode: String): Boolean
 }
+
+/**
+ * 做完的一组题的成绩，只进不出：一组一行，战绩页按时间倒序读最近几组。
+ * 老组留着不删是有原因的——「破了自己纪录」要的就是这一串历史。
+ */
+@Dao
+interface QuizRunDao {
+    @Insert
+    suspend fun insert(entity: QuizRunEntity): Long
+
+    @Query("SELECT * FROM quiz_runs ORDER BY finishedAtSec DESC, id DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<QuizRunEntity>
+
+    /** 插这一组之前先问一句：这个入口以前最好对几个。一行都没有时返回 null。 */
+    @Query("SELECT MAX(correct) FROM quiz_runs WHERE mode = :mode")
+    suspend fun bestCorrect(mode: String): Int?
+}

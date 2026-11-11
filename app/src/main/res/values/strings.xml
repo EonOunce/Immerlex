@@ -9,34 +9,71 @@
     <string name="tab_home">今日</string>
 
     <string name="home_title">今日任务</string>
-    <string name="home_streak">连续 %1$d 天</string>
-    <string name="home_checked_in">今天已打卡</string>
-    <string name="home_not_yet">今天还没打卡</string>
     <string name="home_due">今日到期</string>
-    <string name="home_done">今日已完成</string>
     <string name="home_new_words">新词 %1$d 个</string>
-    <string name="home_heat_title">背书热力图</string>
-    <string name="home_heat_caption">近 13 周 · 今天 %1$d 个</string>
-    <string name="home_heat_less">少</string>
-    <string name="home_heat_more">多</string>
-    <string name="home_trend_title">近 30 天趋势</string>
-    <string name="home_trend_caption">学习词数</string>
-    <string name="home_trend_start">%1$d 天前</string>
-    <string name="home_trend_today">今天</string>
+    <string name="home_recent_title">近况</string>
     <string name="home_makeup_unused">本周补卡：未用</string>
     <string name="home_makeup_used">本周补卡：已用过，本周不再补</string>
     <string name="home_makeup_pending">昨天断了：今天把到期词读完，就自动补回昨天</string>
     <string name="home_loading">正在统计…</string>
     <string name="home_start_first">用今天的词写第一章</string>
-    <string name="home_start_reading">开始今日阅读</string>
-    <string name="home_continue">接着读第 %1$d 章</string>
-    <string name="home_quiz_count">开始测验（%1$d 词）</string>
-    <string name="home_quiz_resume">继续测验</string>
-    <string name="home_quiz_empty">今天没有要测的词</string>
-    <string name="home_early_count">提前复习（%1$d 个可练）</string>
-    <string name="home_room_met">去看看 %1$s</string>
+    <string name="home_room_slip">%1$s · %2$s</string>
     <string name="home_room_unmet">认识一位室友</string>
     <string name="home_share">分享今日报告</string>
+    <string name="home_hero_unit">词</string>
+    <string name="home_hero_start">开始今日阅读</string>
+    <string name="home_hero_done_count">今日已完成 %1$d</string>
+    <string name="home_streak_unit">连续</string>
+    <string name="home_streak_days">%1$d 天</string>
+    <string name="home_quiz_card">今日测验</string>
+    <string name="home_early_card">提前复习</string>
+    <string name="home_quiz_card_count">%1$d 词</string>
+    <string name="home_quiz_card_resume">接着测</string>
+    <string name="home_quiz_card_empty">今天没有要测的</string>
+    <string name="home_early_card_count">%1$d 词可练</string>
+    <string name="home_early_card_none">暂无可练</string>
+    <string name="home_tricky_card">易错练习 %1$d 词</string>
+    <string name="settings_accent">主色</string>
+    <string name="accent_warm">暖阳杏黄</string>
+    <string name="accent_coral">珊瑚橘</string>
+    <string name="tab_stats">战绩</string>
+    <string name="stats_hero_label">此刻大概能想起</string>
+    <string name="stats_words_unit">词</string>
+    <string name="stats_strength_label">战斗力</string>
+    <string name="stats_mastered_label">已掌握</string>
+    <string name="stats_nemesis_label">常忘的词</string>
+    <string name="stats_nemesis_count">忘了 %1$d 次</string>
+    <string name="stats_empty">还没有学过的词</string>
+    <string name="stats_share">炫耀一下</string>
+    <string name="stats_rank_label">段位</string>
+    <string name="stats_rank_next">再掌握 %1$d 个词，升 %2$s</string>
+    <string name="stats_rank_top">已到头</string>
+    <string name="stats_peak_now">巅峰分 %1$d · 最高 %2$d</string>
+    <string name="stats_peak_thin">只重放了 %1$d 次记录，还不算分</string>
+    <string name="stats_best_day">以前最好的一天 %1$d 个</string>
+    <string name="stats_beat_best">已超过以前最好的一天</string>
+    <string name="stats_revenge_label">还欠你一次的词 %1$d 个</string>
+    <string name="stats_revenge_action">复仇</string>
+    <string name="stats_runs_title">最近测验</string>
+    <string name="stats_run_rate">正确率 %1$d%%</string>
+    <string name="rank_white">白词</string>
+    <string name="rank_cyan">青词</string>
+    <string name="rank_blue">蓝词</string>
+    <string name="rank_green">绿词</string>
+    <string name="rank_orange">橙词</string>
+    <string name="rank_violet">紫词</string>
+    <string name="rank_crimson">赤段</string>
+    <string name="rank_obsidian">玄段</string>
+    <string name="rank_gold">金段</string>
+    <string name="rank_sage">词圣</string>
+    <string name="rank_level_form">%1$s %2$d 级</string>
+    <string name="rank_duan_form">%1$s %2$d 段</string>
+    <string name="share_card_strength">战斗力</string>
+    <string name="share_card_can_recall">此刻能想起</string>
+    <string name="share_card_mastered">已掌握</string>
+    <string name="share_card_nemesis">最常忘的词</string>
+    <string name="share_card_studied">学过</string>
+    <string name="share_card_peak">巅峰分最高 %1$d</string>
     <string name="share_action">分享图片</string>
     <string name="share_failed">图片没生成，再试一次</string>
     <string name="share_card_continuous">连续</string>
@@ -58,9 +95,9 @@
     <string name="bank_field_word">英文单词</string>
     <string name="bank_field_gloss_optional">释义（可留空）</string>
     <string name="bank_gloss_hint">留空时自动从离线词典 ECDICT 补全音标与释义。</string>
-    <string name="bank_import_txt">导入 txt</string>
+    <string name="bank_import_txt">文本 / CSV</string>
     <string name="bank_import_image">截图导入</string>
-    <string name="bank_import_pdf">导入 PDF</string>
+    <string name="bank_import_pdf">PDF</string>
     <string name="bank_export">导出</string>
     <string name="bank_export_done">已导出 %1$d 个词，可在 Anki 或表格软件里导入</string>
     <string name="bank_export_failed">导出失败：写不进所选位置，换一个文件夹试试</string>
@@ -172,6 +209,15 @@
     <string name="material_fetch_checksum">有一片校验对不上，没有导入</string>
     <string name="material_fetch_pack">有一片不是能用的素材包</string>
     <string name="material_fetch_local">素材包没能写进本机</string>
+
+    <!-- 设置页每一节折起来时的那一行现状 -->
+    <string name="settings_summary_appearance">%1$d 号字 · %2$s · %3$s</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_summary_reminder_off">提醒已关掉</string>
+    <string name="settings_summary_quiz">提前复习一组 %1$d 个</string>
+    <string name="settings_summary_generate">%1$s · 每日新词 %2$d</string>
+    <string name="settings_summary_unset">还没配置</string>
 
     <string name="settings_bank_section">词库概况</string>
     <string name="settings_bank_summary">共 %1$d 词 · 新词 %2$d · 今日到期 %3$d</string>
@@ -353,7 +399,7 @@
     <string name="tricky_duplicate">这个词已经在易混里了</string>
     <string name="tricky_no_gloss">（没查到释义）</string>
     <string name="tricky_remove">取消关联</string>
-    <string name="bank_tricky">易混词管理</string>
+    <string name="bank_tricky">易混词</string>
     <string name="tricky_page_title">易混词管理</string>
     <string name="tricky_page_empty">还没有易混词。用「批量新增」一行加一组，或在阅读页点词标为易错。</string>
     <string name="tricky_search">搜索单词或释义</string>
@@ -429,7 +475,6 @@
     <string name="grade_days">%1$d 天</string>
 
     <string name="quiz_title">测验</string>
-    <string name="quiz_loading">正在准备题目…</string>
     <string name="quiz_stage_words">正在取今天要测的词…</string>
     <string name="quiz_stage_records">正在读取学习记录…</string>
     <string name="quiz_stage_ai">正在请求 AI 出题…</string>
@@ -464,11 +509,22 @@
     <string name="quiz_retry_progress">练习 %1$d/%2$d · %3$s</string>
     <string name="quiz_retry_done">练习结束</string>
     <string name="quiz_early_badge">提前复习</string>
+    <string name="quiz_tricky_badge">易错练习</string>
+    <string name="quiz_tricky_empty">易错词今天都练过了。</string>
+    <string name="quiz_nemesis_badge">宿敌</string>
+    <string name="quiz_nemesis_empty">没有欠你的词了：上次答错的都打赢了。</string>
+    <string name="quiz_result_streak">最长连对 %1$d 题</string>
+    <string name="quiz_record_beaten">这一组破了你自己的纪录</string>
+    <string name="quiz_mode_due">到期词</string>
+    <string name="quiz_mode_early">提前复习</string>
+    <string name="quiz_mode_tricky">易错练习</string>
+    <string name="quiz_mode_nemesis">宿敌复仇</string>
     <string name="quiz_early_result">本组 %1$d 个词，答对 %2$d 个</string>
     <string name="quiz_again_group">再来一组</string>
     <string name="quiz_early_empty">还没有可提前复习的词：先读几章学些新词吧。</string>
     <string name="quiz_option_correct">正确</string>
     <string name="quiz_option_yours">你的选择</string>
+    <string name="quiz_tricky_retire">移出易错</string>
 
     <string name="about_title">关于与规则</string>
     <string name="about_open">关于与规则</string>
@@ -481,11 +537,14 @@
     <string name="about_home_title">关于今日页</string>
     <string name="about_home_body">今日到期 = 今天该复习的词 + 今天的新词，和写下一章时交给 AI 的是同一份词表。\n热力图和趋势都按“当天不重复的词”计数：同一个词一天点很多次，也只算一个；学习新词和回忆旧词都算。\n热力图是近 13 周，颜色分五档：0 个、1–4 个、5–9 个、10–19 个、20 个以上。\n趋势是近 30 天，包含今天，没有碰词的日子画 0。\n点标题旁的分享按钮，可以把今天这一页生成一张图（连续天数、今天新学与回忆、今天学过的词与今天测验过的词、近 13 周热力图）；词多时只列一小截，数字仍是全数。图只在本机生成，不上传。</string>
 
+    <string name="about_stats_title">关于战绩与主色</string>
+    <string name="about_stats_body">“战绩”只把已经存下来的记录读成一份报告：不写库、不改排期、不给你加作业。这一页只跟你自己比——没有排行榜，也不上传任何东西。\n“此刻大概能想起”用的是调度算法自己的遗忘曲线——把每个词此刻想起来的把握加起来再四舍五入，10 个词各有一半把握就写 5；这是估计，不是考你。\n“已掌握”是复习间隔已经排到 21 天以上的词。\n“战斗力”把上面两件事合成一个 0–100 的数，只给人看，不参与任何调度。\n“常忘的词”是忘得最多的那一个和它忘的次数。\n“段位”数的是已掌握的词：白词、青词、蓝词、绿词、橙词、紫词各带一级到六级，再往上赤段、玄段、金段各带一段到三段，顶上是不带数字的词圣。门槛依次是 20、60、150、300、600、1000、1600、2400、3500 个——光读过一遍不算，要把间隔真推远才算。它只是一个名字，不动排期。\n“巅峰分”把你的整段复习历史从头重放一遍（起点 1200）：答得越费劲、拖得越久才想起来，涨得越多；页上给“现在”和“以前最高”两个数。重放的记录不足 20 次时这个数只是噪声，那时候不说它叫巅峰分。\n“以前最好的一天”是每天留下的那个最高点：把握算的是卡片此刻的状态，明天再也回推不出今天，所以当天要落一笔。\n“还欠你一次的词”是最后一次真记账答错了的那些词，点“复仇”就是一组只考它们的测验。在任一入口真记账地认出来一次，它自己就从名单上下去——四选一攒着的那三次“认出”不算。\n“最近测验”每做完一组留一行：哪个入口、几个题、对几个、最长连对几题。正确率只算计分的题，答错后当堂重练的那些不掺进去；同一入口考得比自己以前最好的一组还好，结果页才说“破了你自己的纪录”，一个入口的第一组永远不说。\n标题旁的“炫耀一下”把这一页导成一张图走系统分享（段位、战斗力、巅峰最高分都在上面），和今日页的分享卡一样只在本机生成、不上传。\n两个圆点是主色（暖阳杏黄、珊瑚橘），今日页和设置页都能换，点了立即生效；换的只有配色，词库、排期、记录一条都不动。</string>
+
     <string name="about_reading_title">关于阅读与评分</string>
     <string name="about_reading_body">学习模式释义直接可见；复习模式释义隐藏，点单词才揭示。\n第一次点开一个新词会记一条“学习”，只用来开始安排复习，不算回忆成功；之后在学习模式里看释义、打分都不计分——答案已经看见了，不是回忆。\n复习模式里揭示后打分算一次回忆；测验和提前复习同样。每次独立回忆都会按实际间隔连续更新排期，没有每日次数上限，也不会覆盖之前的记录。\n还没到复习时间的词，卡上只有“想起来了”和“没想起来”：你的判断发生在点开之前，所以“没想起来”按一次没记住记录，这个词会提前回来；“想起来了”什么都不记，仍按原计划到期时再考你——提前记一次成功会把间隔推远。\n阅读页评分后几秒内可以撤销；过了就只能保留这次记录。\n点章节标题可以换回看其它章；重写只替换本章；删章不影响词库和复习进度。\n“只留英文”只把中文画成透明，版式不动，英文仍然可以点。\n开了自动发音，点开词卡就先读一遍这个词。手机里没有语音引擎或没下载英文语音包时读不出来，卡上会写清楚缺哪一样。</string>
 
     <string name="about_quiz_title">关于测验与计分</string>
-    <string name="about_quiz_body">五种题型：英→中、中→英、句子挖空、英文释义选词、搭配（选出短语的意思）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词和搭配。易错词一开始五种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习从所有学过、还没到期的词里取最近到期的一组（默认 5 个，可在设置页「测验」里选 5 / 10 / 20 个；今天已经回忆过的不算），照常计分；一组做完可以“再来一组”，没有每日上限。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
+    <string name="about_quiz_body">五种题型：英→中、中→英、句子挖空、英文释义选词、搭配（选出短语的意思）。一组最多 40 题，做完可以再来一组；中途退出不会丢，回来还是同一组、同一题。\n新词先考英→中和挖空；成功回忆过一次后加入中→英；中→英也答对后加入释义选词和搭配。易错词一开始五种都能考。\n系统挑你成功率最低、最久没问的题型；刚答错的题型下一题先避开。答错后这个词会先退回英→中/挖空，答对后再逐步放开难题型；一次答对不会让某个题型从此消失。\n点选项立即判对错，并把每个选项的另一面摆出来：中文选项下面是它的英文，英文选项下面是它的释义。\n四选一认出比凭空想起容易，所以答对先攒着：连着认出三次才算一次真正的回忆，复习间隔也只在那一刻推远；答错立刻按一次没记住记账，攒的次数清零。\n想不起来又不想蒙，点「不确定」：直接翻开答案，并按一次没记住记账，这个词照样会在本轮末尾换一种题型重练。\n答错或不确定时可以顺手把这个词标为易错；标了只进易错词表，不会替你关联易混词。\n一个词标成易错之后连着认出 6 次（只数标上之后的记录，中间答错就从头算），题目下面会问一句要不要移出易错：点了只清易错标记和易混连线，复习记录一条不动，不点就一切照旧。\n自动发音只读不会把答案说出来的那一面：英→中一出题就读，中→英要等你翻开答案；句子挖空和释义选词不自动读。\n答错的词在本轮最后换一种题型再练一遍，这次练习不计分。\n测验只考今天到期或今天在阅读里学过的词，不考生词。没有 API key 也能用：题目先来自词库和章节句子，AI 只补缺失的释义、例句和干扰项，失败就用本地题库。同一个词的 AI 素材一辈子只问一次，之后都读存下来的那份，所以不是每测一组都花钱。\n提前复习从所有学过、还没到期的词里取最近到期的一组（默认 5 个，可在设置页「测验」里选 5 / 10 / 20 个；今天已经回忆过的不算），照常计分；一组做完可以“再来一组”，没有每日上限。\n还有一条只用测验就能走完今天的路：「易错练习」只考你亲手标过易错的词，错得最多的先来，一个都没标时今日页不出现这一行。它和到期、提前复习用的是同一套记账。\n战绩页那个「复仇」是第四个入口：只考最后一次真记账答错了的那些词，真记账地认出来一次它就从名单上下去（四选一刚答对只算「认出」，要连着三次升成一次真正的回忆才算）；这一组照样逐题记账、中途退出照样原位续做。\n结果页会说这一组最长连对了几题；如果这一组比同一入口以前最好的一组还对得多，会多说一句「破了你自己的纪录」——一个入口的第一组没得比，所以永远不说这句话。\n阅读页评分后几秒内可以撤销；测验答案提交后不能改。学习模式看释义、查词、答错后的当堂重练都不算回忆。</string>
 
     <string name="about_keyboard_title">关于键盘</string>
     <string name="about_keyboard_body">外接键盘或平板的键盘可以直接用，键位在设置页「键盘快捷键」里改，改完立即生效；同一个键被另一个动作用着时会互换，音量键和返回键不占用。

@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.immerlex.core.db.WordEntity
 import com.immerlex.core.schedule.ReaderTone
+import com.immerlex.core.settings.Accent
 import com.immerlex.core.settings.Appearance
 import com.immerlex.core.word.Mastery
 import com.immerlex.core.word.mastery
@@ -29,6 +30,18 @@ object ImmerlexColors {
     val Line = Color(0xFFE4E2DB)
     val Rust = Color(0xFFBC4B12)
 }
+
+/** ARGB 整数（core 层的主色定义）换成 Compose 颜色。 */
+private fun argbColor(value: Int): Color = Color(value.toLong() and 0xFFFFFFFFL)
+
+/** 界面要摆主色圆点（设置页切换器、今日页快切）时用这一个，别自己换算 ARGB。 */
+fun accentColor(accent: Accent): Color = argbColor(accent.argb)
+
+/** 主色块上压字／压图标时用的反色（一律深墨，配在亮黄亮橘上比白色清楚）。 */
+fun accentInk(accent: Accent): Color = argbColor(accent.onArgb)
+
+/** 当前主色的原始色值，今日页的大色块主角直接吃它，不从 colorScheme 绕。 */
+val LocalAccent = staticCompositionLocalOf { argbColor(Accent.DEFAULT.argb) }
 
 /** Highlight colours for the three mastery states; light and dark sets come from the prototype. */
 data class MasteryTones(
@@ -65,11 +78,11 @@ private val DarkTones = MasteryTones(
 val LocalMasteryTones = staticCompositionLocalOf { LightTones }
 val LocalAppearance = compositionLocalOf { Appearance() }
 
-private val LightScheme = lightColorScheme(
-    primary = ImmerlexColors.Rust,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFF6E3D7),
-    onPrimaryContainer = Color(0xFF7A2E06),
+private fun lightScheme(accent: Accent) = lightColorScheme(
+    primary = argbColor(accent.argb),
+    onPrimary = argbColor(accent.onArgb),
+    primaryContainer = argbColor(accent.containerLight),
+    onPrimaryContainer = ImmerlexColors.Ink,
     secondary = Color(0xFF7A5C48),
     onSecondary = Color(0xFFFFF8F2),
     secondaryContainer = Color(0xFFF1E7DF),
@@ -95,11 +108,11 @@ private val LightScheme = lightColorScheme(
     outlineVariant = ImmerlexColors.Line,
 )
 
-private val DarkScheme = darkColorScheme(
-    primary = Color(0xFFE4834E),
-    onPrimary = Color(0xFF2B1206),
-    primaryContainer = Color(0xFF5C2A0C),
-    onPrimaryContainer = Color(0xFFF6C9A8),
+private fun darkScheme(accent: Accent) = darkColorScheme(
+    primary = argbColor(accent.argb),
+    onPrimary = argbColor(accent.onArgb),
+    primaryContainer = argbColor(accent.containerDark),
+    onPrimaryContainer = argbColor(accent.argb),
     secondary = Color(0xFFD8BDA8),
     onSecondary = Color(0xFF3B2A20),
     secondaryContainer = Color(0xFF3A2A1E),
@@ -128,6 +141,7 @@ private val DarkScheme = darkColorScheme(
 @Composable
 fun ImmerlexTheme(appearance: Appearance, content: @Composable () -> Unit) {
     val dark = appearance.darkMode
+    val accent = appearance.accent
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -141,18 +155,21 @@ fun ImmerlexTheme(appearance: Appearance, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalMasteryTones provides if (dark) DarkTones else LightTones,
         LocalAppearance provides appearance,
+        LocalAccent provides argbColor(accent.argb),
     ) {
         MaterialTheme(
-            colorScheme = if (dark) DarkScheme else LightScheme,
+            colorScheme = if (dark) darkScheme(accent) else lightScheme(accent),
             content = content,
         )
     }
 }
 
-/** Background / content pair for a word's mastery state, shared by bank list and reader. */
+/**
+ * 词库列表只给掌握度那一档字色。底色那一半只有正文渲染要用，所以这里不返回一对——
+ * 列表里再摆一条色带就成了两块颜色抢同一件事。
+ */
 @Composable
-fun masteryPalette(word: WordEntity): Pair<Color, Color> =
-    LocalMasteryTones.current.of(word.mastery())
+fun masteryInk(word: WordEntity): Color = LocalMasteryTones.current.of(word.mastery()).second
 
 /**
  * Feature screens nest their own Scaffold inside the root one, which already padded the host

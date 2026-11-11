@@ -97,6 +97,7 @@ fun QuizScreen(vm: QuizViewModel, keyMap: KeyMap, onExit: () -> Unit) {
                         onAnswer = vm::answer,
                         onDoubt = vm::doubt,
                         onMarkTricky = vm::markTricky,
+                        onRetire = vm::retire,
                         onNext = vm::next,
                     )
                     QuizPhase.DONE -> ResultBody(state, onExit, vm::again)
@@ -137,6 +138,21 @@ private fun ResultBody(state: QuizState, onExit: () -> Unit, onAgain: () -> Unit
                         stringResource(R.string.quiz_retry_done),
                         style = MaterialTheme.typography.bodySmall,
                         color = ImmerlexColors.Meta,
+                    )
+                }
+                if (state.bestStreak >= 2) {
+                    Text(
+                        stringResource(R.string.quiz_result_streak, state.bestStreak),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ImmerlexColors.Meta,
+                    )
+                }
+                // 这一行是留底写完才有的：没有比过，就不说有纪录可破。
+                if (state.record?.isRecord == true) {
+                    Text(
+                        stringResource(R.string.quiz_record_beaten),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
@@ -180,7 +196,14 @@ private fun EmptyBody(mode: QuizMode, onExit: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            stringResource(if (mode == QuizMode.EARLY) R.string.quiz_early_empty else R.string.quiz_empty),
+            stringResource(
+                when (mode) {
+                    QuizMode.EARLY -> R.string.quiz_early_empty
+                    QuizMode.TRICKY -> R.string.quiz_tricky_empty
+                    QuizMode.NEMESIS -> R.string.quiz_nemesis_empty
+                    QuizMode.DUE -> R.string.quiz_empty
+                },
+            ),
             textAlign = TextAlign.Center,
             color = ImmerlexColors.Body,
         )

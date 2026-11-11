@@ -32,9 +32,11 @@ import androidx.room.RoomDatabase
         RoommatePetGiftEntity::class,
         QuizMaterialEntity::class,
         QuizSessionEntity::class,
+        QuizRunEntity::class,
+        RecallSnapshotEntity::class,
         SyncLineageEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class ImmerlexDatabase : RoomDatabase() {
@@ -63,6 +65,9 @@ abstract class ImmerlexDatabase : RoomDatabase() {
     abstract fun roommatePetGiftDao(): RoommatePetGiftDao
     abstract fun quizMaterialDao(): QuizMaterialDao
     abstract fun quizSessionDao(): QuizSessionDao
+    abstract fun quizRunDao(): QuizRunDao
+    abstract fun reviewHistoryDao(): ReviewHistoryDao
+    abstract fun recallSnapshotDao(): RecallSnapshotDao
     abstract fun syncLineageDao(): SyncLineageDao
 
     companion object {

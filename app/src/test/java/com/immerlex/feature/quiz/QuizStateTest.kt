@@ -38,10 +38,33 @@ class QuizStateTest {
 
     @Test
     fun theNextQuestionStartsCleanAgain() {
-        val marked = QuizState(phase = QuizPhase.QUESTION, total = 1).copy(trickyIds = setOf(7L))
+        val marked = QuizState(phase = QuizPhase.QUESTION, total = 1)
+            .copy(trickyIds = setOf(7L), retirement = "affect")
 
         assertEquals(false, marked.afterDoubt().fresh().answered)
         assertEquals(true, marked.fresh().trickyIds.contains(7L))
+        assertEquals(null, marked.fresh().retirement)
+    }
+
+    @Test
+    fun aStreakSurvivesOneMissAndTheBestStreakStays() {
+        val three = QuizState(phase = QuizPhase.QUESTION, total = 5)
+            .afterAnswer(0, correct = true).fresh()
+            .afterAnswer(0, correct = true).fresh()
+            .afterAnswer(0, correct = true)
+        assertEquals(3, three.streak)
+
+        val missed = three.afterAnswer(1, correct = false).fresh()
+        assertEquals("答错这一次归零", 0, missed.streak)
+        assertEquals("最长连过的那一段留到结算", 3, missed.bestStreak)
+
+        val practised = missed.copy(practice = true).afterAnswer(0, correct = true)
+        assertEquals("当堂重练不计分，也不往上加连对", 0, practised.streak)
+        assertEquals(3, practised.bestStreak)
+
+        val doubted = three.fresh().afterDoubt()
+        assertEquals("按「不确定」这一段也断了", 0, doubted.streak)
+        assertEquals(3, doubted.bestStreak)
     }
 
     @Test

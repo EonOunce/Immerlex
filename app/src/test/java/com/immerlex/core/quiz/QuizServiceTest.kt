@@ -1,10 +1,13 @@
 package com.immerlex.core.quiz
 
 import com.immerlex.core.db.FSRS_STATE_REVIEW
+import com.immerlex.core.db.LOG_KIND_ATTEMPT
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.LOG_SOURCE_QUIZ
+import com.immerlex.core.db.LOG_SOURCE_READER
 import com.immerlex.core.db.QuizMaterialEntity
+import com.immerlex.core.db.RecallEventRow
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.TrickyLinkEntity
 import com.immerlex.core.db.TrickyWordEntity
@@ -16,6 +19,7 @@ import com.immerlex.core.schedule.ScheduleService
 import com.immerlex.testsupport.FakeChapterDao
 import com.immerlex.testsupport.FakeDailyLoopDao
 import com.immerlex.testsupport.FakeQuizMaterialDao
+import com.immerlex.testsupport.FakeReviewHistoryDao
 import com.immerlex.testsupport.FakeReviewLogDao
 import com.immerlex.testsupport.FakeTrickyDao
 import com.immerlex.testsupport.FakeWordDao
@@ -26,6 +30,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,11 +50,13 @@ class QuizServiceTest {
         tricky: FakeTrickyDao,
         enricher: QuizEnricher? = null,
         material: QuizMaterialStore? = null,
+        history: FakeReviewHistoryDao = FakeReviewHistoryDao(),
     ): QuizService = QuizService(
         wordDao = words,
         logDao = logs,
         chapterDao = FakeChapterDao(),
         trickyDao = tricky,
+        historyDao = history,
         schedule = ScheduleService(
             wordDao = words,
             logDao = logs,
@@ -118,7 +125,32 @@ class QuizServiceTest {
     }
 
     @Test
-    fun recordingAnAnswerWritesOneRecallWithItsQuestionType() = runBlocking {
+    fun aCorrectAnswerIsAnAttemptUntilTheStreakFills() = runBlocking {
+        val (service, words, logs) = parts()
+        val learned = words.insert(word("lantern"))
+        logs.insert(log(learned, LOG_KIND_LEARN, now.minusSeconds(3600)))
+        words.insert(word("balcony"))
+        words.insert(word("pebble"))
+        val question = service.planDue(now, dailyNewLimit = 10, seed = 2).questions.single()
+        val before = words.findById(learned)!!
+
+        assertTrue(service.record(question, correct = true, now = now.plusSeconds(5)))
+        val attempt = logs.items.last()
+        assertEquals(LOG_KIND_ATTEMPT, attempt.kind)
+        assertEquals(LOG_SOURCE_QUIZ, attempt.source)
+        assertEquals(question.type.key, attempt.questionType)
+        assertEquals("第一次认出只攒连对，词还留在到期队列里", before, words.findById(learned))
+
+        service.record(question, correct = true, now = now.plusSeconds(10))
+        assertTrue(service.record(question, correct = true, now = now.plusSeconds(15)))
+        val good = logs.items.last()
+        assertEquals(LOG_KIND_RECALL, good.kind)
+        assertEquals(Rating.GOOD.value, good.rating)
+        assertNotEquals(before, words.findById(learned))
+    }
+
+    @Test
+    fun aWrongAnswerInTheQuizIsAnImmediateAgainMidStreak() = runBlocking {
         val (service, words, logs) = parts()
         val learned = words.insert(word("lantern"))
         logs.insert(log(learned, LOG_KIND_LEARN, now.minusSeconds(3600)))
@@ -126,13 +158,12 @@ class QuizServiceTest {
         words.insert(word("pebble"))
         val question = service.planDue(now, dailyNewLimit = 10, seed = 2).questions.single()
 
-        assertTrue(service.record(question, correct = true, now = now.plusSeconds(5)))
+        service.record(question, correct = true, now = now.plusSeconds(5))
+        assertTrue(service.record(question, correct = false, now = now.plusSeconds(10)))
 
-        val written = logs.items.last()
-        assertEquals(LOG_KIND_RECALL, written.kind)
-        assertEquals(LOG_SOURCE_QUIZ, written.source)
-        assertEquals(question.type.key, written.questionType)
-        assertEquals(Rating.GOOD.value, written.rating)
+        val last = logs.items.last()
+        assertEquals(LOG_KIND_RECALL, last.kind)
+        assertEquals(Rating.AGAIN.value, last.rating)
     }
 
     @Test
@@ -331,6 +362,35 @@ class QuizServiceTest {
     }
 
     @Test
+    fun distractorsComeFromTheWholeConfusableComponentNotJustDirectLinks() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val tricky = FakeTrickyDao()
+        // affect ↔ effect ↔ estate：affect 只直接挂了 effect，但整个组件是 {affect, effect, estate}。
+        tricky.insertLink(TrickyLinkEntity(wordA = "affect", wordB = "effect", createdAtSec = 0))
+        tricky.insertLink(TrickyLinkEntity(wordA = "effect", wordB = "estate", createdAtSec = 0))
+        tricky.insertIgnore(TrickyWordEntity(word = "effect", gloss = "影响", createdAtSec = 0))
+        tricky.insertIgnore(TrickyWordEntity(word = "estate", gloss = "房地产", createdAtSec = 0))
+        val asked = mutableListOf<Long>()
+        val service = service(
+            words,
+            logs,
+            tricky,
+            RecordingEnricher(asked),
+            QuizMaterialStore(FakeQuizMaterialDao()),
+        )
+        // 会话里只有 affect：estate 既不直接挂在它上面，也不在本组词里。
+        seedDue(words, logs, "affect")
+        words.insert(word("dock"))
+        words.insert(word("pier"))
+
+        val question = service.planDue(now, dailyNewLimit = 10, seed = 1).questions.single()
+
+        val meanings = question.options.flatMap { listOf(it.text, it.gloss) }
+        assertTrue("隔了一层的组件成员也要当成干扰项", meanings.any { "房地产" in it })
+    }
+
+    @Test
     fun aStoredCollocationBecomesAPhraseQuestionOnceTheWordIsFarEnoughAlong() = runBlocking {
         val words = FakeWordDao()
         val logs = FakeReviewLogDao()
@@ -377,6 +437,114 @@ class QuizServiceTest {
         )
         assertTrue("每个选项都能揭开自己原本的短语", question.options.all { it.gloss.isNotBlank() })
     }
+
+    @Test
+    fun retirementCandidateAppearsAfterEnoughConsecutiveCorrect() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val id = seedDue(words, logs, "affect")
+        // 标记定在 seedDue 那条记录之后，好让连对只数下面插入的 attempt。
+        val tricky = FakeTrickyDao()
+        tricky.insertIgnore(
+            TrickyWordEntity(word = "affect", gloss = "影响", createdAtSec = now.minusSeconds(3600).epochSecond),
+        )
+        val marked = service(words, logs, tricky)
+
+        (1..5).forEach { logs.insert(log(id, LOG_KIND_ATTEMPT, now.plusSeconds(it.toLong()))) }
+        assertNull("连对不满 6 次先不问", marked.retirementCandidate(id))
+
+        logs.insert(log(id, LOG_KIND_ATTEMPT, now.plusSeconds(6)))
+        assertEquals("连对满 6 次才问一句", "affect", marked.retirementCandidate(id))
+    }
+
+    @Test
+    fun retirementCandidateResetsAfterAWrongAnswer() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val tricky = FakeTrickyDao()
+        val service = service(words, logs, tricky)
+        val id = seedDue(words, logs, "affect")
+        tricky.insertIgnore(
+            TrickyWordEntity(word = "affect", gloss = "影响", createdAtSec = now.minusSeconds(3600).epochSecond),
+        )
+        (1..6).forEach { logs.insert(log(id, LOG_KIND_ATTEMPT, now.plusSeconds(it.toLong()))) }
+        logs.insert(log(id, LOG_KIND_RECALL, now.plusSeconds(7)).copy(rating = Rating.AGAIN.value))
+
+        assertNull("最近一次答错，连对从头计", service.retirementCandidate(id))
+    }
+
+    @Test
+    fun trickySessionTakesOnlyMarkedWordsAndSkipsThoseRecalledToday() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val tricky = FakeTrickyDao()
+        val marked = seedDue(words, logs, "affect")
+        val alsoMarked = seedDue(words, logs, "effect")
+        val doneToday = seedDue(words, logs, "estate")
+        val unmarked = seedDue(words, logs, "harbour")
+        listOf("affect", "effect", "estate").forEach {
+            tricky.insertIgnore(TrickyWordEntity(word = it, gloss = "释义-$it", createdAtSec = 0))
+        }
+        logs.insert(log(doneToday, LOG_KIND_RECALL, now.minusSeconds(600)))
+        val service = service(words, logs, tricky)
+
+        val ids = service.trickyCandidates(now).map { it.id }
+        assertEquals(listOf(marked, alsoMarked).sorted(), ids.sorted())
+        assertTrue("没标过的词不进这一组", unmarked !in ids)
+        assertTrue("今天已经回忆过的不再重复考", doneToday !in ids)
+
+        val asked = service.planTricky(now).questions.map { it.wordId }.toSet()
+        assertTrue("出出来的题只可能是这几个词", asked.all { it in ids })
+    }
+
+    @Test
+    fun trickySessionPutsTheWordLapsedMostFirst() = runBlocking {
+        val words = FakeWordDao()
+        val logs = FakeReviewLogDao()
+        val tricky = FakeTrickyDao()
+        val slipping = words.insert(word("affect").copy(lapses = 4, dueEpochSec = now.plusSeconds(86400).epochSecond))
+        val fresh = words.insert(word("effect").copy(lapses = 1, dueEpochSec = now.minusSeconds(86400).epochSecond))
+        listOf("affect", "effect").forEach {
+            tricky.insertIgnore(TrickyWordEntity(word = it, gloss = "释义-$it", createdAtSec = 0))
+        }
+
+        val names = service(words, logs, tricky).trickyCandidates(now).map { it.word }
+        assertEquals("错得最多的先练，哪怕它还没到期", listOf("affect", "effect"), names)
+    }
+
+    @Test
+    fun nemesisListIsWordsWhoseLastRealRecallFailedNewestFirst() = runBlocking {
+        val words = FakeWordDao()
+        val history = FakeReviewHistoryDao()
+        val justLost = words.insert(word("harbour"))
+        val lostEarlier = words.insert(word("balcony"))
+        val wonBack = words.insert(word("lantern"))
+        // 升序：先输的在前，最后一次记账是什么，这个词就算什么。
+        history.items += recall(lostEarlier, Rating.AGAIN)
+        history.items += recall(wonBack, Rating.AGAIN)
+        history.items += recall(justLost, Rating.AGAIN)
+        history.items += recall(wonBack, Rating.GOOD)
+
+        val names = service(words, FakeReviewLogDao(), FakeTrickyDao(), history = history)
+            .nemesisCandidates()
+            .map { it.word }
+
+        assertEquals("刚把你赢回来的那个已经下去了", listOf("harbour", "balcony"), names)
+    }
+
+    @Test
+    fun nemesisListSkipsWordsThatAreNoLongerInTheBank() = runBlocking {
+        val history = FakeReviewHistoryDao()
+        history.items += recall(4242L, Rating.AGAIN)
+
+        val words = service(FakeWordDao(), FakeReviewLogDao(), FakeTrickyDao(), history = history)
+            .nemesisCandidates()
+
+        assertTrue("词都不在库里了，就没有这道题", words.isEmpty())
+    }
+
+    private fun recall(wordId: Long, rating: Rating) =
+        RecallEventRow(wordId = wordId, rating = rating.value, source = LOG_SOURCE_READER, difficulty = 5.0, scheduledDays = 1)
 
     private fun material(word: String, collocations: String) =
         QuizMaterialEntity(word = word, collocations = collocations, updatedAtSec = 1)

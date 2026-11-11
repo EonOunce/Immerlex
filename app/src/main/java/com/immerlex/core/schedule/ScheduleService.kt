@@ -5,8 +5,10 @@ import com.immerlex.core.db.FSRS_STATE_LEARNING
 import com.immerlex.core.db.FSRS_STATE_RELEARNING
 import com.immerlex.core.db.FSRS_STATE_REVIEW
 import com.immerlex.core.db.ImmerlexDatabase
+import com.immerlex.core.db.LOG_KIND_ATTEMPT
 import com.immerlex.core.db.LOG_KIND_LEARN
 import com.immerlex.core.db.LOG_KIND_RECALL
+import com.immerlex.core.db.PRE_DUE_LEGACY
 import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.ReviewLogEntity
 import com.immerlex.core.db.WordDao
@@ -120,6 +122,38 @@ class ScheduleService(
     }
 
     /**
+     * 测验类入口（每日测验、提前复习、易错练习、影子对战）的一次"认出来"。
+     * 四选一认出比凭空想起容易得多，一次就记 GOOD 会把间隔推得虚高（用户真机发现的现象），
+     * 所以这里改成**连对满 [GOOD_STREAK] 次才写一次 recall GOOD**：
+     * - 答对且没满 → 写一条 [LOG_KIND_ATTEMPT]，不动卡片、不改到期日，词明天还在到期队列里；
+     *   这条连对的账跨入口、跨天累积，测验/提前/易错/影子任一入口答对都往同一计数上加。
+     * - 答对且是第 [GOOD_STREAK] 次 → 写一次真正的 recall GOOD，计数随之归零（下一次从 0 起算）。
+     * - 答错 → 立即一次 recall AGAIN，卡片照旧进重学，之前的连对作废（AGAIN 那条不是 attempt，计数自然清零）。
+     * 阅读页的「记得」仍走 [recall]，一次就够——"认出来要三次，想起来一次就够"。见 docs/adr/0028。
+     */
+    suspend fun recognize(
+        word: WordEntity,
+        correct: Boolean,
+        source: String,
+        questionType: String? = null,
+        now: Instant = Instant.now(),
+    ): GradeResult? = mutex.withLock {
+        val logs = logDao.forWord(word.id)
+        if (logs.isEmpty()) return@withLock null
+        val last = logs.lastOrNull()
+        if (last != null && now.epochSecond - last.reviewEpochSec < MIN_RECALL_GAP_SECONDS) {
+            return@withLock null
+        }
+        if (!correct) {
+            return@withLock record(word, Rating.AGAIN, source, LOG_KIND_RECALL, questionType, now)
+        }
+        if (trailingAttempts(logs) + 1 >= GOOD_STREAK) {
+            return@withLock record(word, Rating.GOOD, source, LOG_KIND_RECALL, questionType, now)
+        }
+        recordAttempt(word, source, questionType, now)
+    }
+
+    /**
      * 阅读页的几秒内撤销：删掉最后一条记录，把卡片恢复成评分前的样子。
      * 之后的评分就按新事实继续累积，不再允许覆盖。
      */
@@ -131,16 +165,18 @@ class ScheduleService(
         val logs = logDao.forWord(log.wordId)
         if (logs.lastOrNull()?.id != log.id) return@withLock null
         val word = wordDao.findById(log.wordId) ?: return@withLock null
-        val earlier = logs.filterNot { it.id == log.id }
+        // attempt 行既没进过 reps，也不该把 interval 拉成 0——它们从没动过卡片。
+        // 计数一律只看 learn/recall 这些真实事件。
+        val real = logs.filterNot { it.id == log.id }.filterNot { it.kind == LOG_KIND_ATTEMPT }
         val restored = word.copy(
             stability = log.preStability,
             difficulty = log.preDifficulty,
             dueEpochSec = log.preDueEpochSec.takeIf { it != 0L },
             lastReviewEpochSec = log.preLastReviewEpochSec,
             fsrsState = log.preState,
-            reps = earlier.size,
-            lapses = earlier.count { it.rating == Rating.AGAIN.value },
-            intervalDays = earlier.lastOrNull()?.scheduledDays ?: 0,
+            reps = real.size,
+            lapses = real.count { it.rating == Rating.AGAIN.value },
+            intervalDays = real.lastOrNull()?.scheduledDays ?: 0,
         )
         write {
             wordDao.update(restored)
@@ -183,6 +219,42 @@ class ScheduleService(
         return GradeResult(updated, kind, logId, at.epochSecond + UNDO_WINDOW_SECONDS)
     }
 
+    /**
+     * 认出来但还没攒满 [GOOD_STREAK] 次：只落一条 [LOG_KIND_ATTEMPT]，绝不碰卡片。
+     * 到期日、reps、lapses 一个都不动，词明天还在到期队列里。写 `preDueEpochSec =
+     * [PRE_DUE_LEGACY]` 让它 [ReviewLogEntity.hasPreRatingSnapshot] 为假，从而撤销永远跳过它。
+     */
+    private suspend fun recordAttempt(
+        word: WordEntity,
+        source: String,
+        questionType: String?,
+        at: Instant,
+    ): GradeResult {
+        val log = ReviewLogEntity(
+            wordId = word.id,
+            rating = Rating.GOOD.value,
+            source = source,
+            reviewEpochSec = at.epochSecond,
+            elapsedDays = 0,
+            scheduledDays = 0,
+            kind = LOG_KIND_ATTEMPT,
+            questionType = questionType,
+            preDueEpochSec = PRE_DUE_LEGACY,
+        )
+        val logId = write { logDao.insert(log) }
+        return GradeResult(word, LOG_KIND_ATTEMPT, logId, at.epochSecond + UNDO_WINDOW_SECONDS)
+    }
+
+    /** 从末尾往回数连续几条 attempt；碰到第一条 learn/recall 就停——那就是上一次真实记账。 */
+    private fun trailingAttempts(logs: List<ReviewLogEntity>): Int {
+        var n = 0
+        for (log in logs.asReversed()) {
+            if (log.kind != LOG_KIND_ATTEMPT) break
+            n++
+        }
+        return n
+    }
+
     /** 卡片与日志必须同生同死：崩在两次写之间会留下"分了级但没有记录"的卡片。 */
     private suspend fun <T> write(block: suspend () -> T): T =
         if (database != null) database.withTransaction { block() } else block()
@@ -223,10 +295,17 @@ class ScheduleService(
 
         /** 同一词的两次评分相隔不足这么久，按连点手滑处理，不写第二条。 */
         const val MIN_RECALL_GAP_SECONDS = 2L
+
+        /** 间隔达到这么多天算"已掌握"，只喂给战绩页的一个口径，不影响排期。 */
+        const val MASTERED_INTERVAL_DAYS = 21
+
+        /** 四选一"认出来"要连对满这么多次才折算成一次 recall GOOD；想起来一次就够。 */
+        const val GOOD_STREAK = 3
     }
 }
 
-private fun WordEntity.toCard(now: Instant): Card {
+/** 词库行还原成 FSRS 卡片；战绩页算"现在能想起多少"也读这一个函数，不另写一份。 */
+internal fun WordEntity.toCard(now: Instant): Card {
     val s = stability
     val d = difficulty
     if (s == null || d == null) return Card(due = now)

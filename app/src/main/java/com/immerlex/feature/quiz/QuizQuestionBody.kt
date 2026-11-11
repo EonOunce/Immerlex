@@ -46,6 +46,7 @@ internal fun QuestionBody(
     onAnswer: (Int) -> Unit,
     onDoubt: () -> Unit,
     onMarkTricky: () -> Unit,
+    onRetire: () -> Unit,
     onNext: () -> Unit,
 ) {
     val question = state.question ?: return
@@ -63,7 +64,12 @@ internal fun QuestionBody(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.mode == QuizMode.EARLY) Badge(stringResource(R.string.quiz_early_badge))
+            when (state.mode) {
+                QuizMode.EARLY -> Badge(stringResource(R.string.quiz_early_badge))
+                QuizMode.TRICKY -> Badge(stringResource(R.string.quiz_tricky_badge))
+                QuizMode.NEMESIS -> Badge(stringResource(R.string.quiz_nemesis_badge))
+                QuizMode.DUE -> Unit
+            }
             if (state.practice) Badge(stringResource(R.string.quiz_retry_badge))
         }
         Text(
@@ -103,6 +109,10 @@ internal fun QuestionBody(
             // 正确答案那一项自己标着"正确"，这句话不再重复一遍那个词。
             if (!state.correct && question.wordId !in state.trickyIds) {
                 TextButton(onClick = onMarkTricky) { Text(stringResource(R.string.tricky_mark)) }
+            }
+            // 连着认出来这么多回，这个词大概已经不是易错词了——问一句要不要移出，不自己动。
+            if (state.retirement != null) {
+                TextButton(onClick = onRetire) { Text(stringResource(R.string.quiz_tricky_retire)) }
             }
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(if (state.showsFinish) R.string.quiz_finish else R.string.quiz_next))
