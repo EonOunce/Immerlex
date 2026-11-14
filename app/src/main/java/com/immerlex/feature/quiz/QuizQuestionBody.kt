@@ -85,14 +85,24 @@ internal fun QuestionBody(
         )
         PromptCard(question, state.answered, speaker)
 
-        question.options.forEachIndexed { index, option ->
-            OptionCard(
-                option = option,
-                chosen = state.chosen,
-                index = index,
-                answered = state.answered,
-                onPick = onAnswer,
-            )
+        // 答完之后整片选项区都是「下一题」：手指本来停在选项上，不必再够到页底找按钮。
+        // 卡片自己接过这一笔，因为它把点击吃住了、传不到外面这一层。
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = state.answered) { onNext() },
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            question.options.forEachIndexed { index, option ->
+                OptionCard(
+                    option = option,
+                    chosen = state.chosen,
+                    index = index,
+                    answered = state.answered,
+                    onPick = onAnswer,
+                    onContinue = onNext,
+                )
+            }
         }
         if (state.answered) {
             Text(
@@ -178,6 +188,7 @@ private fun OptionCard(
     index: Int,
     answered: Boolean,
     onPick: (Int) -> Unit,
+    onContinue: () -> Unit,
 ) {
     val isChosen = chosen == index
     val highlighted = answered && (option.correct || isChosen)
@@ -187,7 +198,7 @@ private fun OptionCard(
         else -> MaterialTheme.colorScheme.outlineVariant
     }
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !answered) { onPick(index) },
+        modifier = Modifier.fillMaxWidth().clickable { if (answered) onContinue() else onPick(index) },
         border = BorderStroke(if (highlighted) 2.dp else 1.dp, borderColor),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
