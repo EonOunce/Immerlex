@@ -30,6 +30,8 @@ import com.immerlex.app.ui.NavSlot
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.feature.home.HomeScreen
 import com.immerlex.feature.home.HomeViewModel
+import com.immerlex.feature.quiz.MatchScreen
+import com.immerlex.feature.quiz.MatchViewModel
 import com.immerlex.feature.quiz.QuizScreen
 import com.immerlex.feature.quiz.QuizViewModel
 import com.immerlex.feature.roommate.RoommateScreen
@@ -58,6 +60,7 @@ private const val ROUTE_ROOM = "room"
 private const val ROUTE_TRICKY = "tricky"
 private const val ROUTE_KEYBOARD = "keyboard"
 private const val ROUTE_QUIZ = "quiz/{mode}"
+private const val ROUTE_MATCH = "match"
 
 private fun quizRoute(mode: QuizMode): String = "quiz/${mode.name}"
 
@@ -135,6 +138,15 @@ fun ImmerlexRoot() {
                 resume = container.quizResumeStore,
                 tricky = container.trickyRepository,
                 runs = container.quizRunStore,
+                dictionary = container.dictionary,
+                material = container.materialRepository,
+            )
+        }
+        initializer {
+            MatchViewModel(
+                quiz = container.quizService,
+                prefs = container.prefs,
+                runs = container.quizRunStore,
             )
         }
         initializer {
@@ -172,12 +184,17 @@ fun ImmerlexRoot() {
             }
         }
 
+        // 测验与连连看都是一段要连着做完的事：底栏一露出来，切走就等于把这一组丢在身后，
+        // 回来还得重新找入口。它们各有返回键，那里才是离开的路。
+        val showBottomBar = currentRoute != ROUTE_QUIZ && currentRoute != ROUTE_MATCH
         Scaffold(bottomBar = {
-            AppBottomBar(
-                slots = Destinations.entries.map { NavSlot(it.route, it.labelRes, it.icon) },
-                currentRoute = currentRoute,
-                onSelect = { slot -> goToTab(slot.route) },
-            )
+            if (showBottomBar) {
+                AppBottomBar(
+                    slots = Destinations.entries.map { NavSlot(it.route, it.labelRes, it.icon) },
+                    currentRoute = currentRoute,
+                    onSelect = { slot -> goToTab(slot.route) },
+                )
+            }
         }) { padding ->
             NavHost(
                 navController = navController,
@@ -200,6 +217,9 @@ fun ImmerlexRoot() {
                         },
                         onStartTricky = {
                             navController.navigate(quizRoute(QuizMode.TRICKY)) { launchSingleTop = true }
+                        },
+                        onStartMatch = {
+                            navController.navigate(ROUTE_MATCH) { launchSingleTop = true }
                         },
                         onOpenRoom = {
                             navController.navigate(ROUTE_ROOM) { launchSingleTop = true }
@@ -245,6 +265,10 @@ fun ImmerlexRoot() {
                     val vm: QuizViewModel = viewModel(factory = appViewModelFactory)
                     LaunchedEffect(mode) { vm.start(mode) }
                     QuizScreen(vm, keyMap, onExit = { navController.popBackStack() })
+                }
+                composable(ROUTE_MATCH) {
+                    val vm: MatchViewModel = viewModel(factory = appViewModelFactory)
+                    MatchScreen(vm, onExit = { navController.popBackStack() })
                 }
                 composable(ROUTE_BIBLE) {
                     val vm: BibleViewModel = viewModel(factory = appViewModelFactory)

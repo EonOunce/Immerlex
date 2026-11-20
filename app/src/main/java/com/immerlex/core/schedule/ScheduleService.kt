@@ -125,14 +125,15 @@ class ScheduleService(
     }
 
     /**
-     * 测验类入口（每日测验、提前复习、易错练习、影子对战）的一次"认出来"。
+     * 测验类入口（每日测验、今日复习、提前复习、易错练习、宿敌复仇）的一次"认出来"。
      * 四选一认出比凭空想起容易得多，一次就记 GOOD 会把间隔推得虚高（用户真机发现的现象），
-     * 所以这里改成**连对满 [GOOD_STREAK] 次才写一次 recall GOOD**：
-     * - 答对且没满 → 写一条 [LOG_KIND_ATTEMPT]，不动卡片、不改到期日，词明天还在到期队列里；
-     *   这条连对的账跨入口、跨天累积，测验/提前/易错/影子任一入口答对都往同一计数上加。
-     * - 答对且是第 [GOOD_STREAK] 次 → 写一次真正的 recall GOOD，计数随之归零（下一次从 0 起算）。
-     * - 答错 → 立即一次 recall AGAIN，卡片照旧进重学，之前的连对作废（AGAIN 那条不是 attempt，计数自然清零）。
-     * 阅读页的「记得」仍走 [recall]，一次就够——"认出来要三次，想起来一次就够"。见 docs/adr/0028。
+     * 所以这里改成**攒满 [RecognitionGate.GOOD_POINTS] 分才写一次 recall GOOD**：
+     * - 答对且没攒满 → 写一条 [LOG_KIND_ATTEMPT]，不动卡片、不改到期日，词明天还在到期队列里；
+     *   这条账跨入口、跨天累积，哪个入口答对都往同一个分数上加。
+     * - 答对且攒满了 → 写一次真正的 recall GOOD，分数随之归零（下一次从 0 起算）。
+     * - 答错 → 立即一次 recall AGAIN，卡片照旧进重学，之前攒的分作废（AGAIN 那条不是 attempt，分数自然清零）。
+     * 每次答对值几分由题型定（[RecognitionGate.pointsFor]：挖空与释义选词各 2 分，其余 1 分）。
+     * 阅读页的「记得」仍走 [recall]，一次就够——"认出来要攒满三分，想起来一次就够"。见 docs/adr/0028、0037。
      */
     suspend fun recognize(
         word: WordEntity,
@@ -150,7 +151,7 @@ class ScheduleService(
         if (!correct) {
             return@withLock record(word, Rating.AGAIN, source, LOG_KIND_RECALL, questionType, now)
         }
-        if (trailingAttempts(logs) + 1 >= GOOD_STREAK) {
+        if (trailingPoints(logs) + RecognitionGate.pointsFor(questionType) >= RecognitionGate.GOOD_POINTS) {
             return@withLock record(word, Rating.GOOD, source, LOG_KIND_RECALL, questionType, now)
         }
         recordAttempt(word, source, questionType, now)
@@ -242,7 +243,7 @@ class ScheduleService(
     }
 
     /**
-     * 认出来但还没攒满 [GOOD_STREAK] 次：只落一条 [LOG_KIND_ATTEMPT]，绝不碰卡片。
+     * 认出来但还没攒满 [RecognitionGate.GOOD_POINTS] 分：只落一条 [LOG_KIND_ATTEMPT]，绝不碰卡片。
      * 到期日、reps、lapses 一个都不动，词明天还在到期队列里。写 `preDueEpochSec =
      * [PRE_DUE_LEGACY]` 让它 [ReviewLogEntity.hasPreRatingSnapshot] 为假，从而撤销永远跳过它。
      */
@@ -267,14 +268,14 @@ class ScheduleService(
         return GradeResult(word, LOG_KIND_ATTEMPT, logId, at.epochSecond + UNDO_WINDOW_SECONDS)
     }
 
-    /** 从末尾往回数连续几条 attempt；碰到第一条 learn/recall 就停——那就是上一次真实记账。 */
-    private fun trailingAttempts(logs: List<ReviewLogEntity>): Int {
-        var n = 0
+    /** 从末尾往回数连续几条 attempt 值多少分；碰到第一条 learn/recall 就停——那就是上一次真实记账。 */
+    private fun trailingPoints(logs: List<ReviewLogEntity>): Int {
+        var points = 0
         for (log in logs.asReversed()) {
             if (log.kind != LOG_KIND_ATTEMPT) break
-            n++
+            points += RecognitionGate.pointsFor(log.questionType)
         }
-        return n
+        return points
     }
 
     /** 卡片与日志必须同生同死：崩在两次写之间会留下"分了级但没有记录"的卡片。 */
@@ -320,9 +321,6 @@ class ScheduleService(
 
         /** 间隔达到这么多天算"已掌握"，只喂给战绩页的一个口径，不影响排期。 */
         const val MASTERED_INTERVAL_DAYS = 21
-
-        /** 四选一"认出来"要连对满这么多次才折算成一次 recall GOOD；想起来一次就够。 */
-        const val GOOD_STREAK = 3
     }
 }
 

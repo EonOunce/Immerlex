@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
+import com.immerlex.app.ui.DictionaryCardDialog
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.LocalAccent
@@ -110,10 +111,19 @@ fun QuizScreen(vm: QuizViewModel, keyMap: KeyMap, onExit: () -> Unit) {
                         onMarkTricky = vm::markTricky,
                         onRetire = vm::retire,
                         onNext = vm::next,
+                        onLookup = vm::lookupWord,
                     )
                     QuizPhase.DONE -> ResultBody(state, onExit, vm::again, vm::review)
                     QuizPhase.ERROR -> ErrorBody(vm::retry, onExit)
                 }
+            }
+            state.lookup?.let { entry ->
+                DictionaryCardDialog(
+                    entry = entry,
+                    loadMaterial = vm::materialFor,
+                    onAdd = null,
+                    onDismiss = vm::closeLookup,
+                )
             }
         }
     }
@@ -269,6 +279,7 @@ private fun EmptyBody(mode: QuizMode, onExit: () -> Unit) {
                     QuizMode.NEMESIS -> R.string.quiz_nemesis_empty
                     QuizMode.DUE -> R.string.quiz_empty
                     QuizMode.REVIEW -> R.string.quiz_review_empty
+                    QuizMode.MATCH -> R.string.match_empty
                 },
             ),
             textAlign = TextAlign.Center,

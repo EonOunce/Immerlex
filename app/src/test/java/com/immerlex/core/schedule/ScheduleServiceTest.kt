@@ -357,6 +357,66 @@ class ScheduleServiceTest {
     }
 
     @Test
+    fun twoClozeAnswersGraduateBecauseEachIsWorthTwoPoints() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "wharf", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        val first = svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "CLOZE", now = now.plus(3, ChronoUnit.SECONDS),
+        )!!
+        assertEquals("挖空第一下只有 2 分，还不够 3 分", LOG_KIND_ATTEMPT, first.kind)
+
+        val second = svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "CLOZE", now = now.plus(6, ChronoUnit.SECONDS),
+        )!!
+        assertEquals("再一道挖空 2 + 2 = 4 分，这才是真正的一次回忆", LOG_KIND_RECALL, second.kind)
+        assertEquals(Rating.GOOD.value, logs.items.last().rating)
+    }
+
+    @Test
+    fun aClozePlusAnOrdinaryTypeGraduatesAtThreePoints() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "quarry", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        val first = svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "EN_ZH", now = now.plus(3, ChronoUnit.SECONDS),
+        )!!
+        assertEquals(LOG_KIND_ATTEMPT, first.kind)
+
+        val second = svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "CLOZE", now = now.plus(6, ChronoUnit.SECONDS),
+        )!!
+        assertEquals("1 + 2 = 3 分，轻重题型混着也算数", LOG_KIND_RECALL, second.kind)
+        assertEquals(
+            listOf(LOG_KIND_LEARN, LOG_KIND_ATTEMPT, LOG_KIND_RECALL),
+            logs.items.map { it.kind },
+        )
+    }
+
+    @Test
+    fun aWrongAnswerWipesTheHeavyPointsAlreadyAccumulated() = runBlocking {
+        val (svc, words, logs) = parts()
+        val now = Instant.parse("2024-01-01T00:00:00Z")
+        val id = words.insert(WordEntity(word = "ledge", source = "test", createdAtSec = 0))
+        svc.learn(words.findById(id)!!, Rating.GOOD, SOURCE, now)
+
+        svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "CLOZE", now = now.plus(3, ChronoUnit.SECONDS),
+        )
+        svc.recognize(words.findById(id)!!, false, "quiz", now = now.plus(6, ChronoUnit.SECONDS))
+
+        val again = svc.recognize(
+            words.findById(id)!!, true, "quiz", questionType = "CLOZE", now = now.plus(9, ChronoUnit.SECONDS),
+        )!!
+        assertEquals("答错清零：这一下只攒回 2 分，不够 3 分", LOG_KIND_ATTEMPT, again.kind)
+        assertEquals(Rating.AGAIN.value, logs.items[2].rating)
+    }
+
+    @Test
     fun readerRecallIsStillOneShotEvenWithAttemptsPending() = runBlocking {
         val (svc, words, _) = parts()
         val now = Instant.parse("2024-01-01T00:00:00Z")

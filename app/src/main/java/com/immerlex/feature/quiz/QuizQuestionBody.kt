@@ -48,6 +48,7 @@ internal fun QuestionBody(
     onMarkTricky: () -> Unit,
     onRetire: () -> Unit,
     onNext: () -> Unit,
+    onLookup: (String) -> Unit,
 ) {
     val question = state.question ?: return
     val speaker = rememberWordSpeaker()
@@ -70,6 +71,8 @@ internal fun QuestionBody(
                 QuizMode.NEMESIS -> Badge(stringResource(R.string.quiz_nemesis_badge))
                 QuizMode.DUE -> Unit
                 QuizMode.REVIEW -> Badge(stringResource(R.string.quiz_review_badge))
+                // 连连看有自己的页面，不走这道题面。
+                QuizMode.MATCH -> Unit
             }
             if (state.practice) Badge(stringResource(R.string.quiz_retry_badge))
         }
@@ -83,7 +86,7 @@ internal fun QuestionBody(
             style = MaterialTheme.typography.labelMedium,
             color = ImmerlexColors.Meta,
         )
-        PromptCard(question, state.answered, speaker)
+        PromptCard(question, state.answered, speaker, onLookup)
 
         // 答完之后整片选项区都是「下一题」：手指本来停在选项上，不必再够到页底找按钮。
         // 卡片自己接过这一笔，因为它把点击吃住了、传不到外面这一层。
@@ -138,10 +141,17 @@ internal fun QuestionBody(
 }
 
 @Composable
-private fun PromptCard(question: QuizQuestion, answered: Boolean, speaker: WordSpeaker) {
+private fun PromptCard(
+    question: QuizQuestion,
+    answered: Boolean,
+    speaker: WordSpeaker,
+    onLookup: (String) -> Unit,
+) {
     // 念得出题干里的英文、又不会先把答案说出来，才给这个按钮。
     val speakable = question.type == QuizType.EN_ZH || answered
     val unusable = speaker.problem == SpeechProblem.NoEngine || speaker.problem == SpeechProblem.NoEnglish
+    // 题干就是那个词时才点得动：答完点它查词典，答之前点开就等于把答案递到眼前。
+    val lookupable = answered && question.type == QuizType.EN_ZH
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -155,7 +165,9 @@ private fun PromptCard(question: QuizQuestion, answered: Boolean, speaker: WordS
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     question.prompt,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(if (lookupable) Modifier.clickable { onLookup(question.word) } else Modifier),
                     style = if (isHeadwordPrompt(question.type)) {
                         MaterialTheme.typography.headlineMedium
                     } else {

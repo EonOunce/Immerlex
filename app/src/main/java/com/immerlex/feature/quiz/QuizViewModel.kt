@@ -2,6 +2,10 @@ package com.immerlex.feature.quiz
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.immerlex.core.dict.DictEntry
+import com.immerlex.core.dict.DictionarySource
+import com.immerlex.core.material.MaterialEntry
+import com.immerlex.core.material.MaterialRepository
 import com.immerlex.core.quiz.QuizMaterialPrep
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizQuestion
@@ -11,6 +15,7 @@ import com.immerlex.core.quiz.QuizRunRecord
 import com.immerlex.core.quiz.QuizRunSaved
 import com.immerlex.core.quiz.QuizRunStore
 import com.immerlex.core.quiz.QuizService
+import com.immerlex.core.quiz.QuizSession
 import com.immerlex.core.quiz.QuizStage
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.tricky.TrickyRepository
@@ -65,6 +70,8 @@ data class QuizState(
      * null 只在到期组与补测组出现：那几个词要查库才知道，数出来之前那颗按钮先不摆。
      */
     val reviewCount: Int? = null,
+    /** 答题之后点题干那个词查到的词典条目；null 就是没开着。测验里只查，不动词库。 */
+    val lookup: DictEntry? = null,
 ) {
     val answered: Boolean get() = chosen != null || doubt
     val isLast: Boolean get() = total > 0 && index >= total - 1
@@ -104,6 +111,8 @@ class QuizViewModel(
     private val resume: QuizResumeStore,
     private val tricky: TrickyRepository,
     private val runs: QuizRunStore,
+    private val dictionary: DictionarySource,
+    private val material: MaterialRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuizState())
@@ -153,6 +162,26 @@ class QuizViewModel(
         }
         persist()
     }
+
+    /**
+     * 答完之后点题干里那个词：查一次词典，素材随卡现读。答案是四选一，
+     * 先答再查才不会把答案递到眼前；查不到就什么都不弹。
+     */
+    fun lookupWord(word: String) {
+        if (!_state.value.answered) return
+        val clean = word.trim().lowercase()
+        if (clean.isEmpty()) return
+        viewModelScope.launch {
+            val entry = withContext(Dispatchers.IO) { dictionary.lookup(clean) } ?: return@launch
+            _state.value = _state.value.copy(lookup = entry)
+        }
+    }
+
+    fun closeLookup() {
+        _state.value = _state.value.copy(lookup = null)
+    }
+
+    suspend fun materialFor(word: String): MaterialEntry? = material.peek(word)
 
     /** 「不确定」按答错走：翻开答案、排进末尾重练、记一次忘了。 */
     fun doubt() {
@@ -253,35 +282,47 @@ class QuizViewModel(
         val session = try {
             withContext(Dispatchers.Default) {
                 val now = Instant.now()
+                val limit = prefs.dailyNewLimit
+                val segments = prefs.quizSegments
                 when (mode) {
                     QuizMode.DUE -> quiz.planDue(
                         now = now,
-                        dailyNewLimit = prefs.dailyNewLimit,
+                        dailyNewLimit = limit,
+                        segments = segments,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
                     QuizMode.REVIEW -> quiz.planReview(
                         now = now,
+                        dailyNewLimit = limit,
+                        segments = segments,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
                     QuizMode.EARLY -> quiz.planEarly(
                         now = now,
                         excludeWordIds = excluded,
-                        groupSize = prefs.earlyGroupSize,
+                        dailyNewLimit = limit,
+                        segments = segments,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
                     QuizMode.TRICKY -> quiz.planTricky(
                         now = now,
+                        dailyNewLimit = limit,
+                        segments = segments,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
                     QuizMode.NEMESIS -> quiz.planNemesis(
                         now = now,
+                        dailyNewLimit = limit,
+                        segments = segments,
                         onStage = ::publishStage,
                         onMaterial = ::publishMaterial,
                     )
+                    // 连连看有自己的页面与状态机（MatchViewModel），这里只为穷尽，永远不会进来。
+                    QuizMode.MATCH -> QuizSession(QuizMode.MATCH, emptyList())
                 }
             }
         } catch (e: CancellationException) {

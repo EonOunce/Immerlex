@@ -101,6 +101,29 @@ class QuestionBuildersTest {
     }
 
     @Test
+    fun definitionSplitsEachSenseOntoItsOwnLine() {
+        val multi = word(
+            6,
+            "harbour",
+            "港口",
+            def = "a place where ships stay； to keep a thought in mind;  to shelter",
+        )
+
+        val question = DefinitionBuilder().build(multi, QuestionContext(pool = pool + multi, seed = 8))!!
+
+        assertEquals(
+            "a place where ships stay\nto keep a thought in mind\nto shelter",
+            question.prompt,
+        )
+    }
+
+    @Test
+    fun definitionLinesKeepASingleSenseAsOneLine() {
+        assertEquals("a landing place", definitionLines("  a landing place  "))
+        assertEquals("one\nthree", definitionLines("one;;\n\nthree;"))
+    }
+
+    @Test
     fun extraDistractorsFromTheEnricherJoinTheOptionPool() {
         val context = QuestionContext(
             pool = listOf(harbour),

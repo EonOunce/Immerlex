@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.ImmerlexApplication
 import com.immerlex.app.R
 import com.immerlex.app.readPlainText
+import com.immerlex.app.ui.DictionaryCardDialog
 import com.immerlex.app.ui.ImmerlexColors
 import com.immerlex.app.ui.PillChip
 import com.immerlex.app.ui.RootHandledInsets

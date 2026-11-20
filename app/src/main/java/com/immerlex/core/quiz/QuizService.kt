@@ -8,6 +8,7 @@ import com.immerlex.core.db.ReviewLogDao
 import com.immerlex.core.db.TrickyDao
 import com.immerlex.core.db.WordDao
 import com.immerlex.core.db.WordEntity
+import com.immerlex.core.fsrs.Rating
 import com.immerlex.core.schedule.DayBoundary
 import com.immerlex.core.schedule.Nemesis
 import com.immerlex.core.schedule.ScheduleService
@@ -23,7 +24,7 @@ data class QuizMaterialPrep(val ready: Int, val toAsk: Int, val canAsk: Boolean)
 
 /**
  * 独立测验的编排层。只做三件事：挑出今天该测的词、按题型策略出题、
- * 把一次作答折算成一次 [ScheduleService.recall]。不另建排期，也不改 FSRS 公式。
+ * 把一次作答折算成一条记录（生词第一次只 learn，之后过认出闸门）。不另建排期，也不改 FSRS 公式。
  * 本地题库优先，[enricher] 只补缺失素材，失败就静默退化。
  * [material] 存在时每个词只向模型要一回，之后都读库里的这一行。
  */
@@ -42,20 +43,33 @@ class QuizService(
     private val builders: List<QuestionBuilder> = DEFAULT_QUESTION_BUILDERS,
 ) {
 
-    /** 今日到期 + 今天学过但还没回忆的词；今天已经碰过一轮的不再重复考，它们走「今日复习」。 */
+    /**
+     * 今日到期 + 今天学过但还没回忆的词 + 今天的新词；今天已经碰过一轮的不再重复考，它们走「今日复习」。
+     * 新词也进来（v4.4）：没读过课文的人一样可以开测，第一次不管答对答错都只算打过照面。
+     */
     suspend fun dueCandidateIds(now: Instant, dailyNewLimit: Int): List<Long> {
         val dayStart = boundary.startOf(now)
         val queue = schedule.todaysQueue(now, dailyNewLimit)
         val learned = logDao.learnedWordIdsSince(dayStart)
         val handled = schedule.handledWordIds(now)
-        return (queue.reviewWords.map { it.id } + learned.sorted())
+        return (queue.reviewWords.map { it.id } + queue.newWords.map { it.id } + learned.sorted())
             .distinct()
             .filterNot { it in handled }
     }
 
     /**
+     * 今天的总词数：到期词 + 今天的新词（词，不是题）。
+     * 这是分段唯一的被除数——今天分几段坐由设置页决定，一段几道由它除出来。
+     * 用的是**原始**到期队列，所以答完一轮、词今天不再压人之后，每一天的段长也不会越缩越小。
+     */
+    suspend fun todayTotal(now: Instant, dailyNewLimit: Int): Int {
+        val queue = schedule.todaysQueue(now, dailyNewLimit)
+        return (queue.reviewWords + queue.newWords).distinctBy { it.id }.size
+    }
+
+    /**
      * 今日复习：今天被测验考过、但今天还没真正回忆成功过的词。
-     * 认出来一次（连着三次升成的那条 recall GOOD）它就从这一格里下去；答错写的是 recall AGAIN，
+     * 认出来一次（攒满认出闸门升成的那条 recall GOOD）它就从这一格里下去；答错写的是 recall AGAIN，
      * 那是"没认出来"的证据而不是"今天已经算了"，所以照样留着接着练。
      * 这一格不看卡片到没到期——测验里答对只攒 attempt、不动卡片，到期日还停在今天。
      */
@@ -68,20 +82,22 @@ class QuizService(
         if (ids.isEmpty()) return emptyList()
         return wordDao.findByIds(ids)
             .sortedWith(compareBy({ it.dueEpochSec ?: Long.MAX_VALUE }, { it.id }))
-            .take(SESSION_LIMIT)
     }
 
     suspend fun planReview(
         now: Instant,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
-        val words = reviewCandidates(now)
-        if (words.isEmpty()) return QuizSession(QuizMode.REVIEW, emptyList())
+        val candidates = reviewCandidates(now)
+        if (candidates.isEmpty()) return QuizSession(QuizMode.REVIEW, emptyList())
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), candidates.size, segments)
         onStage(QuizStage.READING_LOGS)
-        return build(QuizMode.REVIEW, words, now, seed, onStage, onMaterial)
+        return build(QuizMode.REVIEW, candidates.take(size), now, seed, onStage, onMaterial)
     }
 
     /**
@@ -97,6 +113,7 @@ class QuizService(
     suspend fun planDue(
         now: Instant,
         dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
@@ -105,10 +122,10 @@ class QuizService(
         val ids = dueCandidateIds(now, dailyNewLimit)
         if (ids.isEmpty()) return QuizSession(QuizMode.DUE, emptyList())
         onStage(QuizStage.READING_LOGS)
-        val words = wordDao.findByIds(ids)
+        val sorted = wordDao.findByIds(ids)
             .sortedWith(compareBy({ it.dueEpochSec ?: Long.MAX_VALUE }, { it.id }))
-            .take(SESSION_LIMIT)
-        return build(QuizMode.DUE, words, now, seed, onStage, onMaterial)
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), sorted.size, segments)
+        return build(QuizMode.DUE, sorted.take(size), now, seed, onStage, onMaterial)
     }
 
     /**
@@ -127,20 +144,22 @@ class QuizService(
                     .thenBy { it.dueEpochSec ?: Long.MAX_VALUE }
                     .thenBy { it.id },
             )
-            .take(SESSION_LIMIT)
     }
 
     suspend fun planTricky(
         now: Instant,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
-        val words = trickyCandidates(now)
-        if (words.isEmpty()) return QuizSession(QuizMode.TRICKY, emptyList())
+        val candidates = trickyCandidates(now)
+        if (candidates.isEmpty()) return QuizSession(QuizMode.TRICKY, emptyList())
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), candidates.size, segments)
         onStage(QuizStage.READING_LOGS)
-        return build(QuizMode.TRICKY, words, now, seed, onStage, onMaterial)
+        return build(QuizMode.TRICKY, candidates.take(size), now, seed, onStage, onMaterial)
     }
 
     /**
@@ -149,7 +168,7 @@ class QuizService(
      * 还留在名单上的，就是今天也没打赢的那个。
      */
     suspend fun nemesisCandidates(): List<WordEntity> {
-        val ids = Nemesis.wordIds(historyDao.recallEvents()).take(SESSION_LIMIT)
+        val ids = Nemesis.wordIds(historyDao.recallEvents())
         if (ids.isEmpty()) return emptyList()
         val byId = wordDao.findByIds(ids).associateBy { it.id }
         return ids.mapNotNull { byId[it] }
@@ -157,28 +176,32 @@ class QuizService(
 
     suspend fun planNemesis(
         now: Instant,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
-        val words = nemesisCandidates()
-        if (words.isEmpty()) return QuizSession(QuizMode.NEMESIS, emptyList())
+        val candidates = nemesisCandidates()
+        if (candidates.isEmpty()) return QuizSession(QuizMode.NEMESIS, emptyList())
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), candidates.size, segments)
         onStage(QuizStage.READING_LOGS)
-        return build(QuizMode.NEMESIS, words, now, seed, onStage, onMaterial)
+        return build(QuizMode.NEMESIS, candidates.take(size), now, seed, onStage, onMaterial)
     }
 
     suspend fun planEarly(
         now: Instant,
         excludeWordIds: Set<Long>,
-        groupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
         seed: Long = now.epochSecond,
         onStage: (QuizStage) -> Unit = {},
         onMaterial: (QuizMaterialPrep) -> Unit = {},
     ): QuizSession {
         onStage(QuizStage.COLLECTING)
-        val size = EarlyReview.saneOr(groupSize)
         val candidates = earlyCandidates(now)
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), candidates.size, segments)
         val fresh = candidates.filterNot { it.id in excludeWordIds }
         val picked = if (fresh.size >= size) {
             fresh.take(size)
@@ -191,9 +214,60 @@ class QuizService(
     }
 
     /**
-     * 一次作答折算成一次"认出来"（[ScheduleService.recognize]）：四选一认出比凭空想起容易，
-     * 答对先攒连对、满 [ScheduleService.GOOD_STREAK] 次才写一次 recall GOOD；答错立即一次
-     * recall AGAIN 并清零。是否该考由候选集决定，这里不再按 due 拦一次，所以刚学过的词也能作答。
+     * 连连看用的词：和「今日测验」同一批（今天还没碰过的），只要两边都有字就能上桌。
+     * 段长与其他入口同一个除法：今天的词数 ÷ 设置里的段数。
+     */
+    private suspend fun matchPairs(now: Instant, dailyNewLimit: Int, segments: Int): List<MatchPair> {
+        val ids = dueCandidateIds(now, dailyNewLimit)
+        if (ids.isEmpty()) return emptyList()
+        val sorted = wordDao.findByIds(ids)
+            .filter { it.word.isNotBlank() && it.translation.isNotBlank() }
+            .sortedWith(compareBy({ it.dueEpochSec ?: Long.MAX_VALUE }, { it.id }))
+        if (sorted.isEmpty()) return emptyList()
+        val size = QuizRound.perSegmentOr(todayTotal(now, dailyNewLimit), sorted.size, segments)
+        return sorted.take(size).map { MatchPair(it.id, it.word, it.translation) }
+    }
+
+    /** 今日页入口上那个数：这一组连连看能摆几对（凑不满 [MatchBoards.MIN_PAIRS] 对就是 0，整格不出现）。 */
+    suspend fun matchPairCount(
+        now: Instant,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
+    ): Int = MatchBoards.boards(matchPairs(now, dailyNewLimit, segments), 0L).sumOf { it.left.size }
+
+    /** 一组连连看：挑词在这里，分屏与打乱都交给 [MatchBoards]。 */
+    suspend fun planMatch(
+        now: Instant,
+        dailyNewLimit: Int,
+        segments: Int = QuizRound.DEFAULT_SEGMENTS,
+        seed: Long = now.epochSecond,
+    ): MatchPlan = MatchPlan(MatchBoards.boards(matchPairs(now, dailyNewLimit, segments), seed))
+
+    /**
+     * 连连看连上了一对：只有第一下就连对才写一笔（闸门里和四选一一样值 1 分）。
+     * 先连错、缩小范围后才连上的不算——最后一对不用认也连得上，那种"对上了"说明不了记得。
+     * 连错本身也不记账：错的是那个配对，不是这两个词里任何一个。
+     */
+    suspend fun recordMatch(wordId: Long, firstTry: Boolean, now: Instant = Instant.now()): Boolean {
+        if (!firstTry) return false
+        val word = wordDao.findById(wordId) ?: return false
+        val first = schedule.learn(word, Rating.GOOD, LOG_SOURCE_QUIZ, now)
+        if (first != null) return true
+        return schedule.recognize(
+            word = word,
+            correct = true,
+            source = LOG_SOURCE_QUIZ,
+            questionType = MATCH_QUESTION_TYPE,
+            now = now,
+        ) != null
+    }
+
+    /**
+     * 一次作答折算成一次"认出来"（[ScheduleService.recognize]）。生词第一次是例外（v4.4）：
+     * 没读过课文的人也能开测，第一次作答不管对错都只算打过照面——先走 [ScheduleService.learn]
+     * 建立排期（来源记 quiz，所以今天算是碰过了），不算一次回忆，也不往认出闸门里攒分。
+     * 从第二次起才进闸门：答对按题型攒分，攒满 [com.immerlex.core.schedule.RecognitionGate.GOOD_POINTS]
+     * 分才写一次 recall GOOD；答错立即一次 recall AGAIN 并清零。刚学过的词也能作答，这里不按 due 拦。
      */
     suspend fun record(
         question: QuizQuestion,
@@ -201,6 +275,13 @@ class QuizService(
         now: Instant = Instant.now(),
     ): Boolean {
         val word = wordDao.findById(question.wordId) ?: return false
+        val first = schedule.learn(
+            word = word,
+            rating = if (correct) Rating.GOOD else Rating.AGAIN,
+            source = LOG_SOURCE_QUIZ,
+            now = now,
+        )
+        if (first != null) return true
         val result = schedule.recognize(
             word = word,
             correct = correct,
@@ -212,15 +293,16 @@ class QuizService(
     }
 
     /**
-     * 一个词标成易错后连对满 [TrickyRetirement.STREAK] 次（认出来与真回忆都算一次答对），
-     * 就报出它的词面，问一句要不要移出易错；没标过、或中间答错过，返回 null。
+     * 一个词标成易错后答对攒满 [TrickyRetirement.RETIRE_POINTS] 分（认出来与真回忆都算，
+     * 每次值几分跟认出闸门同一把尺），就报出它的词面，问一句要不要移出易错；
+     * 没标过、或中间答错过，返回 null。
      */
     suspend fun retirementCandidate(wordId: Long): String? {
         val word = wordDao.findById(wordId) ?: return null
         val name = word.word.trim().lowercase()
         val marked = trickyDao.byWord(name) ?: return null
-        val streak = TrickyRetirement.correctStreakSinceMarked(logDao.forWord(wordId), marked.createdAtSec)
-        return if (TrickyRetirement.shouldRetire(streak)) name else null
+        val points = TrickyRetirement.correctPointsSinceMarked(logDao.forWord(wordId), marked.createdAtSec)
+        return if (TrickyRetirement.shouldRetire(points)) name else null
     }
 
     private suspend fun build(
@@ -382,9 +464,7 @@ class QuizService(
     private fun builderOf(type: QuizType): QuestionBuilder? = builders.firstOrNull { it.type == type }
 
     companion object {
-        /** 一组最多 40 题：48 个到期词拆两组就够，既少发一次请求，也不至于让一组长得看不完。 */
-        const val SESSION_LIMIT = 40
-        /** 提前复习先扫这么多个，再剔掉今天已经回忆过的；三档最大 20，留出十倍的余量。 */
+        /** 提前复习先扫这么多个，再剔掉今天已经回忆过的；一天分几段由设置页定，段长由今天的词数除出来。 */
         private const val EARLY_SCAN = 200
         private const val POOL_SIZE = 200
         private const val CHAPTER_SCAN = 20

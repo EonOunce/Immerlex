@@ -33,7 +33,7 @@ import com.immerlex.app.ui.PillSegmented
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.accentLabel
 import com.immerlex.app.ui.textFor
-import com.immerlex.core.quiz.EarlyReview
+import com.immerlex.core.quiz.QuizRound
 
 @Composable
 fun SettingsScreen(
@@ -116,14 +116,16 @@ fun SettingsScreen(
             Section(
                 SECTION_QUIZ,
                 R.string.settings_quiz_section,
-                stringResource(R.string.settings_summary_quiz, state.earlyGroupSize),
+                stringResource(R.string.settings_summary_quiz, state.quizSegments),
                 opened,
             ) {
-                Text(stringResource(R.string.settings_early_group), style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.settings_quiz_segments), style = MaterialTheme.typography.labelLarge)
                 PillSegmented(
-                    options = EarlyReview.GROUP_SIZES.map { it to stringResource(R.string.settings_early_group_count, it) },
-                    selected = state.earlyGroupSize,
-                    onPick = vm::onEarlyGroupSize,
+                    options = QuizRound.SEGMENT_CHOICES.map {
+                        it to stringResource(R.string.settings_quiz_segments_count, it)
+                    },
+                    selected = state.quizSegments,
+                    onPick = vm::onQuizSegments,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

@@ -6,7 +6,7 @@ import com.immerlex.core.ai.Density
 import com.immerlex.core.backup.DownloadVerdict
 import com.immerlex.core.backup.RemoteFile
 import com.immerlex.core.backup.SnapshotProblem
-import com.immerlex.core.quiz.EarlyReview
+import com.immerlex.core.quiz.QuizRound
 import com.immerlex.core.settings.Accent
 import com.immerlex.core.settings.AppPreferences
 import com.immerlex.core.settings.DEFAULT_FONT_SCALE
@@ -27,8 +27,8 @@ data class SettingsState(
     val autoSpeak: Boolean = false,
     /** 全 app 主色，两档暖色，改了立即生效。 */
     val accent: Accent = Accent.DEFAULT,
-    /** 提前复习一组几个词：5 / 10 / 20。 */
-    val earlyGroupSize: Int = EarlyReview.DEFAULT_GROUP_SIZE,
+    /** 今天想分几段坐：2 / 3 / 4，一段几道由今天的词数除出来。 */
+    val quizSegments: Int = QuizRound.DEFAULT_SEGMENTS,
     /** Model IDs reported by the gateway, or the preset's guesses before a probe. */
     val models: List<String> = emptyList(),
     val bankTotal: Int = 0,

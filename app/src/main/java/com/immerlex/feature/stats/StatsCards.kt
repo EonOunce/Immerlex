@@ -210,6 +210,7 @@ private fun modeLabel(mode: QuizMode): Int = when (mode) {
     QuizMode.EARLY -> R.string.quiz_mode_early
     QuizMode.TRICKY -> R.string.quiz_mode_tricky
     QuizMode.NEMESIS -> R.string.quiz_mode_nemesis
+    QuizMode.MATCH -> R.string.quiz_mode_match
 }
 
 private fun accuracy(run: QuizRun): Int =

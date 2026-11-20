@@ -77,7 +77,7 @@ class QuizServiceTest {
     }
 
     @Test
-    fun dueCandidatesAreDueWordsPlusWordsLearnedTodayMinusRecalledToday() = runBlocking {
+    fun dueCandidatesAreDueWordsPlusBrandNewWordsPlusWordsLearnedTodayMinusHandledToday() = runBlocking {
         val (service, words, logs) = parts()
         val due = seedDue(words, logs, "harbour")
         val fresh = words.insert(word("balcony"))
@@ -89,8 +89,8 @@ class QuizServiceTest {
         val ids = service.dueCandidateIds(now, dailyNewLimit = 10)
 
         assertTrue("到期词要考", due in ids)
+        assertTrue("没读过的生词也能直接进测验", fresh in ids)
         assertTrue("今天学过但还没回忆的词要考", learned in ids)
-        assertFalse("没学过的生词不考", fresh in ids)
         assertFalse("今天已经回忆过的不重复考", recalled in ids)
     }
 
@@ -103,7 +103,8 @@ class QuizServiceTest {
         words.insert(word("balcony"))
         words.insert(word("pebble"))
 
-        val session = service.planDue(now, dailyNewLimit = 10, seed = 1)
+        // 今天 3 个词、分 2 段 → 一段 2 个：到期最久的 harbour 与今天学过的 lantern。
+        val session = service.planDue(now, dailyNewLimit = 10, segments = 2, seed = 1)
 
         assertEquals(QuizMode.DUE, session.mode)
         assertEquals(setOf(due, learned), session.wordIds)
@@ -118,14 +119,17 @@ class QuizServiceTest {
     }
 
     @Test
-    fun aDueSessionStopsAtFortyWordsAndKeepsTheMostOverdue() = runBlocking {
+    fun aDueSessionTakesOneSegmentOfTheMostOverdueWords() = runBlocking {
         val (service, words, logs) = parts()
         val ids = (1..45).map { index -> seedDue(words, logs, "w$index", daysOverdue = index.toLong()) }
 
-        val session = service.planDue(now, dailyNewLimit = 10, seed = 7)
+        val thirds = service.planDue(now, dailyNewLimit = 0, segments = 3, seed = 7)
 
-        assertEquals(QuizService.SESSION_LIMIT, session.questions.size)
-        assertEquals("逾期最久的 40 个留下，剩下一组再考", ids.drop(5).toSet(), session.wordIds)
+        assertEquals("45 个词分 3 段，一段 15 个", 15, thirds.questions.size)
+        assertEquals("逾期最久的 15 个先来", ids.drop(30).toSet(), thirds.wordIds)
+
+        val halves = service.planDue(now, dailyNewLimit = 0, segments = 2, seed = 7)
+        assertEquals("想少坐一会就分 2 段，一段 23 个", 23, halves.questions.size)
     }
 
     @Test
@@ -171,6 +175,32 @@ class QuizServiceTest {
     }
 
     @Test
+    fun theFirstEverQuizAnswerOnlyMarksTheWordAsMet() = runBlocking {
+        val (service, words, logs) = parts()
+        val id = words.insert(word("kiln"))
+        val question = QuizQuestion(
+            wordId = id,
+            word = "kiln",
+            type = QuizType.CLOZE,
+            prompt = "The ___ was still warm.",
+            options = listOf(QuizOption("kiln", "", true)),
+        )
+
+        assertTrue(service.record(question, correct = true, now = now.plusSeconds(5)))
+
+        val first = logs.items.single()
+        assertEquals("第一次碰到它只走 learn：先开始排期，不算一次回忆", LOG_KIND_LEARN, first.kind)
+        assertEquals(LOG_SOURCE_QUIZ, first.source)
+        assertEquals("答对答错都一样，这里只把刚学过记下来", Rating.GOOD.value, first.rating)
+        assertTrue("卡上要有排期，明天才回得来", words.findById(id)!!.stability != null)
+
+        assertTrue(service.record(question, correct = true, now = now.plusSeconds(10)))
+        val second = logs.items.last()
+        assertEquals("从第二次起才进认出闸门，挖空 2 分还不够", LOG_KIND_ATTEMPT, second.kind)
+        assertEquals(QuizType.CLOZE.key, second.questionType)
+    }
+
+    @Test
     fun reviewKeepsWhatTheQuizHasNotSettledTodayAndDropsWhatItDid() = runBlocking {
         val (service, words, logs) = parts()
         val attempted = seedDue(words, logs, "harbour")
@@ -204,7 +234,7 @@ class QuizServiceTest {
         seedDue(words, logs, "kiln")
         seedDue(words, logs, "balcony")
 
-        val session = service.planReview(now, seed = 11)
+        val session = service.planReview(now, dailyNewLimit = 0, seed = 11)
 
         assertEquals(QuizMode.REVIEW, session.mode)
         assertEquals(setOf(quizzed), session.wordIds)
@@ -217,7 +247,7 @@ class QuizServiceTest {
         seedDue(words, logs, "harbour")
         seedDue(words, logs, "kiln")
 
-        val session = service.planReview(now, seed = 11)
+        val session = service.planReview(now, dailyNewLimit = 0, seed = 11)
 
         assertEquals(QuizMode.REVIEW, session.mode)
         assertTrue(session.questions.isEmpty())
@@ -239,34 +269,32 @@ class QuizServiceTest {
     @Test
     fun earlyGroupsTakeTheWordsClosestToDueAndCycleWhenFewRemain() = runBlocking {
         val (service, words, logs) = parts()
-        // 七个都学过、都还没到期：只有到期日远近能分先后。
+        // 七个都学过、都还没到期：今天没有到期词，一段就从这七个里除以 3 得出来。
         val byDue = (1..7).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
 
-        val first = service.planEarly(now, excludeWordIds = emptySet(), seed = 3)
-        assertEquals(5, first.questions.size)
-        assertEquals("最近到期的 5 个", byDue.take(5).toSet(), first.wordIds)
+        val first = service.planEarly(now, excludeWordIds = emptySet(), dailyNewLimit = 10, seed = 3)
+        assertEquals(3, first.questions.size)
+        assertEquals("最近到期的 3 个", byDue.take(3).toSet(), first.wordIds)
 
-        val second = service.planEarly(now, excludeWordIds = first.wordIds, seed = 4)
-        assertEquals(5, second.questions.size)
-        assertTrue("剩下没练过的两个必须进下一组", second.wordIds.containsAll(byDue.drop(5)))
-        assertTrue(second.wordIds.any { it in first.wordIds })
+        val second = service.planEarly(now, excludeWordIds = first.wordIds, dailyNewLimit = 10, seed = 4)
+        assertEquals(3, second.questions.size)
+        assertTrue("剩下没练过的四个排在前面", second.wordIds.containsAll(byDue.drop(3).take(3)))
 
-        val third = service.planEarly(now, excludeWordIds = byDue.toSet(), seed = 5)
-        assertEquals("全练过一遍后循环出题，不再有每日上限", 5, third.questions.size)
+        val third = service.planEarly(now, excludeWordIds = byDue.toSet(), dailyNewLimit = 10, seed = 5)
+        assertEquals("全练过一遍后循环出题，不再有每日上限", 3, third.questions.size)
     }
 
     @Test
-    fun earlyGroupSizeFollowsTheChosenTier() = runBlocking {
+    fun anEarlyGroupIsOneSegmentOfTheLearnedPoolWhenNothingIsDueToday() = runBlocking {
         val (service, words, logs) = parts()
         val byDue = (1..22).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
 
-        val ten = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 10, seed = 3)
-        assertEquals(10, ten.questions.size)
-        assertEquals("最近到期的 10 个", byDue.take(10).toSet(), ten.wordIds)
+        val halves = service.planEarly(now, excludeWordIds = emptySet(), dailyNewLimit = 10, segments = 2, seed = 3)
+        assertEquals("22 个词分 2 段，一段 11 个", 11, halves.questions.size)
+        assertEquals("最近到期的 11 个", byDue.take(11).toSet(), halves.wordIds)
 
-        val twenty = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 20, seed = 4)
-        assertEquals(20, twenty.questions.size)
-        assertEquals("最近到期的 20 个", byDue.take(20).toSet(), twenty.wordIds)
+        val quarters = service.planEarly(now, excludeWordIds = emptySet(), dailyNewLimit = 10, segments = 4, seed = 4)
+        assertEquals("分 4 段就是 6 个", 6, quarters.questions.size)
     }
 
     @Test
@@ -274,19 +302,19 @@ class QuizServiceTest {
         val (service, words, logs) = parts()
         val byDue = (1..7).map { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
 
-        val session = service.planEarly(now, excludeWordIds = byDue.toSet(), groupSize = 10, seed = 5)
+        val session = service.planEarly(now, excludeWordIds = byDue.toSet(), dailyNewLimit = 10, segments = 2, seed = 5)
 
-        assertEquals("凑不满十个别空转，循环拿练过的补", 7, session.questions.size)
+        assertEquals("凑不满一段就循环拿练过的补，别空转", 4, session.questions.size)
     }
 
     @Test
-    fun anUnknownEarlyGroupSizeFallsBackToFive() = runBlocking {
+    fun anEarlyGroupHasNoFixedUpperCap() = runBlocking {
         val (service, words, logs) = parts()
-        (1..8).forEach { index -> seedFuture(words, logs, "w$index", daysAhead = index.toLong()) }
+        repeat(60) { index -> seedFuture(words, logs, "w$index", daysAhead = (index % 9 + 1).toLong()) }
 
-        val session = service.planEarly(now, excludeWordIds = emptySet(), groupSize = 12, seed = 3)
+        val session = service.planEarly(now, excludeWordIds = emptySet(), dailyNewLimit = 10, segments = 2, seed = 3)
 
-        assertEquals(EarlyReview.DEFAULT_GROUP_SIZE, session.questions.size)
+        assertEquals("60 个词分 2 段就是 30 个，没有 40 题那种固定上限", 30, session.questions.size)
     }
 
     @Test
@@ -313,6 +341,60 @@ class QuizServiceTest {
         val candidates = service.earlyCandidates(now).map { it.id }
 
         assertEquals(listOf(learnedToday), candidates)
+    }
+
+    @Test
+    fun matchPlanTakesTodaysUnhandledWordsAndStopsAtOneSegment() = runBlocking {
+        val (service, words, logs) = parts()
+        val oldest = seedDue(words, logs, "harbour", daysOverdue = 3)
+        val middle = seedDue(words, logs, "kiln", daysOverdue = 2)
+        val newest = seedDue(words, logs, "balcony", daysOverdue = 1)
+        val fresh = words.insert(word("pebble"))
+
+        // 今天 4 个词、分 2 段 → 一段 2 对：最该复习的两个先摆上桌。
+        val plan = service.planMatch(now, dailyNewLimit = 10, segments = 2, seed = 1)
+
+        val ids = plan.boards.flatMap { it.left }.map { it.wordId }.toSet()
+        assertEquals(2, plan.pairCount)
+        assertEquals(setOf(oldest, middle), ids)
+        assertFalse(newest in ids)
+        assertFalse(fresh in ids)
+        assertEquals("入口上的数与实际摆出来的对数一致", 2, service.matchPairCount(now, 10, segments = 2))
+    }
+
+    @Test
+    fun matchPairsSkipWordsWithoutAChineseFace() = runBlocking {
+        val (service, words, logs) = parts()
+        val first = seedDue(words, logs, "harbour", daysOverdue = 2)
+        val blank = seedDue(words, logs, "kiln", daysOverdue = 1)
+        words.update(words.findById(blank)!!.copy(translation = "   "))
+        val second = seedDue(words, logs, "balcony")
+        seedDue(words, logs, "lantern", daysOverdue = 1)
+
+        val plan = service.planMatch(now, dailyNewLimit = 10, segments = 2, seed = 1)
+
+        val ids = plan.boards.flatMap { it.left }.map { it.wordId }.toSet()
+        assertEquals("没有中文面的词上不了桌，空出来的位置由后面的词补上", setOf(first, second), ids)
+        assertFalse(blank in ids)
+    }
+
+    @Test
+    fun onlyAFirstTryMatchWritesARecognition() = runBlocking {
+        val (service, words, logs) = parts()
+        val id = words.insert(word("kiln"))
+
+        assertTrue(service.recordMatch(id, firstTry = true, now = now.plusSeconds(5)))
+        val first = logs.items.single()
+        assertEquals("第一次碰到它只走 learn：先开始排期", LOG_KIND_LEARN, first.kind)
+        assertEquals(LOG_SOURCE_QUIZ, first.source)
+
+        assertTrue(service.recordMatch(id, firstTry = true, now = now.plusSeconds(10)))
+        val second = logs.items.last()
+        assertEquals("从第二次起才进认出闸门", LOG_KIND_ATTEMPT, second.kind)
+        assertEquals(MATCH_QUESTION_TYPE, second.questionType)
+
+        assertFalse(service.recordMatch(id, firstTry = false, now = now.plusSeconds(15)))
+        assertEquals("配错过的词一个字都不写", 2, logs.items.size)
     }
 
     @Test
@@ -357,10 +439,13 @@ class QuizServiceTest {
         )
         seedDue(words, logs, "harbour")
         val missing = seedDue(words, logs, "pebble")
+        seedDue(words, logs, "kiln")
+        seedDue(words, logs, "balcony")
         store.items["harbour"] = material("harbour", "[]")
         var report: QuizMaterialPrep? = null
 
-        service.planDue(now, dailyNewLimit = 10, seed = 1, onMaterial = { report = it })
+        // 今天 4 个词、分 2 段 → 一段 2 个，正好是 harbour 与 pebble。
+        service.planDue(now, dailyNewLimit = 10, segments = 2, seed = 1, onMaterial = { report = it })
 
         assertEquals(QuizMaterialPrep(ready = 1, toAsk = 1, canAsk = true), report)
         assertEquals("只有没素材的那个去问模型", listOf(missing), asked)
@@ -495,7 +580,8 @@ class QuizServiceTest {
         val service = service(words, logs, FakeTrickyDao(), material = QuizMaterialStore(store))
 
         // 这个词没有译文、释义和例句，前四种题型都出不了，只剩搭配题。
-        val question = service.planDue(now, dailyNewLimit = 10, seed = 5).questions.single()
+        // 今天 4 个词（harbour 到期 + 三个生词）、分 4 段 → 一段 1 个，到期最久的 harbour 自己一组。
+        val question = service.planDue(now, dailyNewLimit = 10, segments = 4, seed = 5).questions.single()
 
         assertEquals(QuizType.COLLOCATION, question.type)
         assertEquals("题干是这个自己的短语，选项问它的意思", "harbour wall", question.prompt)
@@ -563,7 +649,7 @@ class QuizServiceTest {
         assertTrue("没标过的词不进这一组", unmarked !in ids)
         assertTrue("今天已经回忆过的不再重复考", doneToday !in ids)
 
-        val asked = service.planTricky(now).questions.map { it.wordId }.toSet()
+        val asked = service.planTricky(now, dailyNewLimit = 10).questions.map { it.wordId }.toSet()
         assertTrue("出出来的题只可能是这几个词", asked.all { it in ids })
     }
 

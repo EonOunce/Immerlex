@@ -77,10 +77,10 @@ class SettingsViewModel(
         _state.value = _state.value.copy(accent = prefs.accent)
     }
 
-    /** 档位也改了即生效：下一次点「提前复习」就按新的一组词数出题。 */
-    fun onEarlyGroupSize(value: Int) {
-        prefs.earlyGroupSize = value
-        _state.value = _state.value.copy(earlyGroupSize = prefs.earlyGroupSize)
+    /** 分段也改了即生效：下一次出题就按新段数除今天的词数。 */
+    fun onQuizSegments(value: Int) {
+        prefs.quizSegments = value
+        _state.value = _state.value.copy(quizSegments = prefs.quizSegments)
     }
 
     /** 提醒也是改了即生效：它只是一次性 WorkManager 任务的重排，不需要"保存"。 */
@@ -309,7 +309,7 @@ class SettingsViewModel(
             darkMode = prefs.darkMode,
             autoSpeak = prefs.autoSpeak,
             accent = prefs.accent,
-            earlyGroupSize = prefs.earlyGroupSize,
+            quizSegments = prefs.quizSegments,
             reminderEnabled = reminder.enabled,
             reminderMinute = reminder.minuteOfDay,
             notificationsAllowed = reminder.areNotificationsAllowed(),

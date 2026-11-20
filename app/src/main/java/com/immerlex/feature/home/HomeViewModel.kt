@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.immerlex.core.db.ChapterDao
 import com.immerlex.core.quiz.QuizMode
 import com.immerlex.core.quiz.QuizResumeStore
+import com.immerlex.core.quiz.QuizRound
 import com.immerlex.core.quiz.QuizService
 import com.immerlex.core.roommate.RoommateService
 import com.immerlex.core.schedule.DailyLoopService
@@ -42,6 +43,7 @@ data class HomeState(
     val reviewResumable: Boolean = false,
     val earlyCount: Int = 0,
     val trickyCount: Int = 0,
+    val matchPairs: Int = 0,
     val roomMet: Boolean = false,
     val roomName: String = "",
     val roomLine: String = "",
@@ -87,6 +89,8 @@ class HomeViewModel(
         val tally = dailyLoop.todayTally(now)
         val latest = chapterDao.latest(prefs.genre)
         val room = roommate.hook(now)
+        val segments = prefs.quizSegments
+        val today = quiz.todayTotal(now, limit)
         _state.value = HomeState(
             loading = false,
             due = info.dueCount,
@@ -104,21 +108,27 @@ class HomeViewModel(
             recalledToday = tally.recalled,
             quizzedToday = tally.quizzed,
             // 入口数字与测验自己的候选集合同源：今天到期或今天刚学过、且今天还没碰过的词。
-            // 一组最多 40 题，入口显示的就是这一组能测多少，不是候选池总数。
-            quizCount = quiz.dueCandidateIds(now, limit).size.coerceAtMost(QuizService.SESSION_LIMIT),
+            // 一段几道 = 今天总词数 ÷ 设置里的段数，所以入口显示的就是这一组能测多少，不是候选池总数。
+            quizCount = quizCount(quiz.dueCandidateIds(now, limit).size, today, segments),
             // 答完最后一题却没点完成时候选已经清零，入口只有靠存下的会话才还能进去。
             quizResumable = resume.has(QuizMode.DUE),
             // 今日复习：今天已经测过、还没真认出来的那些词，和到期组同一批，只是换了扇门。
-            reviewCount = quiz.reviewCandidates(now).size.coerceAtMost(QuizService.SESSION_LIMIT),
+            reviewCount = quizCount(quiz.reviewCandidates(now).size, today, segments),
             reviewResumable = resume.has(QuizMode.REVIEW),
-            // 提前复习一组 5 / 10 / 20 个（设置页选）：入口数字是这一组能练多少，不是学过的词总数。
-            earlyCount = quiz.earlyCandidates(now).size.coerceAtMost(prefs.earlyGroupSize),
+            // 提前复习与易错练习不跟今天到期绑定：今天没词时按各自的池子除，免得休息日两个入口都空着。
+            earlyCount = quizCount(quiz.earlyCandidates(now).size, today, segments),
             // 易错练习没标过的词就整条入口不出现，所以这里只报真实可练的个数。
-            trickyCount = quiz.trickyCandidates(now).size.coerceAtMost(QuizService.SESSION_LIMIT),
+            trickyCount = quizCount(quiz.trickyCandidates(now).size, today, segments),
+            // 连连看与「今日测验」同一批词，数的是这一段能摆几对（凑不满一对就不出现）。
+            matchPairs = quiz.matchPairCount(now, limit, segments),
             roomMet = room.met,
             roomName = room.name,
             roomLine = room.line,
             roomBalance = room.balance,
         )
     }
+
+    /** 入口说"这一组能做几个"：池子与"今天总词数 ÷ 段数"取小的，和测验里切出来的那一段对齐。 */
+    private fun quizCount(pool: Int, todayTotal: Int, segments: Int): Int =
+        pool.coerceAtMost(QuizRound.perSegmentOr(todayTotal, pool, segments))
 }

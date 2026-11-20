@@ -85,11 +85,21 @@ class DefinitionBuilder : QuestionBuilder {
             wordId = word.id,
             word = word.word,
             type = type,
-            prompt = definition,
+            prompt = definitionLines(definition),
             options = options,
         )
     }
 }
+
+/**
+ * 一条英文释义里的几个义项各自成行：ECDICT 存的是用 `；` 连起来的一长串，
+ * 整段塞进题干会挤成一堆；换行、`；`、`;` 都当分隔（用户 v4.4：不同的英文释义之间要回车隔开）。
+ */
+internal fun definitionLines(raw: String): String =
+    raw.split('\n', '；', ';')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .joinToString("\n")
 
 /**
  * 搭配题：题干是**这个词自己的**一条真实搭配，选项是四个中文释义，只有一个对得上。
@@ -228,7 +238,7 @@ private fun rotate(items: List<Choice>, attempt: Int, size: Int): List<Choice> {
     return (items.drop(start) + items.take(start)).distinctBy { it.text.lowercase() }.take(size)
 }
 
-private fun stableHash(text: String, seed: Long): Long =
+internal fun stableHash(text: String, seed: Long): Long =
     (text.hashCode().toLong() * 1_000_003L + seed) xor (seed shl 7)
 
 private fun blankWord(text: String, word: String): String? {

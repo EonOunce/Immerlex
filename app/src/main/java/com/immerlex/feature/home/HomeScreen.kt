@@ -59,6 +59,7 @@ fun HomeScreen(
     onStartReview: () -> Unit,
     onStartEarly: () -> Unit,
     onStartTricky: () -> Unit,
+    onStartMatch: () -> Unit,
     onOpenRoom: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -92,6 +93,7 @@ fun HomeScreen(
             onStartQuiz = onStartQuiz,
             onStartReview = onStartReview,
             onStartEarly = onStartEarly,
+            onStartMatch = onStartMatch,
         )
 
         RoommateNote(state, onOpenRoom)
@@ -199,8 +201,9 @@ private fun StreakStamp(streak: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * 今日页的四个测验入口。
+ * 今日页的测验入口。
  * 首测与补测是一对略歪、彼此叠靠的白卡——它们是同一天里连着发生的两件事；
+ * 连连看考的是首测那一批词，紧跟在这对卡后面，玩的还是同一批词；
  * 提前复习自成一张横卡，它测的根本不是今天到期的词；
  * 易错练习压到整页最底下，隔开一整行，它是"今天还想再多练一点"时才点的东西，
  * 挨着主入口只会被误触。
@@ -211,6 +214,7 @@ private fun QuizEntries(
     onStartQuiz: () -> Unit,
     onStartReview: () -> Unit,
     onStartEarly: () -> Unit,
+    onStartMatch: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -245,6 +249,17 @@ private fun QuizEntries(
                 )
             }
         }
+        EntryCard(
+            label = stringResource(R.string.home_match_card),
+            value = if (state.matchPairs > 0) {
+                stringResource(R.string.home_match_card_count, state.matchPairs)
+            } else {
+                stringResource(R.string.home_match_card_empty)
+            },
+            dot = ImmerlexColors.Rust,
+            enabled = !state.loading && state.matchPairs > 0,
+            onClick = onStartMatch,
+        )
         EntryCard(
             label = stringResource(R.string.home_early_card),
             value = if (state.earlyCount > 0) stringResource(R.string.home_early_card_count, state.earlyCount) else stringResource(R.string.home_early_card_none),
