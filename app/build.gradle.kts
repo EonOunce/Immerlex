@@ -21,8 +21,8 @@ android {
         applicationId = "com.immerlex.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "4.4.0"
+        versionCode = 32
+        versionName = "4.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

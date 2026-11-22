@@ -16,6 +16,7 @@ class QuestionBuildersTest {
     private val lantern = word(3, "lantern", "灯笼")
     private val pebble = word(4, "pebble", "鹅卵石")
     private val pool = listOf(harbour, balcony, lantern, pebble)
+    private val POS_MARKER = Regex("^[a-zA-Z]{1,6}\\.")
 
     @Test
     fun enToZhAsksForTheChineseMeaningWithDistinctDistractors() {
@@ -170,6 +171,53 @@ class QuestionBuildersTest {
             second.options.map { it.text }.toSet(),
         )
         assertTrue(first.options.all { it.gloss.isNotBlank() })
+    }
+
+    @Test
+    fun consecutiveQuestionsDoNotRepeatTheSameDistractors() {
+        // 用户真机："连续好几个题的选项除了正确答案的在变，其他三个选项都是一样的。"
+        // 头一回做的那组词次数全是 0，若只按次数从池子里抽，每道题都从同一格起。
+        val bank = (100..140).map { word(it.toLong(), "term$it", "释义$it") }
+        val context = QuestionContext(pool = bank, seed = 31)
+
+        val triples = bank.take(10).mapNotNull { EnToZhBuilder().build(it, context) }
+            .map { question -> question.options.filterNot { it.correct }.map { it.text }.toSet() }
+
+        assertEquals(10, triples.size)
+        triples.zipWithNext().forEach { (first, second) ->
+            assertNotEquals("连着两道题不该摆同一叠干扰项", first, second)
+        }
+        assertTrue("十道题里至少要有九种不同的排法", triples.distinct().size >= 9)
+    }
+
+    @Test
+    fun optionFacesDropPartOfSpeechMarkersSoTrickyWordsDoNotStandOut() {
+        // 用户真机："自己写的易错词在选项中，是没有 v.n. 这样的标记的，那就会一眼看出哪个是易错词。"
+        val marked = word(1, "ubiquitous", "adj. 无处不在的")
+        val written = word(2, "reluctant", "不情愿的")
+        val context = QuestionContext(
+            pool = listOf(marked, written, balcony, lantern, pebble),
+            confusables = mapOf(1L to listOf(EnrichedDistractor("reluctant", "不情愿的"))),
+            seed = 41,
+        )
+
+        val question = EnToZhBuilder().build(marked, context)!!
+
+        assertEquals("无处不在的", question.correctText())
+        assertTrue("手写的易错词照样在场上", question.options.any { it.text == "不情愿的" })
+        assertTrue(
+            "四个选项的中文面都不许带词性标记",
+            question.options.none { POS_MARKER.containsMatchIn(it.text) },
+        )
+        assertEquals("无处不在的", ZhToEnBuilder().build(marked, context.copy(seed = 43))!!.prompt)
+    }
+
+    @Test
+    fun glossFaceStripsTheMarkersEcdictPutsInFrontOfEachSense() {
+        assertEquals("不情愿的", glossFace("adj. 不情愿的"))
+        assertEquals("使适应, 改编；适应", glossFace("vt. 使适应, 改编；vi. 适应"))
+        assertEquals("苹果, 家伙；苹果", glossFace("n. 苹果, 家伙；[医] 苹果"))
+        assertEquals("灯笼", glossFace("灯笼"))
     }
 
     @Test

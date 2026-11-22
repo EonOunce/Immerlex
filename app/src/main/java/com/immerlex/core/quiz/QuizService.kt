@@ -1,6 +1,7 @@
 package com.immerlex.core.quiz
 
 import com.immerlex.core.db.ChapterDao
+import com.immerlex.core.db.LOG_KIND_ATTEMPT
 import com.immerlex.core.db.LOG_KIND_RECALL
 import com.immerlex.core.db.LOG_SOURCE_QUIZ
 import com.immerlex.core.db.ReviewHistoryDao
@@ -328,7 +329,10 @@ class QuizService(
             sentences = ClozeSentences.fromChapters(chapterDao.recentSegments(CHAPTER_SCAN)),
             enrichment = enrichment,
             confusables = confusablesFor(words),
-            attempts = logsByWord.mapValues { (_, logs) -> logs.count { it.kind == LOG_KIND_RECALL } },
+            // 认出闸门挡下的 attempt 也算一次被考：同一天里再考同一个词，选项该换一叠。
+            attempts = logsByWord.mapValues { (_, logs) ->
+                logs.count { it.kind == LOG_KIND_RECALL || it.kind == LOG_KIND_ATTEMPT }
+            },
             collocationPool = (stored.values + enrichment.entries.values)
                 .flatMap { it.collocations }
                 .distinctBy { it.word.trim().lowercase() },
@@ -428,8 +432,10 @@ class QuizService(
 
     private suspend fun glossFor(names: List<String>): Map<String, String> {
         val glosses = mutableMapOf<String, String>()
-        wordDao.findByWords(names).forEach { put(glosses, it.word, it.translation) }
+        // 易错表里的释义常常是阅读页那一刻的简短说法；词库里有这一行就以词库为准，
+        // 免得同一个词当正确答案与当干扰项时摆出两种写法。
         trickyDao.byWords(names).forEach { put(glosses, it.word, it.gloss) }
+        wordDao.findByWords(names).forEach { put(glosses, it.word, it.translation) }
         return glosses
     }
 

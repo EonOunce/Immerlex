@@ -23,6 +23,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +42,7 @@ import com.immerlex.app.ui.keyLabel
 import com.immerlex.core.settings.KeyAction
 import com.immerlex.core.settings.KeyContext
 import com.immerlex.core.settings.KeyMap
+import com.immerlex.core.settings.KeyRecording
 
 /**
  * 一个动作一行，点一下再按一个键就换过来。同一个场景里被抢走的键自动跟原主人互换，
@@ -50,6 +53,10 @@ import com.immerlex.core.settings.KeyMap
 fun KeyboardScreen(vm: KeyboardViewModel, onBack: () -> Unit) {
     val bindings by vm.bindings.collectAsStateWithLifecycle()
     var capturing by remember { mutableStateOf<KeyAction?>(null) }
+
+    // 录制期间让「收起窗口」那颗键让路，否则想把别的动作绑到 Esc 上时应用自己先收起来了。
+    SideEffect { KeyRecording.active = capturing != null }
+    DisposableEffect(Unit) { onDispose { KeyRecording.active = false } }
 
     KeyCapture(
         requestOn = capturing,
@@ -137,6 +144,7 @@ private fun KeyRow(label: String, keyText: String, capturing: Boolean, onClick: 
 private fun contextLabel(context: KeyContext): Int = when (context) {
     KeyContext.READER -> R.string.key_reader_section
     KeyContext.QUIZ -> R.string.key_quiz_section
+    KeyContext.GLOBAL -> R.string.key_global_section
 }
 
 private fun actionLabel(action: KeyAction): Int = when (action) {
@@ -153,4 +161,5 @@ private fun actionLabel(action: KeyAction): Int = when (action) {
     KeyAction.QUIZ_OPTION_D -> R.string.key_quiz_d
     KeyAction.QUIZ_DOUBT -> R.string.key_quiz_doubt
     KeyAction.QUIZ_NEXT -> R.string.key_quiz_next
+    KeyAction.APP_HIDE -> R.string.key_app_hide
 }

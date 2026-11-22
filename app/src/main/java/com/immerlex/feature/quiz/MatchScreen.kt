@@ -1,19 +1,23 @@
 package com.immerlex.feature.quiz
 
+import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -44,89 +48,187 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.immerlex.app.R
 import com.immerlex.app.ui.ImmerlexColors
+import com.immerlex.app.ui.KeyCapture
 import com.immerlex.app.ui.LocalAccent
 import com.immerlex.app.ui.RootHandledInsets
 import com.immerlex.app.ui.capsule
 import com.immerlex.app.ui.signed
+
+/** 数字键 1–5 就是这一屏从上到下的五对。 */
+private val MATCH_ROWS = listOf(
+    KeyEvent.KEYCODE_1,
+    KeyEvent.KEYCODE_2,
+    KeyEvent.KEYCODE_3,
+    KeyEvent.KEYCODE_4,
+    KeyEvent.KEYCODE_5,
+)
+
+private val MATCH_GAP = 12.dp
+private val MATCH_CARD_MIN = 58.dp
+private val MATCH_CARD_MAX = 140.dp
+
+/** 进度那一行连同它下面的间距，估一个高度：摊不摊得开就看剩下多少给牌。 */
+private val MATCH_PROGRESS_BLOCK = 32.dp
+
+/** 与阅读页正文同一个限宽：牌摊到平板两头，眼睛就得来回扫一整屏。 */
+private val MATCH_BOARD_MAX_WIDTH = 720.dp
 
 @Composable
 fun MatchScreen(vm: MatchViewModel, onExit: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.start() }
 
-    Scaffold(contentWindowInsets = RootHandledInsets) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onExit) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.action_back),
+    // 1–5 是这一屏从上到下的五对：第一次按点左边那张，第二次按点右边那张，6 把刚才点的那张放回去。
+    // 这几颗键不进设置页——它们不是"哪个动作绑哪个键"，就是这一屏的五个位置。
+    val keyHandler: (Int) -> Boolean = { code ->
+        when {
+            state.phase != MatchPhase.PLAYING -> false
+            code == KeyEvent.KEYCODE_6 -> {
+                vm.cancelPick()
+                true
+            }
+            else -> {
+                val row = MATCH_ROWS.indexOf(code)
+                if (row < 0) {
+                    false
+                } else {
+                    val side = if (state.pickedSide == MatchSide.LEFT) MatchSide.RIGHT else MatchSide.LEFT
+                    val pairs = if (side == MatchSide.LEFT) state.left else state.right
+                    val pair = pairs.getOrNull(row)
+                    if (pair == null) false else {
+                        vm.tap(side, pair.wordId)
+                        true
+                    }
+                }
+            }
+        }
+    }
+
+    KeyCapture(
+        onKey = keyHandler,
+        requestOn = state,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Scaffold(contentWindowInsets = RootHandledInsets) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onExit) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.match_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
-                Text(
-                    stringResource(R.string.match_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
+                when (state.phase) {
+                    MatchPhase.LOADING -> MatchNotice(stringResource(R.string.match_loading)) {
+                        OutlinedButton(onClick = onExit) { Text(stringResource(R.string.action_back)) }
+                    }
+                    MatchPhase.EMPTY -> MatchNotice(stringResource(R.string.match_empty)) {
+                        OutlinedButton(onClick = onExit) { Text(stringResource(R.string.action_back)) }
+                    }
+                    MatchPhase.PLAYING -> PlayBody(state, vm::tap)
+                    MatchPhase.DONE -> ResultBody(state, onExit, vm::again)
+                }
             }
-            when (state.phase) {
-                MatchPhase.LOADING -> MatchNotice(stringResource(R.string.match_loading)) {
-                    OutlinedButton(onClick = onExit) { Text(stringResource(R.string.action_back)) }
+        }
+    }
+}
+
+/**
+ * 一屏牌摊满整屏：五张牌把可用高度分掉，牌面自己长高（最多 140dp），剩的空当上下均分，
+ * 宽屏上限宽 720dp 居中——牌摊到平板两头，眼睛就得来回扫一整屏。
+ * 摊不开的时候（三星小窗收成半屏）才退回滚动，牌仍是 58dp 起步。
+ */
+@Composable
+private fun PlayBody(state: MatchState, onTap: (MatchSide, Long) -> Unit) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) {
+        val rows = maxOf(state.left.size, state.right.size)
+        val needed = MATCH_PROGRESS_BLOCK + MATCH_GAP +
+            MATCH_CARD_MIN * rows + MATCH_GAP * (rows - 1)
+        val board = Modifier.fillMaxHeight().widthIn(max = MATCH_BOARD_MAX_WIDTH).align(Alignment.TopCenter)
+        if (maxHeight >= needed) {
+            Column(modifier = board, verticalArrangement = Arrangement.spacedBy(MATCH_GAP)) {
+                MatchProgress(state)
+                Row(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(MATCH_GAP),
+                ) {
+                    MatchColumn(state, MatchSide.LEFT, onTap, Modifier.weight(1f).fillMaxHeight(), fill = true)
+                    MatchColumn(state, MatchSide.RIGHT, onTap, Modifier.weight(1f).fillMaxHeight(), fill = true)
                 }
-                MatchPhase.EMPTY -> MatchNotice(stringResource(R.string.match_empty)) {
-                    OutlinedButton(onClick = onExit) { Text(stringResource(R.string.action_back)) }
+            }
+        } else {
+            Column(
+                modifier = board.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(MATCH_GAP),
+            ) {
+                MatchProgress(state)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MATCH_GAP),
+                ) {
+                    MatchColumn(state, MatchSide.LEFT, onTap, Modifier.weight(1f), fill = false)
+                    MatchColumn(state, MatchSide.RIGHT, onTap, Modifier.weight(1f), fill = false)
                 }
-                MatchPhase.PLAYING -> PlayBody(state, vm::tap)
-                MatchPhase.DONE -> ResultBody(state, onExit, vm::again)
             }
         }
     }
 }
 
 @Composable
-private fun PlayBody(state: MatchState, onTap: (MatchSide, Long) -> Unit) {
+private fun MatchProgress(state: MatchState) {
+    Text(
+        stringResource(R.string.match_progress, state.boardIndex + 1, state.boardCount, state.remaining),
+        style = MaterialTheme.typography.bodySmall,
+        color = ImmerlexColors.Meta,
+    )
+}
+
+/**
+ * 一列牌：左列是英文、右列是中文。[fill] 时五张牌把这一列的高度分掉（每张最多 140dp，
+ * 多出来的空当上下均分），不 fill 时按牌面自己的最小高度往下排、整列可滚。
+ */
+@Composable
+private fun MatchColumn(
+    state: MatchState,
+    side: MatchSide,
+    onTap: (MatchSide, Long) -> Unit,
+    modifier: Modifier,
+    fill: Boolean,
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(MATCH_GAP, Alignment.CenterVertically),
     ) {
-        Text(
-            stringResource(R.string.match_progress, state.boardIndex + 1, state.boardCount, state.remaining),
-            style = MaterialTheme.typography.bodySmall,
-            color = ImmerlexColors.Meta,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.left.forEach { pair ->
-                    MatchCard(
-                        text = pair.word,
-                        serif = true,
-                        matched = pair.wordId in state.matched,
-                        picked = state.pickedSide == MatchSide.LEFT && state.pickedId == pair.wordId,
-                        wrong = pair.wordId in state.wrongIds,
-                        onClick = { onTap(MatchSide.LEFT, pair.wordId) },
-                    )
-                }
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.right.forEach { pair ->
-                    MatchCard(
-                        text = pair.gloss,
-                        serif = false,
-                        matched = pair.wordId in state.matched,
-                        picked = state.pickedSide == MatchSide.RIGHT && state.pickedId == pair.wordId,
-                        wrong = pair.wordId in state.wrongIds,
-                        onClick = { onTap(MatchSide.RIGHT, pair.wordId) },
-                    )
-                }
+        val pairs = if (side == MatchSide.LEFT) state.left else state.right
+        pairs.forEach { pair ->
+            // 份给外层的格、牌面自己封顶：weight 会把子项钉死成整份高度，
+            // 直接写在牌上时 heightIn(max) 永远够不着，牌就会跟着格子一起长到半屏高。
+            val slot = if (fill) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth()
+            Box(modifier = slot, contentAlignment = Alignment.Center) {
+                MatchCard(
+                    text = if (side == MatchSide.LEFT) pair.word else pair.gloss,
+                    serif = side == MatchSide.LEFT,
+                    matched = pair.wordId in state.matched,
+                    picked = state.pickedSide == side && state.pickedId == pair.wordId,
+                    wrong = pair.wordId in state.wrongIds,
+                    onClick = { onTap(side, pair.wordId) },
+                    // 先封顶再撑满：反过来写（撑满在前）时 min 会被钉成整格高度，
+                    // max 再小也压不住，牌就跟着格子长到半屏高。
+                    modifier = if (fill) Modifier.heightIn(max = MATCH_CARD_MAX).fillMaxHeight() else Modifier,
+                )
             }
         }
     }
@@ -144,6 +246,7 @@ private fun MatchCard(
     picked: Boolean,
     wrong: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val background = when {
         picked -> LocalAccent.current
@@ -157,9 +260,9 @@ private fun MatchCard(
         else -> MaterialTheme.colorScheme.onSurface
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
+            .heightIn(min = MATCH_CARD_MIN)
             .then(if (matched) Modifier.alpha(0.45f) else Modifier)
             .capsule(radius = 16.dp, elevation = if (matched) 0.dp else 2.dp, color = background)
             .clickable(enabled = !matched, onClick = onClick)

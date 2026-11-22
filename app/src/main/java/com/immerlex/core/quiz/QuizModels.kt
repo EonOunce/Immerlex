@@ -70,7 +70,7 @@ data class QuestionContext(
     val enrichment: QuizEnrichment = QuizEnrichment(),
     /** 用户手动标过的易混词，比任何候选池都优先。 */
     val confusables: Map<Long, List<EnrichedDistractor>> = emptyMap(),
-    /** 这个词被考过几次——决定这一轮从候选池的哪一格开始抽选项。 */
+    /** 这个词被考过几次（真记账 + 认出闸门挡下的作答）——决定这一轮从候选池的哪一格开始抽选项。 */
     val attempts: Map<Long, Int> = emptyMap(),
     /**
      * 别的词的搭配短语，只用来做搭配题的干扰项。用户自己的易混关系与它无涉：

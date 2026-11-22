@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.immerlex.app.R
 import java.util.Locale
 
@@ -74,6 +77,11 @@ class WordSpeaker {
         ready = false
     }
 
+    /** 只闭嘴，不拆引擎：窗口被收起时停掉正在读的那个词，回来还能接着读。 */
+    fun stop() {
+        engine?.stop()
+    }
+
     private companion object {
         const val UTTERANCE_ID = "immerlex-word"
         val VOICE_LOCALES = listOf(Locale.US, Locale.UK, Locale.ENGLISH)
@@ -83,10 +91,19 @@ class WordSpeaker {
 @Composable
 fun rememberWordSpeaker(): WordSpeaker {
     val context = LocalContext.current.applicationContext
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val speaker = remember(context) { WordSpeaker() }
     DisposableEffect(speaker) {
         speaker.start(context)
         onDispose { speaker.shutdown() }
+    }
+    // 窗口退到后面就立刻闭嘴（含那颗「收起窗口」的键）：界面藏着而声音还在教室里，比界面露着更糟。
+    DisposableEffect(speaker, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) speaker.stop()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
     return speaker
 }

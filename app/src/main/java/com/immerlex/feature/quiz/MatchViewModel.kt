@@ -105,6 +105,13 @@ class MatchViewModel(
         if (picked == wordId) match(current, wordId) else miss(current, picked, wordId)
     }
 
+    /** 数字键 6：把刚才点的那张放回去。配错是写不进库的，但这一对在这一组里就不再计分了，所以撤销要趁早。 */
+    fun cancelPick() {
+        val current = _state.value
+        if (current.phase != MatchPhase.PLAYING) return
+        _state.value = current.copy(pickedSide = null, pickedId = null, wrongIds = emptySet())
+    }
+
     private fun plan() = viewModelScope.launch {
         advanceJob?.cancel()
         flashJob?.cancel()

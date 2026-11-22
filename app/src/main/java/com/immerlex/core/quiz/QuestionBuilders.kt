@@ -18,7 +18,7 @@ class EnToZhBuilder : QuestionBuilder {
     override val type = QuizType.EN_ZH
 
     override fun build(word: WordEntity, context: QuestionContext): QuizQuestion? {
-        val options = optionsFor(word, context, Face.GLOSS) ?: return null
+        val options = optionsFor(word, context, Face.GLOSS, type) ?: return null
         return QuizQuestion(
             wordId = word.id,
             word = word.word,
@@ -35,9 +35,9 @@ class ZhToEnBuilder : QuestionBuilder {
     override val type = QuizType.ZH_EN
 
     override fun build(word: WordEntity, context: QuestionContext): QuizQuestion? {
-        val prompt = word.translation.trim()
+        val prompt = glossFace(word.translation)
         if (prompt.isBlank()) return null
-        val options = wordOptions(word, context) ?: return null
+        val options = wordOptions(word, context, type) ?: return null
         return QuizQuestion(
             wordId = word.id,
             word = word.word,
@@ -59,7 +59,7 @@ class ClozeBuilder : QuestionBuilder {
         val sentence = chapterSentence
             ?: material?.example?.let { blankWord(it, word.word) }
             ?: return null
-        val options = wordOptions(word, context) ?: return null
+        val options = wordOptions(word, context, type) ?: return null
         return QuizQuestion(
             wordId = word.id,
             word = word.word,
@@ -80,7 +80,7 @@ class DefinitionBuilder : QuestionBuilder {
         val definition = word.definition.trim()
             .ifBlank { context.enrichment.of(word)?.definition?.trim().orEmpty() }
         if (definition.isBlank()) return null
-        val options = wordOptions(word, context) ?: return null
+        val options = wordOptions(word, context, type) ?: return null
         return QuizQuestion(
             wordId = word.id,
             word = word.word,
@@ -121,13 +121,13 @@ class CollocationBuilder : QuestionBuilder {
         val attempt = context.attempts[word.id] ?: 0
         val correct = mine[Math.floorMod(attempt, mine.size)]
         val phrase = correct.word.trim()
-        val answer = correct.zh.trim()
+        val answer = glossFace(correct.zh)
         // 同一个词的其他搭配先上：一个词的两个意思更容易混，也一定有出处。
         val siblings = mine.filter { it != correct }
         val others = context.collocationPool
             .filterNot { it.word.trim().equals(phrase, ignoreCase = true) }
         val candidates = (siblings + others)
-            .map { Choice(it.zh.trim(), it.word.trim()) }
+            .map { Choice(glossFace(it.zh), it.word.trim()) }
             .filter {
                 it.text.isNotBlank() && it.gloss.isNotBlank() &&
                     !it.text.equals(answer, ignoreCase = true) &&
@@ -136,7 +136,13 @@ class CollocationBuilder : QuestionBuilder {
             .distinctBy { it.text.lowercase() }
             // 同一个短语换了个中文说法也是同一个答案，答完会露出两遍。
             .distinctBy { it.gloss.lowercase() }
-        val picked = rotate(candidates, attempt, MAX_DISTRACTORS)
+        val picked = rotate(
+            candidates,
+            attempt,
+            MAX_DISTRACTORS,
+            // 盐按这个词算，不按短语：短语本身随次数换，盐再跟着变，同一个词第二次抽到哪儿就没准了。
+            salt = saltOf(head, type, context.seed + 47),
+        )
         if (picked.isEmpty()) return null
         return QuizQuestion(
             wordId = word.id,
@@ -164,13 +170,18 @@ val DEFAULT_QUESTION_BUILDERS: List<QuestionBuilder> = listOf(
     CollocationBuilder(),
 )
 
-private fun wordOptions(word: WordEntity, context: QuestionContext): List<QuizOption>? =
-    optionsFor(word, context, Face.WORD)
+private fun wordOptions(word: WordEntity, context: QuestionContext, type: QuizType): List<QuizOption>? =
+    optionsFor(word, context, Face.WORD, type)
 
 /** 选项的面：英文单词本身，还是中文释义——两种题型只是取的面不同，来源顺序一样。 */
 private enum class Face { WORD, GLOSS }
 
-private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): List<QuizOption>? {
+private fun optionsFor(
+    word: WordEntity,
+    context: QuestionContext,
+    face: Face,
+    type: QuizType,
+): List<QuizOption>? {
     val correct = correctChoice(word, face) ?: return null
     val key = correct.text.trim().lowercase()
     val answerZh = correct.zh(face)
@@ -182,15 +193,31 @@ private fun optionsFor(word: WordEntity, context: QuestionContext, face: Face): 
         .distinctBy { it.text.trim().lowercase() }
     val ai = usable(context.enrichment.of(word)?.distractors.orEmpty().mapNotNull { choice(it.word, it.zh, face) })
     val bank = usable(context.pool.filter { it.id != word.id }.mapNotNull { choice(it.word, it.translation, face) })
+    // 用户标过的易混词固定留两个，其余位置每次都换——避免连着几次看到同一道题。
     val kept = confusable.take(KEEP_CONFUSABLES)
     val fixed = kept.map { it.text.trim().lowercase() }.toSet()
     val fixedZh = kept.mapTo(HashSet()) { it.zh(face) }
-    val rest = (confusable.drop(kept.size) + ai + bank)
+    fun fresh(choices: List<Choice>): List<Choice> = choices
         .filterNot { val text = it.text.trim().lowercase(); text == key || text in fixed }
         .filterNot { it.zh(face) in fixedZh }
         .distinctBy { it.text.trim().lowercase() }
         .distinctBy { it.zh(face) }
-    val picked = kept + rotate(rest, context.attempts[word.id] ?: 0, MAX_DISTRACTORS - kept.size)
+    val attempt = context.attempts[word.id] ?: 0
+    val wanted = MAX_DISTRACTORS - kept.size
+    // 模型给的干扰项跟着这个词走，先在它自己的池子里按次数轮换；
+    // 剩下的位置从词库那个全组共享的池子里抽——按词面 + 题型加盐，否则头一回做的那几道题
+    // 次数全是 0，从同一个位置起抽，三张牌一模一样。
+    val lead = rotate(fresh(ai), attempt, wanted)
+    val leadText = lead.mapTo(HashSet()) { it.text.trim().lowercase() }
+    val leadZh = lead.mapTo(HashSet()) { it.zh(face) }
+    val fill = rotate(
+        fresh(confusable.drop(kept.size) + bank)
+            .filterNot { it.text.trim().lowercase() in leadText || it.zh(face) in leadZh },
+        attempt,
+        wanted - lead.size,
+        salt = saltOf(key, type, context.seed + 53),
+    )
+    val picked = kept + lead + fill
     if (picked.isEmpty()) return null
     return (listOf(correct) + picked)
         .sortedBy { stableHash(it.text.trim().lowercase(), context.seed + 31) }
@@ -211,32 +238,53 @@ private fun Choice.zh(face: Face): String = if (face == Face.WORD) gloss.trim() 
  * 中文选项底下要能对出英文单词，英文选项底下要能对出中文释义——选错的人才知道别的词差在哪。
  */
 private fun correctChoice(word: WordEntity, face: Face): Choice? {
-    val zh = word.translation.trim()
+    val zh = glossFace(word.translation)
     if (zh.isBlank()) return null
     val en = word.word.trim()
     return when (face) {
-        Face.WORD -> Choice(en, zh.ifBlank { word.definition.trim() })
+        Face.WORD -> Choice(en, zh)
         Face.GLOSS -> Choice(zh, en)
     }
 }
 
 private fun choice(en: String, zh: String, face: Face): Choice? {
     val word = en.trim()
-    val gloss = zh.trim()
+    val gloss = glossFace(zh)
     if (word.isEmpty() || gloss.isEmpty()) return null
     return if (face == Face.WORD) Choice(word, gloss) else Choice(gloss, word)
 }
 
 /**
- * 同一个词第 N 次被考，就从候选池的第 N×3 格开始抽，抽完一圈再回头。
- * 用户标过的易混词最多固定留两个，其余位置每次都换——避免连着几次看到同一道题。
+ * 同一个词第 N 次被考，就从候选池的第 N×3 格开始抽，抽完一圈再回头；
+ * 用户标过的易混词最多固定留两个。同一个词再考一次要换牌，靠的是 [attempt] 与 [salt]：
+ * 只按次数抽的话，头一回做的那一组词次数全是 0，从同一个位置起抽，三张牌次次相同。
  */
-private fun rotate(items: List<Choice>, attempt: Int, size: Int): List<Choice> {
+private fun rotate(items: List<Choice>, attempt: Int, size: Int, salt: Int = 0): List<Choice> {
     if (size <= 0 || items.isEmpty()) return emptyList()
     if (items.size <= size) return items
-    val start = Math.floorMod(attempt * size, items.size)
+    val start = Math.floorMod(attempt.toLong() * size + salt, items.size.toLong()).toInt()
     return (items.drop(start) + items.take(start)).distinctBy { it.text.lowercase() }.take(size)
 }
+
+/** 起点还要认题面与题型：同一组里不同的题不该摆同一叠牌，同一个词换个题型也该换一叠。 */
+private fun saltOf(key: String, type: QuizType, seed: Long): Int =
+    stableHash("$key|${type.key}", seed).toInt()
+
+/**
+ * 中文面的前缀（`adj.` / `n.` / `vt.&vi.` / `[医]`）在词库里是 ECDICT 给的，素材包与手写易错词
+ * 却没有——摆成选项时少一个标记的那张卡就等于自报来历，一眼就能排除。所以出题时统一剥掉。
+ * 释义本身不动，只影响选项与中→英的题干。
+ */
+internal fun glossFace(raw: String): String = raw.split('\n', '；', ';')
+    .map { stripGlossTags(it.trim()) }
+    .filter { it.isNotEmpty() }
+    .distinct()
+    .joinToString("；")
+
+private val GLOSS_PREFIX = Regex("^(?:(?:[a-zA-Z]{1,6}\\.|[\\[［][^\\]］]{1,8}[\\]］]|[&/])\\s*)+")
+
+private fun stripGlossTags(segment: String): String =
+    segment.replaceFirst(GLOSS_PREFIX, "").trim().ifEmpty { segment.trim() }
 
 internal fun stableHash(text: String, seed: Long): Long =
     (text.hashCode().toLong() * 1_000_003L + seed) xor (seed shl 7)

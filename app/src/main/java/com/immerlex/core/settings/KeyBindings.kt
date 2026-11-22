@@ -2,8 +2,11 @@ package com.immerlex.core.settings
 
 import android.view.KeyEvent
 
-/** 键盘只在这两处有绑定：阅读页与测验页。同一个键在两边可以各干各的。 */
-enum class KeyContext { READER, QUIZ }
+/**
+ * 键盘在这几处有绑定：阅读页、测验页，以及不分页面的「全局」。
+ * 同一个键在阅读页与测验页可以各干各的；全局那一组在任何一屏都生效。
+ */
+enum class KeyContext { READER, QUIZ, GLOBAL }
 
 /**
  * 一个动作的默认键位。阅读页数字 1–4 从"简单"到"忘了"——与 FSRS 自己的编号方向相反，
@@ -23,6 +26,7 @@ enum class KeyAction(val context: KeyContext, val defaultKeyCode: Int) {
     QUIZ_OPTION_D(KeyContext.QUIZ, KeyEvent.KEYCODE_4),
     QUIZ_DOUBT(KeyContext.QUIZ, KeyEvent.KEYCODE_0),
     QUIZ_NEXT(KeyContext.QUIZ, KeyEvent.KEYCODE_DPAD_RIGHT),
+    APP_HIDE(KeyContext.GLOBAL, KeyEvent.KEYCODE_ESCAPE),
     ;
 
     companion object {
@@ -68,4 +72,13 @@ data class KeyMap private constructor(private val codes: Map<KeyAction, Int>) {
             }
         }
     }
+}
+
+/**
+ * 键位页正在录一个键时，「收起窗口」必须让路：收键是在 Activity 那一层拦的，比界面先看到按键，
+ * 不让路的话想把别的动作绑到 Esc 上，一按 Esc 应用自己先收起来了，永远绑不成。
+ */
+object KeyRecording {
+    @Volatile
+    var active: Boolean = false
 }

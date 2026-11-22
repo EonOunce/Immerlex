@@ -13,6 +13,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.immerlex.app.R
 
@@ -20,6 +21,7 @@ import com.immerlex.app.R
  * 把落到这块界面上的物理按键交给 [onKey]（返回 true = 这个键用掉了）。
  * [requestOn] 一变就重新要一次焦点：卡片收起、换一章之后组合里可能没有能拿焦点的东西，
  * 焦点会漏到系统那边，方向键就开始挪光标而不是选词。
+ * 「收起窗口」那颗键在这里先认一次：抽屉与弹窗是另一扇窗，Activity 那一层收不到它们的按键。
  */
 @Composable
 fun KeyCapture(
@@ -28,6 +30,7 @@ fun KeyCapture(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val context = LocalContext.current
     val focus = remember { FocusRequester() }
     LaunchedEffect(requestOn) { runCatching { focus.requestFocus() } }
     Box(
@@ -35,7 +38,13 @@ fun KeyCapture(
             .focusRequester(focus)
             .focusable()
             .onPreviewKeyEvent { event ->
-                event.type == KeyEventType.KeyDown && onKey(event.nativeKeyEvent.keyCode)
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val keyCode = event.nativeKeyEvent.keyCode
+                if (isHideKey(context, keyCode)) {
+                    hideWindow(context)
+                    return@onPreviewKeyEvent true
+                }
+                onKey(keyCode)
             },
         content = content,
     )
